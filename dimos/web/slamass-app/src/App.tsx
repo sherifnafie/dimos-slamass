@@ -20,6 +20,7 @@ import {
 } from "./teleop";
 import {
   AppState,
+  ChatState,
   InspectionSettings,
   ManualInspectionMode,
   Poi,
@@ -70,6 +71,10 @@ const emptyState: AppState = {
     },
     selected_item: null,
     highlighted_items: [],
+  },
+  chat: {
+    running: false,
+    messages: [],
   },
 };
 
@@ -514,6 +519,13 @@ export default function App(): React.ReactElement {
       });
     });
 
+    source.addEventListener("chat_state_updated", (event) => {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as ChatState;
+      startTransition(() => {
+        setState((previous) => ({ ...previous, chat: payload }));
+      });
+    });
+
     source.addEventListener("ui_state_updated", (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as UiState;
       mergeUiState(payload);
@@ -798,6 +810,38 @@ export default function App(): React.ReactElement {
     }
   }, [appendActivity, reportActionError]);
 
+  const handleSubmitChatMessage = React.useCallback(
+    async (message: string) => {
+      appendActivity("operator", "Agent prompt", message, "accent");
+      try {
+        const payload = await fetchJson<ChatState>("/api/chat", {
+          method: "POST",
+          body: JSON.stringify({ message }),
+        });
+        startTransition(() => {
+          setState((previous) => ({ ...previous, chat: payload }));
+        });
+      } catch (error) {
+        reportActionError("Chat request failed", error);
+      }
+    },
+    [appendActivity, reportActionError],
+  );
+
+  const handleResetChat = React.useCallback(async () => {
+    try {
+      const payload = await fetchJson<ChatState>("/api/chat/reset", {
+        method: "POST",
+      });
+      startTransition(() => {
+        setState((previous) => ({ ...previous, chat: payload }));
+      });
+      appendActivity("system", "Agent reset", "Chat history cleared.", "neutral");
+    } catch (error) {
+      reportActionError("Chat reset failed", error);
+    }
+  }, [appendActivity, reportActionError]);
+
   React.useEffect(() => {
     teleopKeysRef.current.clear();
     teleopErrorMessageRef.current = null;
@@ -906,6 +950,7 @@ export default function App(): React.ReactElement {
           {state.inspection.status === "running" ? (
             <span className="toolbar-chip tone-running">Inspecting</span>
           ) : null}
+          {state.chat.running ? <span className="toolbar-chip tone-accent">Agent thinking</span> : null}
           {state.yolo_runtime.mode !== "live" ? (
             <span className="toolbar-chip tone-accent">YOLO paused</span>
           ) : null}
@@ -1098,7 +1143,11 @@ export default function App(): React.ReactElement {
           <OperatorRail
             activityEntries={activityEntries}
             busyAction={busyAction}
+            chat={state.chat}
             items={semanticItems}
+            onResetChat={() => {
+              void handleResetChat();
+            }}
             onClearFocus={() => {
               void handleClearFocus();
             }}
@@ -1116,6 +1165,9 @@ export default function App(): React.ReactElement {
             }}
             selectedItem={state.ui.selected_item}
             selectedPreview={selectedPreview}
+            onSubmitChatMessage={(message) => {
+              void handleSubmitChatMessage(message);
+            }}
           />
         ) : null}
       </main>

@@ -1251,6 +1251,125 @@ img {
   font-size: 0.82rem;
 }
 
+.chat-shell {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+}
+
+.chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 94%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.chat-message.role-user {
+  align-self: flex-end;
+  background: rgba(246, 173, 85, 0.12);
+  border-color: rgba(246, 173, 85, 0.18);
+}
+
+.chat-message.status-running {
+  border-color: rgba(246, 173, 85, 0.18);
+}
+
+.chat-message.status-error {
+  border-color: rgba(248, 113, 113, 0.22);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.chat-message-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.chat-message-meta strong {
+  font-size: 0.84rem;
+}
+
+.chat-message-meta time {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.chat-message p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.chat-tool-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chat-tool-row span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.chat-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.chat-compose textarea {
+  width: 100%;
+  min-height: 84px;
+  resize: vertical;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(11, 16, 24, 0.88);
+  color: var(--text);
+}
+
+.chat-compose textarea:focus {
+  outline: none;
+  border-color: rgba(246, 173, 85, 0.34);
+  box-shadow: 0 0 0 1px rgba(246, 173, 85, 0.24);
+}
+
+.chat-compose textarea:disabled {
+  opacity: 0.72;
+}
+
+.chat-compose-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .thread-empty {
   display: grid;
   place-items: center;

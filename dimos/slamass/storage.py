@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
+import shutil
 import sqlite3
 import threading
 import uuid
@@ -335,6 +336,33 @@ class SlamassStorage:
         png_rel = Path("maps") / "active_map.png"
         (self.state_dir / png_rel).write_bytes(preview_png)
         return str(png_rel)
+
+    def clear_active_map(self) -> None:
+        conn = self._get_conn()
+        conn.execute("DELETE FROM active_map WHERE id = 1")
+        conn.commit()
+
+        for relative_path in ("maps/active_map.npz", "maps/active_map.png"):
+            path = self.asset_path(relative_path)
+            if path.exists():
+                path.unlink()
+
+    def clear_semantic_memory(self) -> None:
+        conn = self._get_conn()
+        conn.executescript(
+            """
+            DELETE FROM pois;
+            DELETE FROM poi_observations;
+            DELETE FROM yolo_objects;
+            DELETE FROM yolo_object_observations;
+            DELETE FROM app_settings WHERE key = 'chat_state';
+            """
+        )
+        conn.commit()
+
+        if self.images_dir.exists():
+            shutil.rmtree(self.images_dir)
+        self.images_dir.mkdir(parents=True, exist_ok=True)
 
     def load_json_setting(self, key: str) -> dict[str, object] | None:
         conn = self._get_conn()

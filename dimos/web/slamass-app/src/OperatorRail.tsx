@@ -1,7 +1,8 @@
 import React from "react";
 
+import { ChatPanel } from "./ChatPanel";
 import { PanelShell } from "./PanelShell";
-import { SemanticItem, SemanticItemRef, SemanticKind } from "./types";
+import { ChatState, SemanticItem, SemanticItemRef, SemanticKind } from "./types";
 
 type ActivityEntry = {
   id: string;
@@ -12,7 +13,7 @@ type ActivityEntry = {
   timestamp: string;
 };
 
-type RailView = "timeline" | "semantic";
+type RailView = "timeline" | "semantic" | "chat";
 
 export type SelectedSemanticPreview = {
   kind: SemanticKind;
@@ -26,6 +27,7 @@ export type SelectedSemanticPreview = {
 type OperatorRailProps = {
   activityEntries: ActivityEntry[];
   busyAction: string | null;
+  chat: ChatState;
   items: SemanticItem[];
   selectedItem: SemanticItemRef | null;
   selectedPreview: SelectedSemanticPreview | null;
@@ -34,6 +36,8 @@ type OperatorRailProps = {
   onFocusItem: (item: SemanticItemRef) => void;
   onGoToItem: (item: SemanticItemRef) => void;
   onClearFocus: () => void;
+  onResetChat: () => void;
+  onSubmitChatMessage: (message: string) => void;
 };
 
 function itemLabel(kind: SemanticKind): string {
@@ -44,6 +48,7 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
   const {
     activityEntries,
     busyAction,
+    chat,
     items,
     selectedItem,
     selectedPreview,
@@ -52,6 +57,8 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
     onFocusItem,
     onGoToItem,
     onClearFocus,
+    onResetChat,
+    onSubmitChatMessage,
   } = props;
 
   const [railView, setRailView] = React.useState<RailView>("timeline");
@@ -78,6 +85,15 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
             type="button"
           >
             Semantic
+          </button>
+          <button
+            className={railView === "chat" ? "is-active" : ""}
+            onClick={() => {
+              setRailView("chat");
+            }}
+            type="button"
+          >
+            Agent
           </button>
         </div>
       }
@@ -147,7 +163,7 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
                 </article>
               ))}
             </div>
-          ) : (
+          ) : railView === "semantic" ? (
             <div className="rail-poi-list">
               {items.length > 0 ? (
                 items.map((item) => {
@@ -183,6 +199,8 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
                 <div className="thread-empty">No semantic anchors yet.</div>
               )}
             </div>
+          ) : (
+            <ChatPanel chat={chat} onResetChat={onResetChat} onSubmitMessage={onSubmitChatMessage} />
           )}
         </div>
       </div>

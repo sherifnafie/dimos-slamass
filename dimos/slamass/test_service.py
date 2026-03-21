@@ -20,6 +20,7 @@ import numpy as np
 import pytest
 
 from dimos.slamass.map_memory import RawCostmap
+from dimos.slamass.chat_agent import ChatTurnResult
 from dimos.slamass.service import (
     InspectionAnalysis,
     OpenAIInspectionAnalyzer,
@@ -89,6 +90,16 @@ class FakeAnalyzer:
             gate_reason="clear spatial landmark" if self.should_create_poi else "too generic",
             objects=["window", "light"],
         )
+
+
+class FakeChatAgent:
+    def __init__(self, content: str = "I focused the best match on the map.") -> None:
+        self.content = content
+        self.calls: list[tuple[str, int]] = []
+
+    async def run_turn(self, runtime, *, history, user_message):  # type: ignore[no-untyped-def]
+        self.calls.append((user_message, len(history)))
+        return ChatTurnResult(content=self.content, tools_used=["search_semantic_memory", "focus_semantic_item"])
 
 
 def make_test_jpeg() -> bytes:
@@ -540,3 +551,140 @@ async def test_service_stop_dimos_runs_stop_command_after_zero_velocity(tmp_path
         "angular_y": 0.0,
         "angular_z": 0.0,
     }
+
+
+@pytest.mark.asyncio
+async def test_service_submit_chat_message_runs_agent_and_updates_state(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_chat_agent = FakeChatAgent(content="The window POI is highlighted on the map.")
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+        chat_agent=fake_chat_agent,
+    )
+
+    initial = await service.submit_chat_message("Where is the window?")
+    assert initial["running"] is True
+    assert [message["role"] for message in initial["messages"]] == ["user", "assistant"]
+
+    assert service._chat_task is not None
+    await asyncio.wait_for(service._chat_task, timeout=1.0)
+
+    snapshot = await service.chat_snapshot()
+    assert snapshot["running"] is False
+    assert snapshot["messages"][0]["content"] == "Where is the window?"
+    assert snapshot["messages"][1]["content"] == "The window POI is highlighted on the map."
+    assert snapshot["messages"][1]["tools_used"] == [
+        "search_semantic_memory",
+        "focus_semantic_item",
+    ]
+    assert fake_chat_agent.calls == [("Where is the window?", 0)]
+
+
+@pytest.mark.asyncio
+async def test_chat_search_semantic_memory_finds_matching_poi(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+        chat_agent=FakeChatAgent(),
+    )
+    hero = storage.create_image_asset(b"hero", ".jpg")
+    thumb = storage.create_image_asset(b"thumb", ".jpg")
+    poi = storage.new_poi(
+        map_id="active",
+        world_x=1.0,
+        world_y=2.0,
+        world_yaw=0.1,
+        title="Window Bay",
+        summary="Bright corner with a large exterior window and plants.",
+        category="window",
+        interest_score=0.8,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        objects=["window", "plant"],
+    )
+    storage.upsert_poi(poi)
+    service.pois[poi.poi_id] = poi
+
+    result = await service.chat_search_semantic_memory(query="window", kind="all", limit=5)
+
+    assert result["results"][0]["kind"] == "vlm_poi"
+    assert result["results"][0]["entity_id"] == poi.poi_id
+
+
+@pytest.mark.asyncio
+async def test_chat_set_layer_visibility_updates_state(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+        chat_agent=FakeChatAgent(),
+    )
+
+    result = await service.chat_set_layer_visibility(show_pois=False, show_yolo=True)
+    snapshot = await service.snapshot()
+
+    assert result == {"ok": True, "layers": {"show_pois": False, "show_yolo": True}}
+    assert snapshot["layers"] == {"show_pois": False, "show_yolo": True}
+
+
+@pytest.mark.asyncio
+async def test_chat_set_yolo_runtime_updates_state(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+        chat_agent=FakeChatAgent(),
+    )
+
+    result = await service.chat_set_yolo_runtime(mode="paused")
+    snapshot = await service.snapshot()
+
+    assert result == {"ok": True, "yolo_runtime": {"mode": "paused"}}
+    assert snapshot["yolo_runtime"] == {"mode": "paused"}
+
+
+@pytest.mark.asyncio
+async def test_chat_save_map_persists_active_map(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+        chat_agent=FakeChatAgent(),
+    )
+    await service._handle_raw_costmap(
+        RawCostmap(
+            grid=np.full((3, 3), 100, dtype=np.int8),
+            origin_x=0.0,
+            origin_y=0.0,
+            resolution=0.05,
+            ts=0.0,
+        )
+    )
+
+    result = await service.chat_save_map()
+
+    assert result["ok"] is True
+    assert result["saved"] is True
+    assert (tmp_path / "maps" / "active_map.npz").exists()

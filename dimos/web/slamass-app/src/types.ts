@@ -119,6 +119,20 @@ export interface LayerVisibility {
   show_yolo: boolean;
 }
 
+export interface ChatMessage {
+  message_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+  status: string;
+  tools_used: string[];
+}
+
+export interface ChatState {
+  running: boolean;
+  messages: ChatMessage[];
+}
+
 export interface AppState {
   connected: boolean;
   robot_pose: RobotPose | null;
@@ -132,4 +146,5 @@ export interface AppState {
   yolo_runtime: YoloRuntimeState;
   layers: LayerVisibility;
   ui: UiState;
+  chat: ChatState;
 }

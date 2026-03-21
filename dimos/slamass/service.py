@@ -45,6 +45,8 @@ import uvicorn
 from dimos.models.vl.openai import OpenAIVlModel
 from dimos.msgs.sensor_msgs.Image import ImageFormat
 from dimos.msgs.sensor_msgs.Image import Image as DimosImage
+from dimos.robot.unitree.unitree_skill_container import UNITREE_WEBRTC_CONTROLS
+from dimos.slamass.chat_agent import ChatMessage, SlamassChatAgent
 from dimos.slamass.map_memory import ActiveMapState, RawCostmap
 from dimos.slamass.storage import (
     ActiveMapRecord,
@@ -208,6 +210,12 @@ class SlamassUiState:
 
 
 @dataclass(slots=True)
+class ChatState:
+    messages: list[ChatMessage] = field(default_factory=list)
+    running: bool = False
+
+
+@dataclass(slots=True)
 class YoloDetection:
     label: str
     class_id: int
@@ -323,6 +331,10 @@ class LayerVisibilityRequest(BaseModel):
     show_yolo: bool | None = None
 
 
+class ChatSubmitRequest(BaseModel):
+    message: str
+
+
 class McpToolClient:
     def __init__(self, mcp_url: str) -> None:
         self.mcp_url = mcp_url
@@ -360,6 +372,24 @@ class McpToolClient:
             "relative_move",
             {"forward": forward, "left": left, "degrees": degrees},
         )
+
+    async def call_tool_text(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        request_id: str | None = None,
+    ) -> str:
+        body = await self.call_tool(name, arguments, request_id=request_id)
+        content = body.get("result", {}).get("content", [])
+        if not isinstance(content, list):
+            return ""
+        for item in content:
+            if item.get("type") == "text":
+                text = item.get("text", "")
+                if isinstance(text, str):
+                    return text
+        return ""
 
     async def call_tool(
         self,
@@ -728,9 +758,11 @@ class SlamassService:
         mcp_url: str,
         state_dir: Path,
         model_name: str = "gpt-5.4-mini",
+        chat_model_name: str = "gpt-5.4",
         storage: SlamassStorage | None = None,
         mcp_client: McpToolClient | None = None,
         analyzer: OpenAIInspectionAnalyzer | None = None,
+        chat_agent: SlamassChatAgent | None = None,
         stop_command_runner: Any | None = None,
         poi_arrival_tolerance_m: float = POI_ARRIVAL_TOLERANCE_METERS,
         poi_arrival_settle_seconds: float = POI_ARRIVAL_SETTLE_SECONDS,
@@ -741,6 +773,8 @@ class SlamassService:
         self.storage = storage or SlamassStorage(state_dir)
         self.mcp_client = mcp_client or McpToolClient(mcp_url)
         self.analyzer = analyzer or OpenAIInspectionAnalyzer(model_name=model_name)
+        self.chat_agent = chat_agent or SlamassChatAgent(model_name=chat_model_name)
+        self._chat_vlm = OpenAIVlModel(model_name=chat_model_name)
         self._stop_command_runner = stop_command_runner or run_dimos_stop_command
         self.map_client = MapSocketClient(
             map_socket_url,
@@ -757,6 +791,7 @@ class SlamassService:
         self._stopped = False
         self._last_pose_event = 0.0
         self._goto_poi_task: asyncio.Task[None] | None = None
+        self._chat_task: asyncio.Task[None] | None = None
         self._poi_arrival_tolerance_m = poi_arrival_tolerance_m
         self._poi_arrival_settle_seconds = poi_arrival_settle_seconds
         self._poi_arrival_timeout_seconds = poi_arrival_timeout_seconds
@@ -782,6 +817,7 @@ class SlamassService:
         self.yolo_runtime = YoloRuntimeState()
         self.layer_visibility = LayerVisibilityState()
         self.ui_state = SlamassUiState()
+        self.chat_state = ChatState()
 
     async def start(self) -> None:
         self._load_from_storage()
@@ -799,6 +835,11 @@ class SlamassService:
             with contextlib_suppress(asyncio.CancelledError):
                 await self._goto_poi_task
             self._goto_poi_task = None
+        if self._chat_task is not None:
+            self._chat_task.cancel()
+            with contextlib_suppress(asyncio.CancelledError):
+                await self._chat_task
+            self._chat_task = None
         await self.map_client.stop()
         for task in self._tasks:
             task.cancel()
@@ -809,6 +850,7 @@ class SlamassService:
             await self.flush_active_map(force=True)
         with contextlib_suppress(asyncio.CancelledError):
             await self._maybe_stop_mcp_client()
+        self._chat_vlm.stop()
         self.storage.close()
 
     async def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
@@ -852,6 +894,7 @@ class SlamassService:
                 "yolo_runtime": self._serialize_yolo_runtime_locked(),
                 "layers": self._serialize_layers_locked(),
                 "ui": self._serialize_ui_locked(),
+                "chat": self._serialize_chat_locked(),
             }
 
     async def navigate(self, x: float, y: float, yaw: float | None = None) -> None:
@@ -1080,6 +1123,256 @@ class SlamassService:
             payload = self._commit_ui_state_locked()
         await self.publish_event("ui_state_updated", payload)
         return payload
+
+    async def chat_snapshot(self) -> dict[str, Any]:
+        async with self._state_lock:
+            return self._serialize_chat_locked()
+
+    async def submit_chat_message(self, message: str) -> dict[str, Any]:
+        content = message.strip()
+        if not content:
+            raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+        async with self._state_lock:
+            if self.chat_state.running:
+                raise HTTPException(status_code=409, detail="Chat agent is already running")
+            history = list(self.chat_state.messages)
+            user_message = self._new_chat_message(role="user", content=content)
+            assistant_message = self._new_chat_message(role="assistant", content="", status="running")
+            self.chat_state.messages.extend([user_message, assistant_message])
+            self.chat_state.running = True
+            self._persist_chat_state_locked()
+            payload = self._serialize_chat_locked()
+            self._chat_task = asyncio.create_task(
+                self._run_chat_turn(
+                    assistant_message_id=assistant_message.message_id,
+                    history=history,
+                    user_message=content,
+                )
+            )
+        await self.publish_event("chat_state_updated", payload)
+        return payload
+
+    async def reset_chat(self) -> dict[str, Any]:
+        if self._chat_task is not None:
+            self._chat_task.cancel()
+            with contextlib_suppress(asyncio.CancelledError):
+                await self._chat_task
+        async with self._state_lock:
+            self._chat_task = None
+            self.chat_state = ChatState()
+            self._persist_chat_state_locked()
+            payload = self._serialize_chat_locked()
+        await self.publish_event("chat_state_updated", payload)
+        return payload
+
+    async def _run_chat_turn(
+        self,
+        *,
+        assistant_message_id: str,
+        history: list[ChatMessage],
+        user_message: str,
+    ) -> None:
+        try:
+            result = await self.chat_agent.run_turn(
+                self,
+                history=history,
+                user_message=user_message,
+            )
+            async with self._state_lock:
+                assistant_message = self._require_chat_message_locked(assistant_message_id)
+                assistant_message.content = result.content
+                assistant_message.status = "final"
+                assistant_message.tools_used = result.tools_used
+                self.chat_state.running = False
+                self._chat_task = None
+                self._persist_chat_state_locked()
+                payload = self._serialize_chat_locked()
+        except Exception as exc:
+            async with self._state_lock:
+                assistant_message = self._require_chat_message_locked(assistant_message_id)
+                assistant_message.content = str(exc)
+                assistant_message.status = "error"
+                assistant_message.tools_used = []
+                self.chat_state.running = False
+                self._chat_task = None
+                self._persist_chat_state_locked()
+                payload = self._serialize_chat_locked()
+        await self.publish_event("chat_state_updated", payload)
+
+    async def chat_runtime_overview(self) -> dict[str, Any]:
+        async with self._state_lock:
+            return {
+                "connected": self.connected,
+                "robot_pose": self._serialize_pose(self.robot_pose),
+                "path_points": len(self.path),
+                "map_available": self.map_state is not None,
+                "poi_count": len(self._active_pois()),
+                "yolo_object_count": len(self._active_yolo_objects()),
+                "selected_item": self._serialize_item_ref(self.ui_state.selected_item),
+                "highlighted_items": [
+                    self._serialize_item_ref(item_ref) for item_ref in self.ui_state.highlighted_items
+                ],
+                "layers": self._serialize_layers_locked(),
+                "yolo_runtime": self._serialize_yolo_runtime_locked(),
+            }
+
+    async def chat_search_semantic_memory(
+        self,
+        *,
+        query: str,
+        kind: str = "all",
+        limit: int = 5,
+    ) -> dict[str, Any]:
+        async with self._state_lock:
+            results = self._search_semantic_items_locked(query=query, kind=kind, limit=limit)
+        return {"query": query, "kind": kind, "results": results}
+
+    async def chat_get_semantic_item(self, *, kind: str, entity_id: str) -> dict[str, Any]:
+        async with self._state_lock:
+            item_ref = self._require_item_ref_locked(kind, entity_id)
+            if item_ref.kind == SEMANTIC_KIND_POI:
+                poi = self._require_active_poi_locked(item_ref.entity_id)
+                return {
+                    "kind": SEMANTIC_KIND_POI,
+                    "entity_id": poi.poi_id,
+                    "title": poi.title,
+                    "summary": poi.summary,
+                    "category": poi.category,
+                    "objects": poi.objects,
+                    "world_x": poi.world_x,
+                    "world_y": poi.world_y,
+                    "world_yaw": poi.world_yaw,
+                    "updated_at": poi.updated_at,
+                }
+            object_record = self._require_active_yolo_object_locked(item_ref.entity_id)
+            return {
+                "kind": SEMANTIC_KIND_YOLO,
+                "entity_id": object_record.object_id,
+                "label": object_record.label,
+                "detections_count": object_record.detections_count,
+                "best_confidence": object_record.best_confidence,
+                "world_x": object_record.world_x,
+                "world_y": object_record.world_y,
+                "world_z": object_record.world_z,
+                "best_view_x": object_record.best_view_x,
+                "best_view_y": object_record.best_view_y,
+                "best_view_yaw": object_record.best_view_yaw,
+                "updated_at": object_record.updated_at,
+                "last_seen_at": object_record.last_seen_at,
+            }
+
+    async def chat_focus_semantic_item(
+        self,
+        *,
+        kind: str,
+        entity_id: str,
+        zoom: float | None = None,
+    ) -> dict[str, Any]:
+        payload = await self.focus_item(kind, entity_id, zoom=zoom)
+        return {"ok": True, "ui": payload}
+
+    async def chat_highlight_semantic_items(
+        self,
+        *,
+        items: list[dict[str, str]],
+        selected_item: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        payload = await self.highlight_items(
+            [SemanticItemRef(kind=item["kind"], entity_id=item["entity_id"]) for item in items],
+            selected_item=(
+                SemanticItemRef(kind=selected_item["kind"], entity_id=selected_item["entity_id"])
+                if selected_item is not None
+                else None
+            ),
+        )
+        return {"ok": True, "ui": payload}
+
+    async def chat_focus_map(self) -> dict[str, Any]:
+        payload = await self.focus_map()
+        return {"ok": True, "ui": payload}
+
+    async def chat_focus_robot(self, *, zoom: float | None = None) -> dict[str, Any]:
+        payload = await self.focus_robot(zoom=zoom)
+        return {"ok": True, "ui": payload}
+
+    async def chat_clear_map_focus(self) -> dict[str, Any]:
+        payload = await self.clear_ui_focus()
+        return {"ok": True, "ui": payload}
+
+    async def chat_set_layer_visibility(
+        self,
+        *,
+        show_pois: bool | None = None,
+        show_yolo: bool | None = None,
+    ) -> dict[str, Any]:
+        payload = await self.set_layer_visibility(show_pois=show_pois, show_yolo=show_yolo)
+        return {"ok": True, "layers": payload}
+
+    async def chat_set_yolo_runtime(self, *, mode: str) -> dict[str, Any]:
+        payload = await self.set_yolo_mode(mode)
+        return {"ok": True, "yolo_runtime": payload}
+
+    async def chat_save_map(self) -> dict[str, Any]:
+        payload = await self.save_map()
+        return {"ok": True, **payload}
+
+    async def chat_go_to_semantic_item(self, *, kind: str, entity_id: str) -> dict[str, Any]:
+        if kind == SEMANTIC_KIND_POI:
+            await self.go_to_poi(entity_id)
+        elif kind == SEMANTIC_KIND_YOLO:
+            await self.go_to_yolo_object(entity_id)
+        else:
+            raise HTTPException(status_code=404, detail=f"Unknown semantic item kind: {kind}")
+        return {"ok": True, "kind": kind, "entity_id": entity_id}
+
+    async def chat_inspect_now(self) -> dict[str, Any]:
+        return await self.inspect_now()
+
+    async def chat_look_current_view(self, *, query: str) -> dict[str, Any]:
+        image_bytes = await self._observe_jpeg()
+        if image_bytes is None:
+            return {"ok": False, "error": "No image available from observe()"}
+        dimos_image = jpeg_bytes_to_dimos_image(image_bytes)
+        prompt = (
+            "Answer the operator's question about the current live robot view. "
+            "Base the answer only on visible evidence and keep it concise.\n\n"
+            f"Question: {query.strip() or 'What is visible in the current view?'}"
+        )
+        answer = await asyncio.to_thread(self._chat_vlm.query, dimos_image, prompt)
+        return {"ok": True, "answer": answer}
+
+    async def chat_relative_move(
+        self,
+        *,
+        forward: float = 0.0,
+        left: float = 0.0,
+        degrees: float = 0.0,
+    ) -> dict[str, Any]:
+        text = await self.mcp_client.call_tool_text(
+            "relative_move",
+            {"forward": forward, "left": left, "degrees": degrees},
+        )
+        return {"ok": True, "result": text}
+
+    async def chat_wait(self, *, seconds: float) -> dict[str, Any]:
+        text = await self.mcp_client.call_tool_text("wait", {"seconds": seconds})
+        return {"ok": True, "result": text}
+
+    async def chat_execute_sport_command(self, *, command_name: str) -> dict[str, Any]:
+        text = await self.mcp_client.call_tool_text(
+            "execute_sport_command",
+            {"command_name": command_name},
+        )
+        return {"ok": True, "result": text}
+
+    async def chat_list_sport_commands(self) -> dict[str, Any]:
+        commands = [
+            {"name": name, "description": description}
+            for name, _, description in UNITREE_WEBRTC_CONTROLS
+            if name not in {"Reverse", "Spin"}
+        ]
+        return {"commands": commands}
 
     async def save_map(self) -> dict[str, Any]:
         record = await self.flush_active_map(force=True)
@@ -1330,6 +1623,29 @@ class SlamassService:
                 show_pois=bool(layer_visibility.get("show_pois", True)),
                 show_yolo=bool(layer_visibility.get("show_yolo", YOLO_DEFAULT_LAYER_VISIBLE)),
             )
+        chat_state = self.storage.load_json_setting("chat_state")
+        if chat_state is not None:
+            messages = chat_state.get("messages", [])
+            if isinstance(messages, list):
+                restored_messages: list[ChatMessage] = []
+                for item in messages:
+                    if not isinstance(item, dict):
+                        continue
+                    restored_messages.append(
+                        ChatMessage(
+                            message_id=str(item.get("message_id", "")),
+                            role=str(item.get("role", "assistant")),
+                            content=str(item.get("content", "")),
+                            created_at=str(item.get("created_at", utc_now_iso())),
+                            status=str(item.get("status", "final")),
+                            tools_used=[
+                                str(tool_name)
+                                for tool_name in item.get("tools_used", [])
+                                if isinstance(tool_name, str)
+                            ],
+                        )
+                    )
+                self.chat_state = ChatState(messages=restored_messages, running=False)
         if record is not None and log_odds is not None and observation_count is not None:
             self.map_state = ActiveMapState.from_arrays(
                 map_id=record.map_id,
@@ -1710,6 +2026,98 @@ class SlamassService:
     def _active_yolo_objects(self) -> list[YoloObjectRecord]:
         return [object_record for object_record in self.yolo_objects.values() if object_record.status != "deleted"]
 
+    def _search_semantic_items_locked(
+        self,
+        *,
+        query: str,
+        kind: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        normalized_kind = kind.strip().lower() if kind else "all"
+        if normalized_kind not in {"all", SEMANTIC_KIND_POI, SEMANTIC_KIND_YOLO}:
+            raise HTTPException(status_code=400, detail=f"Unsupported semantic kind: {kind}")
+
+        normalized_query = normalize_text(query)
+        tokens = [token for token in normalized_query.split() if token]
+        capped_limit = max(1, min(int(limit), 8))
+        scored: list[tuple[float, str, dict[str, Any]]] = []
+
+        if normalized_kind in {"all", SEMANTIC_KIND_POI}:
+            for poi in self._active_pois():
+                score = self._field_score(normalized_query, tokens, poi.title, 4.0)
+                score += self._field_score(normalized_query, tokens, poi.category, 3.0)
+                score += sum(self._field_score(normalized_query, tokens, item, 2.0) for item in poi.objects)
+                score += self._field_score(normalized_query, tokens, poi.summary, 1.0)
+                if normalized_query and score <= 0:
+                    continue
+                scored.append(
+                    (
+                        score if normalized_query else poi.interest_score,
+                        poi.updated_at,
+                        {
+                            "kind": SEMANTIC_KIND_POI,
+                            "entity_id": poi.poi_id,
+                            "title": poi.title,
+                            "subtitle": poi.category,
+                            "summary": poi.summary,
+                            "world_x": poi.world_x,
+                            "world_y": poi.world_y,
+                            "world_yaw": poi.world_yaw,
+                            "score": round(score, 3),
+                        },
+                    )
+                )
+
+        if normalized_kind in {"all", SEMANTIC_KIND_YOLO}:
+            for object_record in self._active_yolo_objects():
+                score = self._field_score(normalized_query, tokens, object_record.label, 4.0)
+                if normalized_query and score <= 0:
+                    continue
+                scored.append(
+                    (
+                        score if normalized_query else object_record.best_confidence,
+                        object_record.updated_at,
+                        {
+                            "kind": SEMANTIC_KIND_YOLO,
+                            "entity_id": object_record.object_id,
+                            "title": object_record.label.title(),
+                            "subtitle": f"{object_record.best_confidence:.2f} confidence",
+                            "summary": (
+                                f"{object_record.detections_count} detections. "
+                                f"Best view stored at {object_record.best_view_x:.2f}, {object_record.best_view_y:.2f}."
+                            ),
+                            "world_x": object_record.world_x,
+                            "world_y": object_record.world_y,
+                            "world_yaw": object_record.best_view_yaw,
+                            "score": round(score, 3),
+                        },
+                    )
+                )
+
+        scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return [payload for _, _, payload in scored[:capped_limit]]
+
+    def _field_score(
+        self,
+        normalized_query: str,
+        tokens: list[str],
+        value: str,
+        weight: float,
+    ) -> float:
+        normalized_value = normalize_text(value)
+        if not normalized_value:
+            return 0.0
+        score = 0.0
+        if normalized_query:
+            if normalized_value == normalized_query:
+                score += 6.0 * weight
+            if normalized_query in normalized_value:
+                score += 4.0 * weight
+        for token in tokens:
+            if token in normalized_value:
+                score += weight
+        return score
+
     def _parse_yolo_detection_payload(
         self,
         payload: dict[str, Any],
@@ -1944,6 +2352,41 @@ class SlamassService:
             "show_yolo": self.layer_visibility.show_yolo,
         }
 
+    def _serialize_chat_locked(self) -> dict[str, Any]:
+        return {
+            "running": self.chat_state.running,
+            "messages": [
+                {
+                    "message_id": message.message_id,
+                    "role": message.role,
+                    "content": message.content,
+                    "created_at": message.created_at,
+                    "status": message.status,
+                    "tools_used": list(message.tools_used or []),
+                }
+                for message in self.chat_state.messages
+            ],
+        }
+
+    def _persist_chat_state_locked(self) -> None:
+        self.storage.save_json_setting("chat_state", self._serialize_chat_locked())
+
+    def _new_chat_message(self, *, role: str, content: str, status: str = "final") -> ChatMessage:
+        return ChatMessage(
+            message_id=f"chat-{time.time_ns()}",
+            role=role,
+            content=content,
+            created_at=utc_now_iso(),
+            status=status,
+            tools_used=[],
+        )
+
+    def _require_chat_message_locked(self, message_id: str) -> ChatMessage:
+        for message in self.chat_state.messages:
+            if message.message_id == message_id:
+                return message
+        raise RuntimeError(f"Unknown chat message: {message_id}")
+
     def _serialize_item_ref(self, item_ref: SemanticItemRef | None) -> dict[str, str] | None:
         if item_ref is None:
             return None
@@ -2033,6 +2476,7 @@ def create_app(
     mcp_url: str = "http://localhost:9990/mcp",
     state_dir: Path | None = None,
     model_name: str = "gpt-5.4-mini",
+    chat_model_name: str = "gpt-5.4",
     service: SlamassService | None = None,
 ) -> FastAPI:
     _state_dir = state_dir or default_state_dir()
@@ -2041,6 +2485,7 @@ def create_app(
         mcp_url=mcp_url,
         state_dir=_state_dir,
         model_name=model_name,
+        chat_model_name=chat_model_name,
     )
 
     @asynccontextmanager
@@ -2067,6 +2512,10 @@ def create_app(
     @app.get("/api/ui")
     async def get_ui_state() -> dict[str, Any]:
         return await slamass.ui_snapshot()
+
+    @app.get("/api/chat")
+    async def get_chat_state() -> dict[str, Any]:
+        return await slamass.chat_snapshot()
 
     @app.get("/api/events")
     async def get_events() -> EventSourceResponse:
@@ -2181,6 +2630,14 @@ def create_app(
     @app.post("/api/system/stop")
     async def post_system_stop() -> dict[str, Any]:
         return await slamass.stop_dimos(force=False)
+
+    @app.post("/api/chat")
+    async def post_chat_message(request: ChatSubmitRequest) -> dict[str, Any]:
+        return await slamass.submit_chat_message(request.message)
+
+    @app.post("/api/chat/reset")
+    async def post_chat_reset() -> dict[str, Any]:
+        return await slamass.reset_chat()
 
     @app.post("/api/inspect/now")
     async def post_inspect_now() -> dict[str, Any]:
@@ -2299,6 +2756,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mcp-url", default="http://localhost:9990/mcp")
     parser.add_argument("--state-dir", type=Path, default=default_state_dir())
     parser.add_argument("--model", default="gpt-5.4-mini")
+    parser.add_argument("--chat-model", default="gpt-5.4")
     return parser
 
 
@@ -2311,6 +2769,7 @@ def main() -> None:
             mcp_url=args.mcp_url,
             state_dir=args.state_dir,
             model_name=args.model,
+            chat_model_name=args.chat_model,
         ),
         host=args.host,
         port=args.port,
