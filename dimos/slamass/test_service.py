@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 from pathlib import Path
 
 import cv2
@@ -26,9 +27,16 @@ from dimos.slamass.storage import SlamassStorage
 class FakeMcpClient:
     def __init__(self, image_bytes: bytes) -> None:
         self._image_bytes = image_bytes
+        self.relative_move_calls: list[tuple[float, float, float]] = []
 
     def observe_jpeg(self) -> bytes:
         return self._image_bytes
+
+    async def relative_move(
+        self, *, forward: float = 0.0, left: float = 0.0, degrees: float = 0.0
+    ) -> dict[str, str]:
+        self.relative_move_calls.append((forward, left, degrees))
+        return {"status": "ok"}
 
 
 class FakeMapClient:
@@ -141,13 +149,15 @@ async def test_service_persists_active_map(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_service_go_to_poi_uses_stored_view_pose(tmp_path: Path) -> None:
     storage = SlamassStorage(tmp_path)
+    fake_mcp = FakeMcpClient(make_test_jpeg())
     service = SlamassService(
         map_socket_url="http://localhost:7779",
         mcp_url="http://localhost:9990/mcp",
         state_dir=tmp_path,
         storage=storage,
-        mcp_client=FakeMcpClient(make_test_jpeg()),
+        mcp_client=fake_mcp,
         analyzer=FakeAnalyzer(),
+        poi_arrival_settle_seconds=0.0,
     )
     hero = storage.create_image_asset(b"hero", ".jpg")
     thumb = storage.create_image_asset(b"thumb", ".jpg")
@@ -166,12 +176,16 @@ async def test_service_go_to_poi_uses_stored_view_pose(tmp_path: Path) -> None:
     )
     storage.upsert_poi(poi)
     service.pois[poi.poi_id] = poi
+    service.robot_pose = RobotPose(x=poi.world_x, y=poi.world_y, z=0.0, yaw=0.1)
     fake_map_client = FakeMapClient()
     service.map_client = fake_map_client  # type: ignore[assignment]
 
     await service.go_to_poi(poi.poi_id)
+    assert service._goto_poi_task is not None
+    await asyncio.wait_for(service._goto_poi_task, timeout=1.0)
 
-    assert fake_map_client.calls == [(1.25, -0.75, 0.6)]
+    assert fake_map_client.calls == [(1.25, -0.75, None)]
+    assert fake_mcp.relative_move_calls == [(0.0, 0.0, pytest.approx(28.64788975654116))]
 
 
 @pytest.mark.asyncio
