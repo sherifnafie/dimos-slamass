@@ -61,6 +61,12 @@ export interface InspectionState {
   poi_id: string | null;
 }
 
+export type ManualInspectionMode = "ai_gate" | "always_create";
+
+export interface InspectionSettings {
+  manual_mode: ManualInspectionMode;
+}
+
 export interface AppState {
   connected: boolean;
   robot_pose: RobotPose | null;
@@ -69,5 +75,6 @@ export interface AppState {
   map: MapState | null;
   pois: Poi[];
   inspection: InspectionState;
+  inspection_settings: InspectionSettings;
   ui: UiState;
 }

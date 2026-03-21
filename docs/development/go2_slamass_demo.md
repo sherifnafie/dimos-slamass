@@ -87,9 +87,11 @@ The demo presenter opens a web UI and sees:
 As the robot moves through a pre-mapped building:
 
 - the operator can manually trigger an inspection
+- the operator can choose between `AI Gate` and `Always Create` for manual inspections
 - or later the robot can opportunistically inspect as it walks
 - the system captures a frame plus pose
 - a VLM describes what the robot is seeing
+- the inspection gate is intentionally permissive by default: it should reject only frames with almost no usable semantic content, such as blank walls, heavy blur, or contextless close-ups
 - a second LLM layer decides whether the observation is notable enough to become a POI
 - if accepted, the system stores the frame, a thumbnail, the semantic description, and the world pose
 - a floating spatial card appears on the map

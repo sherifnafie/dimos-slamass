@@ -57,6 +57,12 @@ POI_ARRIVAL_TOLERANCE_METERS = 0.6
 POI_ARRIVAL_SETTLE_SECONDS = 1.0
 POI_ARRIVAL_TIMEOUT_SECONDS = 120.0
 POI_ROTATION_THRESHOLD_DEGREES = 8.0
+INSPECTION_MODE_AI_GATE = "ai_gate"
+INSPECTION_MODE_ALWAYS_CREATE = "always_create"
+VALID_MANUAL_INSPECTION_MODES = (
+    INSPECTION_MODE_AI_GATE,
+    INSPECTION_MODE_ALWAYS_CREATE,
+)
 
 
 def load_slamass_env() -> None:
@@ -119,6 +125,11 @@ class InspectionAnalysis:
 
 
 @dataclass(slots=True)
+class InspectionSettings:
+    manual_mode: str = INSPECTION_MODE_AI_GATE
+
+
+@dataclass(slots=True)
 class UiCameraState:
     center_x: float | None = None
     center_y: float | None = None
@@ -156,6 +167,10 @@ class UiHighlightRequest(BaseModel):
 
 class UiFocusRequest(BaseModel):
     zoom: float | None = None
+
+
+class InspectionSettingsRequest(BaseModel):
+    manual_mode: str
 
 
 class McpToolClient:
@@ -235,9 +250,15 @@ Return exactly one JSON object with these keys:
 - objects: array of short object/location strings
 
 Acceptance rules:
-- Accept frames that contain a spatially meaningful landmark, area, or visually interesting place a presenter could point at on a map.
-- Reject frames that are mostly blank floor, generic wall, motion blur, or repetitive uninteresting corridor views with no clear point of interest.
-- Be conservative. If unsure, reject.
+- Accept frames whenever they contain usable semantic information a human could later recognize on the map.
+- Accept identifiable places or objects even if they are ordinary: desk areas, doors, windows, kitchen corners, seating, posters, shelves, appliances, hallway intersections, entryways, displays, plants, signage, workstations.
+- Reject only when the frame provides almost no usable semantic information:
+  - plain featureless wall, floor, or ceiling
+  - severe motion blur
+  - an extremely close-up crop with no scene context
+  - a generic empty corridor or corner with nothing distinctive to point at
+- Do not reject just because the scene is common or not visually dramatic.
+- When the frame has weak but still usable context, accept it with a lower interest_score instead of rejecting it.
 
 The title should name the place or salient thing, not a sentence.
 The summary should describe visible evidence only.
@@ -349,6 +370,13 @@ def yaw_distance(a: float, b: float) -> float:
 
 def angle_delta(target: float, current: float) -> float:
     return math.atan2(math.sin(target - current), math.cos(target - current))
+
+
+def normalize_manual_inspection_mode(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in VALID_MANUAL_INSPECTION_MODES:
+        raise ValueError(f"Unsupported inspection mode: {value}")
+    return normalized
 
 
 class MapSocketClient:
@@ -514,6 +542,7 @@ class SlamassService:
             "message": "",
             "poi_id": None,
         }
+        self.inspection_settings = InspectionSettings()
         self.ui_state = SlamassUiState()
 
     async def start(self) -> None:
@@ -577,6 +606,7 @@ class SlamassService:
                 "map": self._serialize_map(),
                 "pois": [self._serialize_poi(poi) for poi in self._active_pois()],
                 "inspection": dict(self.inspection_state),
+                "inspection_settings": self._serialize_inspection_settings_locked(),
                 "ui": self._serialize_ui_locked(),
             }
 
@@ -604,6 +634,19 @@ class SlamassService:
                 target_yaw=target_yaw,
             )
         )
+
+    async def set_manual_inspection_mode(self, manual_mode: str) -> dict[str, Any]:
+        try:
+            normalized_mode = normalize_manual_inspection_mode(manual_mode)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        async with self._state_lock:
+            self.inspection_settings.manual_mode = normalized_mode
+            payload = self._serialize_inspection_settings_locked()
+            self.storage.save_json_setting("inspection_settings", payload)
+        await self.publish_event("state_updated", {"inspection_settings": payload})
+        return payload
 
     async def ui_snapshot(self) -> dict[str, Any]:
         async with self._state_lock:
@@ -691,6 +734,7 @@ class SlamassService:
             if self.inspection_state["status"] == "running":
                 raise HTTPException(status_code=409, detail="Inspection already running")
             pose = self.robot_pose
+            manual_mode = self.inspection_settings.manual_mode
             self.inspection_state = {"status": "running", "message": "Inspecting current view", "poi_id": None}
         await self.publish_event("inspection_updated", dict(self.inspection_state))
 
@@ -709,9 +753,18 @@ class SlamassService:
             dimos_image = jpeg_bytes_to_dimos_image(image_bytes)
             analysis = self.analyzer.analyze(dimos_image)
             payload_json = json.dumps(analysis.as_payload())
+            effective_create_poi = analysis.should_create_poi
+            gate_result = "accepted"
+            gate_message = analysis.gate_reason
+            if manual_mode == INSPECTION_MODE_ALWAYS_CREATE and not analysis.should_create_poi:
+                effective_create_poi = True
+                gate_result = "forced_accept"
+                gate_message = f"Saved by manual override. AI note: {analysis.gate_reason}"
+            elif not analysis.should_create_poi:
+                gate_result = "rejected"
 
             poi: PoiRecord | None = None
-            if analysis.should_create_poi:
+            if effective_create_poi:
                 async with self._state_lock:
                     duplicate = self._find_duplicate_poi_locked(analysis, pose)
                     if duplicate is not None:
@@ -743,9 +796,9 @@ class SlamassService:
 
                 await self.publish_event("poi_upserted", self._serialize_poi(poi))
                 await self.focus_poi(poi.poi_id, zoom=UI_FOCUS_POI_ZOOM)
-                await self._set_inspection_state("accepted", analysis.gate_reason, poi.poi_id)
+                await self._set_inspection_state("accepted", gate_message, poi.poi_id)
             else:
-                await self._set_inspection_state("rejected", analysis.gate_reason, None)
+                await self._set_inspection_state("rejected", gate_message, None)
 
             observation = self.storage.new_observation(
                 poi_id=poi.poi_id if poi is not None else None,
@@ -755,13 +808,14 @@ class SlamassService:
                 image_path=hero_path,
                 thumbnail_path=thumb_path,
                 model_payload_json=payload_json,
-                gate_result="accepted" if poi is not None else "rejected",
+                gate_result=gate_result,
             )
             self.storage.insert_observation(observation)
             return {
                 "status": self.inspection_state["status"],
                 "poi_id": poi.poi_id if poi is not None else None,
                 "analysis": analysis.as_payload(),
+                "manual_mode": manual_mode,
             }
         except (OpenAIError, aiohttp.ClientError, RuntimeError, ValueError) as exc:
             logger.exception("Inspect Now failed")
@@ -842,6 +896,15 @@ class SlamassService:
     def _load_from_storage(self) -> None:
         record, log_odds, observation_count = self.storage.load_active_map()
         self.map_record = record
+        settings = self.storage.load_json_setting("inspection_settings")
+        if settings is not None:
+            try:
+                raw_manual_mode = settings.get("manual_mode", INSPECTION_MODE_AI_GATE)
+                self.inspection_settings = InspectionSettings(
+                    manual_mode=normalize_manual_inspection_mode(str(raw_manual_mode))
+                )
+            except ValueError:
+                logger.warning("Ignoring invalid persisted inspection settings", settings=settings)
         if record is not None and log_odds is not None and observation_count is not None:
             self.map_state = ActiveMapState.from_arrays(
                 map_id=record.map_id,
@@ -1049,6 +1112,7 @@ class SlamassService:
                     "updated_at": self.pov_updated_at,
                     "image_url": f"/api/pov/latest.jpg?v={self.pov_seq}",
                 },
+                "inspection_settings": self._serialize_inspection_settings_locked(),
             }
 
     def _require_active_poi_locked(self, poi_id: str) -> PoiRecord:
@@ -1176,6 +1240,11 @@ class SlamassService:
             "highlighted_poi_ids": list(self.ui_state.highlighted_poi_ids),
         }
 
+    def _serialize_inspection_settings_locked(self) -> dict[str, Any]:
+        return {
+            "manual_mode": self.inspection_settings.manual_mode,
+        }
+
     def _serialize_poi(self, poi: PoiRecord) -> dict[str, Any]:
         return {
             "poi_id": poi.poi_id,
@@ -1233,6 +1302,11 @@ def create_app(
     @app.get("/api/state")
     async def get_state() -> dict[str, Any]:
         return await slamass.snapshot()
+
+    @app.get("/api/inspection-settings")
+    async def get_inspection_settings() -> dict[str, Any]:
+        async with slamass._state_lock:
+            return slamass._serialize_inspection_settings_locked()
 
     @app.get("/api/ui")
     async def get_ui_state() -> dict[str, Any]:
@@ -1326,6 +1400,10 @@ def create_app(
     @app.post("/api/inspect/now")
     async def post_inspect_now() -> dict[str, Any]:
         return await slamass.inspect_now()
+
+    @app.put("/api/inspection-settings")
+    async def put_inspection_settings(request: InspectionSettingsRequest) -> dict[str, Any]:
+        return await slamass.set_manual_inspection_mode(request.manual_mode)
 
     @app.get("/api/pois")
     async def get_pois() -> list[dict[str, Any]]:

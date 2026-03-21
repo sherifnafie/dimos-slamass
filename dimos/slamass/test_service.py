@@ -116,6 +116,29 @@ async def test_service_inspect_now_rejects_without_creating_poi(tmp_path: Path) 
 
 
 @pytest.mark.asyncio
+async def test_service_manual_inspection_override_creates_poi(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(should_create_poi=False, title="Office Corner"),
+    )
+    service.robot_pose = RobotPose(x=0.0, y=0.0, z=0.0, yaw=0.0)
+
+    settings = await service.set_manual_inspection_mode("always_create")
+    result = await service.inspect_now()
+
+    assert settings["manual_mode"] == "always_create"
+    assert result["status"] == "accepted"
+    assert result["manual_mode"] == "always_create"
+    assert len(storage.list_pois()) == 1
+    assert service.inspection_state["message"].startswith("Saved by manual override.")
+
+
+@pytest.mark.asyncio
 async def test_service_persists_active_map(tmp_path: Path) -> None:
     storage = SlamassStorage(tmp_path)
     service = SlamassService(
@@ -144,6 +167,25 @@ async def test_service_persists_active_map(tmp_path: Path) -> None:
     assert snapshot["map"] is not None
     assert (tmp_path / "maps" / "active_map.npz").exists()
     assert (tmp_path / "maps" / "active_map.png").exists()
+
+
+@pytest.mark.asyncio
+async def test_service_loads_persisted_inspection_settings(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    storage.save_json_setting("inspection_settings", {"manual_mode": "always_create"})
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+    )
+
+    service._load_from_storage()
+    snapshot = await service.snapshot()
+
+    assert snapshot["inspection_settings"]["manual_mode"] == "always_create"
 
 
 @pytest.mark.asyncio

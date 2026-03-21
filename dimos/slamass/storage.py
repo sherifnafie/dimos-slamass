@@ -157,6 +157,12 @@ class SlamassStorage:
                 gate_result TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """
         )
         conn.commit()
@@ -239,6 +245,30 @@ class SlamassStorage:
         png_rel = Path("maps") / "active_map.png"
         (self.state_dir / png_rel).write_bytes(preview_png)
         return str(png_rel)
+
+    def load_json_setting(self, key: str) -> dict[str, object] | None:
+        conn = self._get_conn()
+        row = conn.execute("SELECT value_json FROM app_settings WHERE key = ?", (key,)).fetchone()
+        if row is None:
+            return None
+        parsed = json.loads(str(row["value_json"]))
+        if not isinstance(parsed, dict):
+            return None
+        return parsed
+
+    def save_json_setting(self, key: str, value: dict[str, object]) -> None:
+        conn = self._get_conn()
+        conn.execute(
+            """
+            INSERT INTO app_settings (key, value_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value_json = excluded.value_json,
+                updated_at = excluded.updated_at
+            """,
+            (key, json.dumps(value), utc_now_iso()),
+        )
+        conn.commit()
 
     def load_active_map(
         self,

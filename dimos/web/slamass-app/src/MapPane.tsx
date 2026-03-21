@@ -252,8 +252,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
         <>
           <div className="map-chrome">
             <div className="map-meta">
-              <span>Drag to pan</span>
-              <span>Scroll to zoom</span>
               <span>{ui.camera.zoom.toFixed(2)}x</span>
               <span>{describeHighlightState(ui)}</span>
             </div>
@@ -411,8 +409,22 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                   <img alt={poi.title} draggable={false} onDragStart={preventNativeDrag} src={poi.thumbnail_url} />
                   <span>{poi.title}</span>
                 </button>
-              );
-            })}
+                );
+              })}
+          <div className="map-legend" onPointerDown={stopEvent}>
+            <span>
+              <i className="legend-swatch robot" />
+              Robot
+            </span>
+            <span>
+              <i className="legend-swatch path" />
+              Planned path
+            </span>
+            <span>
+              <i className="legend-swatch poi" />
+              Semantic POIs
+            </span>
+          </div>
         </>
       )}
     </div>

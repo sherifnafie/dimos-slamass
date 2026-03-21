@@ -105,3 +105,16 @@ def test_poi_upsert_and_soft_delete(tmp_path: Path) -> None:
     storage.soft_delete_poi(poi.poi_id)
     assert storage.list_pois() == []
     assert storage.get_poi(poi.poi_id) is not None
+
+
+def test_settings_round_trip(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+
+    storage.save_json_setting(
+        "inspection_settings",
+        {"manual_mode": "always_create"},
+    )
+
+    loaded = storage.load_json_setting("inspection_settings")
+
+    assert loaded == {"manual_mode": "always_create"}
