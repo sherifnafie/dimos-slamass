@@ -408,6 +408,21 @@ img {
   color: #ffe0e0;
 }
 
+.menu-divider {
+  height: 1px;
+  margin: 6px 2px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.menu-section-label {
+  margin: 0;
+  padding: 2px 10px 0;
+  color: var(--text-muted);
+  font-size: 0.69rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .menu-field {
   display: grid;
   gap: 8px;

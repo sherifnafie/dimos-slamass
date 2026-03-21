@@ -99,8 +99,6 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
       }
       bodyClassName="panel-body-console"
       className="console-panel"
-      kicker="Operator"
-      title="Console"
     >
       <div className="rail-stack">
         {selectedPreview ? (

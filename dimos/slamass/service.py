@@ -1124,6 +1124,51 @@ class SlamassService:
         await self.publish_event("ui_state_updated", payload)
         return payload
 
+    async def clear_low_level_map_memory(self) -> dict[str, Any]:
+        async with self._state_lock:
+            self.storage.clear_active_map()
+            self.map_state = None
+            self.path = []
+            self._dirty_map = False
+            self.ui_state.camera = UiCameraState(center_x=None, center_y=None, zoom=UI_MIN_ZOOM)
+            ui_payload = self._commit_ui_state_locked()
+
+        await self.publish_event("state_updated", {"map": None, "path": []})
+        await self.publish_event("map_updated", None)
+        await self.publish_event("ui_state_updated", ui_payload)
+        return {"cleared": True, "scope": "low_level_map"}
+
+    async def clear_semantic_memory(self) -> dict[str, Any]:
+        if self._goto_poi_task is not None:
+            self._goto_poi_task.cancel()
+            with contextlib_suppress(asyncio.CancelledError):
+                await self._goto_poi_task
+            self._goto_poi_task = None
+
+        if self._chat_task is not None:
+            self._chat_task.cancel()
+            with contextlib_suppress(asyncio.CancelledError):
+                await self._chat_task
+
+        async with self._state_lock:
+            self.storage.clear_semantic_memory()
+            self._chat_task = None
+            self.chat_state = ChatState()
+            self.pois = {}
+            self.yolo_objects = {}
+            self.ui_state.selected_item = None
+            self.ui_state.highlighted_items = []
+            self.inspection_state = {"status": "idle", "message": "", "poi_id": None}
+            ui_payload = self._commit_ui_state_locked()
+            chat_payload = self._serialize_chat_locked()
+            inspection_payload = dict(self.inspection_state)
+
+        await self.publish_event("state_updated", {"pois": [], "yolo_objects": []})
+        await self.publish_event("inspection_updated", inspection_payload)
+        await self.publish_event("ui_state_updated", ui_payload)
+        await self.publish_event("chat_state_updated", chat_payload)
+        return {"cleared": True, "scope": "semantic_memory"}
+
     async def chat_snapshot(self) -> dict[str, Any]:
         async with self._state_lock:
             return self._serialize_chat_locked()
@@ -2565,6 +2610,14 @@ def create_app(
     @app.post("/api/map/save")
     async def post_save_map() -> dict[str, Any]:
         return await slamass.save_map()
+
+    @app.post("/api/memory/clear-map")
+    async def post_clear_low_level_map_memory() -> dict[str, Any]:
+        return await slamass.clear_low_level_map_memory()
+
+    @app.post("/api/memory/clear-semantic")
+    async def post_clear_semantic_memory() -> dict[str, Any]:
+        return await slamass.clear_semantic_memory()
 
     @app.put("/api/ui/camera")
     async def put_ui_camera(request: UiCameraRequest) -> dict[str, Any]:

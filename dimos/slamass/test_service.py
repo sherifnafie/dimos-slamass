@@ -214,6 +214,131 @@ async def test_service_persists_active_map(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_service_clear_low_level_map_memory_preserves_semantics(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+    )
+
+    await service._handle_raw_costmap(
+        RawCostmap(
+            grid=np.full((4, 4), 100, dtype=np.int8),
+            origin_x=0.0,
+            origin_y=0.0,
+            resolution=0.05,
+            ts=0.0,
+        )
+    )
+
+    hero = storage.create_image_asset(b"hero", ".jpg")
+    thumb = storage.create_image_asset(b"thumb", ".jpg")
+    poi = storage.new_poi(
+        map_id="active",
+        world_x=0.5,
+        world_y=0.5,
+        world_yaw=0.0,
+        title="Desk",
+        summary="Desk landmark",
+        category="desk",
+        interest_score=0.7,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        objects=["desk"],
+    )
+    storage.upsert_poi(poi)
+    service.pois[poi.poi_id] = poi
+
+    result = await service.clear_low_level_map_memory()
+
+    assert result == {"cleared": True, "scope": "low_level_map"}
+    assert service.map_state is None
+    assert service.path == []
+    assert storage.load_active_map() == (None, None, None)
+    assert (tmp_path / "maps" / "active_map.npz").exists() is False
+    assert (tmp_path / "maps" / "active_map.png").exists() is False
+    assert service.pois[poi.poi_id].title == "Desk"
+
+
+@pytest.mark.asyncio
+async def test_service_clear_semantic_memory_preserves_low_level_map(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+    )
+
+    await service._handle_raw_costmap(
+        RawCostmap(
+            grid=np.full((4, 4), 100, dtype=np.int8),
+            origin_x=0.0,
+            origin_y=0.0,
+            resolution=0.05,
+            ts=0.0,
+        )
+    )
+
+    hero = storage.create_image_asset(b"hero", ".jpg")
+    thumb = storage.create_image_asset(b"thumb", ".jpg")
+    poi = storage.new_poi(
+        map_id="active",
+        world_x=0.5,
+        world_y=0.5,
+        world_yaw=0.0,
+        title="Desk",
+        summary="Desk landmark",
+        category="desk",
+        interest_score=0.7,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        objects=["desk"],
+    )
+    storage.upsert_poi(poi)
+    service.pois[poi.poi_id] = poi
+
+    yolo = storage.new_yolo_object(
+        map_id="active",
+        label="chair",
+        class_id=56,
+        world_x=0.25,
+        world_y=0.35,
+        world_z=0.0,
+        size_x=0.4,
+        size_y=0.4,
+        size_z=0.8,
+        best_view_x=0.25,
+        best_view_y=0.2,
+        best_view_yaw=0.0,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        detections_count=4,
+        best_confidence=0.88,
+    )
+    storage.upsert_yolo_object(yolo)
+    service.yolo_objects[yolo.object_id] = yolo
+    await service.select_poi(poi.poi_id)
+
+    result = await service.clear_semantic_memory()
+
+    assert result == {"cleared": True, "scope": "semantic_memory"}
+    assert service.map_state is not None
+    assert service.pois == {}
+    assert service.yolo_objects == {}
+    assert storage.list_pois() == []
+    assert storage.list_yolo_objects() == []
+    assert service.ui_state.selected_item is None
+    assert service.ui_state.highlighted_items == []
+
+
+@pytest.mark.asyncio
 async def test_service_loads_persisted_inspection_settings(tmp_path: Path) -> None:
     storage = SlamassStorage(tmp_path)
     storage.save_json_setting("inspection_settings", {"manual_mode": "always_create"})

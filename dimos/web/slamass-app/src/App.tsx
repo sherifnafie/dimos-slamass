@@ -562,6 +562,87 @@ export default function App(): React.ReactElement {
     }
   }, [appendActivity, reportActionError]);
 
+  const handleClearLowLevelMapMemory = React.useCallback(async () => {
+    const confirmed = window.confirm(
+      "Clear the low-level persistent map memory?\n\nThis removes the active occupancy map only. Semantic POIs and YOLO objects are kept.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    appendActivity("operator", "Clear map memory", "Low-level map reset requested.", "danger");
+    setBusyAction("clear-map-memory");
+    try {
+      await fetchJson("/api/memory/clear-map", { method: "POST" });
+      startTransition(() => {
+        setState((previous) => ({
+          ...previous,
+          map: null,
+          path: [],
+          ui: {
+            ...previous.ui,
+            camera: {
+              center_x: null,
+              center_y: null,
+              zoom: 1,
+            },
+          },
+        }));
+      });
+      appendActivity("system", "Map memory cleared", "Active occupancy map removed.", "danger");
+    } catch (error) {
+      reportActionError("Clear map memory failed", error);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [appendActivity, reportActionError]);
+
+  const handleClearSemanticMemory = React.useCallback(async () => {
+    const confirmed = window.confirm(
+      "Clear semantic memory?\n\nThis removes VLM POIs, YOLO objects, semantic observations, and chat history. The low-level occupancy map stays intact.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    appendActivity("operator", "Clear semantic memory", "Semantic memory reset requested.", "danger");
+    setBusyAction("clear-semantic-memory");
+    try {
+      await fetchJson("/api/memory/clear-semantic", { method: "POST" });
+      startTransition(() => {
+        setState((previous) => ({
+          ...previous,
+          pois: [],
+          yolo_objects: [],
+          inspection: {
+            status: "idle",
+            message: "",
+            poi_id: null,
+          },
+          ui: {
+            ...previous.ui,
+            selected_item: null,
+            highlighted_items: [],
+          },
+          chat: {
+            running: false,
+            messages: [],
+          },
+        }));
+      });
+      appendActivity(
+        "system",
+        "Semantic memory cleared",
+        "POIs, YOLO objects, and semantic chat state removed.",
+        "danger",
+      );
+    } catch (error) {
+      reportActionError("Clear semantic memory failed", error);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [appendActivity, reportActionError]);
+
   const handleInspectionModeChange = React.useCallback(
     async (manualMode: ManualInspectionMode) => {
       try {
@@ -1083,6 +1164,32 @@ export default function App(): React.ReactElement {
                   type="button"
                 >
                   {state.layers.show_pois ? "Hide VLM layer" : "Show VLM layer"}
+                </button>
+                <div className="menu-divider" />
+                <p className="menu-section-label">Danger zone</p>
+                <button
+                  className="menu-item menu-item-danger"
+                  disabled={busyAction !== null || state.map === null}
+                  onClick={() => {
+                    void handleClearLowLevelMapMemory();
+                    setControlsMenuOpen(false);
+                  }}
+                  type="button"
+                >
+                  Clear low-level map
+                </button>
+                <button
+                  className="menu-item menu-item-danger"
+                  disabled={
+                    busyAction !== null || (state.pois.length === 0 && state.yolo_objects.length === 0)
+                  }
+                  onClick={() => {
+                    void handleClearSemanticMemory();
+                    setControlsMenuOpen(false);
+                  }}
+                  type="button"
+                >
+                  Clear semantic memory
                 </button>
               </div>
             ) : null}
