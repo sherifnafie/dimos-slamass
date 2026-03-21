@@ -53,6 +53,30 @@ def test_storage_round_trip(tmp_path: Path) -> None:
     assert int(loaded_observation_count[0, 0]) == 3
 
 
+def test_storage_ignores_empty_active_map_artifact(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+
+    storage.save_active_map(
+        map_id="active",
+        resolution=0.15,
+        origin_x=-1.5,
+        origin_y=2.25,
+        log_odds=np.ones((2, 3), dtype=np.float32),
+        observation_count=np.full((2, 3), 3, dtype=np.uint16),
+        preview_png=b"preview",
+    )
+
+    artifact_path = tmp_path / "maps" / "active_map.npz"
+    artifact_path.write_bytes(b"")
+
+    loaded_record, loaded_log_odds, loaded_observation_count = storage.load_active_map()
+
+    assert loaded_record is not None
+    assert loaded_record.map_id == "active"
+    assert loaded_log_odds is None
+    assert loaded_observation_count is None
+
+
 def test_poi_upsert_and_soft_delete(tmp_path: Path) -> None:
     storage = SlamassStorage(tmp_path)
     hero = storage.create_image_asset(b"hero", ".jpg")

@@ -17,12 +17,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import logging
 from pathlib import Path
 import sqlite3
 import threading
 import uuid
+from zipfile import BadZipFile
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def utc_now_iso() -> str:
@@ -260,8 +264,20 @@ class SlamassStorage:
         if not artifact_path.exists():
             return record, None, None
 
-        loaded = np.load(artifact_path)
-        return record, loaded["log_odds"], loaded["observation_count"]
+        if artifact_path.stat().st_size == 0:
+            logger.warning("Ignoring empty SLAMASS map artifact at %s", artifact_path)
+            return record, None, None
+
+        try:
+            with np.load(artifact_path) as loaded:
+                return record, loaded["log_odds"], loaded["observation_count"]
+        except (BadZipFile, EOFError, KeyError, OSError, ValueError) as exc:
+            logger.warning(
+                "Ignoring unreadable SLAMASS map artifact at %s: %s",
+                artifact_path,
+                exc,
+            )
+            return record, None, None
 
     def upsert_poi(self, record: PoiRecord) -> None:
         conn = self._get_conn()
