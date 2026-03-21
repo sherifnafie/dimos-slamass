@@ -78,9 +78,22 @@ export function worldToScreen(
 ): [number, number] {
   const cellX = (x - map.origin_x) / map.resolution;
   const cellY = (y - map.origin_y) / map.resolution;
+  const imageX = cellX * viewport.pixelsPerCell;
+  const imageY = (map.height - cellY) * viewport.pixelsPerCell;
+  return [viewport.imageLeft + imageX, viewport.imageTop + imageY];
+}
+
+export function worldToImagePixels(
+  map: MapState,
+  viewport: MapViewport,
+  x: number,
+  y: number,
+): [number, number] {
+  const cellX = (x - map.origin_x) / map.resolution;
+  const cellY = (y - map.origin_y) / map.resolution;
   return [
-    viewport.imageLeft + cellX * viewport.pixelsPerCell,
-    viewport.imageTop + (map.height - cellY) * viewport.pixelsPerCell,
+    cellX * viewport.pixelsPerCell,
+    (map.height - cellY) * viewport.pixelsPerCell,
   ];
 }
 

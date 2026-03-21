@@ -5,7 +5,7 @@ import {
   clampZoom,
   panCamera,
   screenToWorld,
-  worldToScreen,
+  worldToImagePixels,
   zoomCameraAtScreenPoint,
 } from "./mapViewport";
 import { refFromPoi, refFromYoloObject, semanticKey } from "./semanticItems";
@@ -359,17 +359,27 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
               top: `${viewport.imageTop}px`,
             }}
           />
-          <svg className="map-overlay" viewBox={`0 0 ${size.width} ${size.height}`}>
+          <svg
+            className="map-overlay map-overlay-anchored"
+            preserveAspectRatio="none"
+            style={{
+              width: `${viewport.imageWidth}px`,
+              height: `${viewport.imageHeight}px`,
+              left: `${viewport.imageLeft}px`,
+              top: `${viewport.imageTop}px`,
+            }}
+            viewBox={`0 0 ${viewport.imageWidth} ${viewport.imageHeight}`}
+          >
             {path.length > 1 && (
               <polyline
                 className="path-line"
                 points={path
-                  .map(([x, y]) => worldToScreen(map, viewport, x, y).join(","))
+                  .map(([x, y]) => worldToImagePixels(map, viewport, x, y).join(","))
                   .join(" ")}
               />
             )}
             {robotPose && (() => {
-              const [robotX, robotY] = worldToScreen(map, viewport, robotPose.x, robotPose.y);
+              const [robotX, robotY] = worldToImagePixels(map, viewport, robotPose.x, robotPose.y);
               return (
                 <g transform={`translate(${robotX}, ${robotY})`}>
                   <circle className="robot-ring" r="13" />
@@ -386,7 +396,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
             })()}
             {layers.show_pois &&
               activePois.map((poi) => {
-                const [x, y] = worldToScreen(map, viewport, poi.world_x, poi.world_y);
+                const [x, y] = worldToImagePixels(map, viewport, poi.world_x, poi.world_y);
                 const itemRef = refFromPoi(poi.poi_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
@@ -431,7 +441,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
               })}
             {layers.show_yolo &&
               activeYoloObjects.map((object) => {
-                const [x, y] = worldToScreen(map, viewport, object.world_x, object.world_y);
+                const [x, y] = worldToImagePixels(map, viewport, object.world_x, object.world_y);
                 const itemRef = refFromYoloObject(object.object_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
@@ -456,73 +466,88 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 );
               })}
           </svg>
-          {layers.show_pois &&
-            activePois.map((poi) => {
-              const [x, y] = worldToScreen(map, viewport, poi.world_x, poi.world_y);
-              const itemRef = refFromPoi(poi.poi_id);
-              const itemKey = semanticKey(itemRef);
-              const isSelected = selectedKey === itemKey;
-              const isHighlighted = highlightedKeys.has(itemKey);
-              const isMuted = hasHighlights && !isHighlighted && !isSelected;
-              return (
-                <button
-                  className={[
-                    "poi-card",
-                    isSelected ? "is-selected" : "",
-                    isHighlighted ? "is-highlighted" : "",
-                    isMuted ? "is-muted" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  key={poi.poi_id}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelectItem(itemRef);
-                  }}
-                  onDragStart={preventNativeDrag}
-                  onPointerDown={stopEvent}
-                  style={{ left: `${x}px`, top: `${y - 42}px` }}
-                  type="button"
-                >
-                  <img alt={poi.title} draggable={false} onDragStart={preventNativeDrag} src={poi.thumbnail_url} />
-                  <span>{poi.title}</span>
-                </button>
-              );
-            })}
-          {layers.show_yolo &&
-            activeYoloObjects.map((object) => {
-              const [x, y] = worldToScreen(map, viewport, object.world_x, object.world_y);
-              const itemRef = refFromYoloObject(object.object_id);
-              const itemKey = semanticKey(itemRef);
-              const isSelected = selectedKey === itemKey;
-              const isHighlighted = highlightedKeys.has(itemKey);
-              const isMuted = hasHighlights && !isHighlighted && !isSelected;
-              const showLabel = labeledYoloIds.has(object.object_id);
-              return (
-                <button
-                  className={[
-                    "yolo-chip",
-                    showLabel ? "has-label" : "dot-only",
-                    isSelected ? "is-selected" : "",
-                    isHighlighted ? "is-highlighted" : "",
-                    isMuted ? "is-muted" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  key={object.object_id}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelectItem(itemRef);
-                  }}
-                  onDragStart={preventNativeDrag}
-                  onPointerDown={stopEvent}
-                  style={{ left: `${x}px`, top: `${y + 12}px` }}
-                  type="button"
-                >
-                  {showLabel ? <span>{object.label}</span> : null}
-                </button>
-              );
-            })}
+          <div
+            className="map-annotation-layer"
+            style={{
+              width: `${viewport.imageWidth}px`,
+              height: `${viewport.imageHeight}px`,
+              left: `${viewport.imageLeft}px`,
+              top: `${viewport.imageTop}px`,
+            }}
+          >
+            {layers.show_pois &&
+              activePois.map((poi) => {
+                const [x, y] = worldToImagePixels(map, viewport, poi.world_x, poi.world_y);
+                const itemRef = refFromPoi(poi.poi_id);
+                const itemKey = semanticKey(itemRef);
+                const isSelected = selectedKey === itemKey;
+                const isHighlighted = highlightedKeys.has(itemKey);
+                const isMuted = hasHighlights && !isHighlighted && !isSelected;
+                return (
+                  <button
+                    className={[
+                      "poi-card",
+                      isSelected ? "is-selected" : "",
+                      isHighlighted ? "is-highlighted" : "",
+                      isMuted ? "is-muted" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    key={poi.poi_id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectItem(itemRef);
+                    }}
+                    onDragStart={preventNativeDrag}
+                    onPointerDown={stopEvent}
+                    style={{ left: `${x}px`, top: `${y - 42}px` }}
+                    type="button"
+                  >
+                    <img
+                      alt={poi.title}
+                      draggable={false}
+                      onDragStart={preventNativeDrag}
+                      src={poi.thumbnail_url}
+                    />
+                    <span>{poi.title}</span>
+                  </button>
+                );
+              })}
+            {layers.show_yolo &&
+              activeYoloObjects.map((object) => {
+                const [x, y] = worldToImagePixels(map, viewport, object.world_x, object.world_y);
+                const itemRef = refFromYoloObject(object.object_id);
+                const itemKey = semanticKey(itemRef);
+                const isSelected = selectedKey === itemKey;
+                const isHighlighted = highlightedKeys.has(itemKey);
+                const isMuted = hasHighlights && !isHighlighted && !isSelected;
+                const showLabel = labeledYoloIds.has(object.object_id);
+                return (
+                  <button
+                    className={[
+                      "yolo-chip",
+                      showLabel ? "has-label" : "dot-only",
+                      isSelected ? "is-selected" : "",
+                      isHighlighted ? "is-highlighted" : "",
+                      isMuted ? "is-muted" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    key={object.object_id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectItem(itemRef);
+                    }}
+                    onDragStart={preventNativeDrag}
+                    onPointerDown={stopEvent}
+                    style={{ left: `${x}px`, top: `${y + 12}px` }}
+                    type="button"
+                  >
+                    {showLabel ? <span>{object.label}</span> : null}
+                  </button>
+                );
+              })}
+          </div>
           <div className="map-legend" onPointerDown={stopEvent}>
             <span>
               <i className="legend-swatch robot" />

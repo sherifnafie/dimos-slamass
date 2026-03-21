@@ -635,6 +635,27 @@ img {
   pointer-events: none;
 }
 
+.map-overlay-anchored,
+.map-annotation-layer {
+  inset: auto;
+}
+
+.map-overlay-anchored {
+  pointer-events: none;
+}
+
+.map-annotation-layer {
+  position: absolute;
+  z-index: 2;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.map-annotation-layer .poi-card,
+.map-annotation-layer .yolo-chip {
+  pointer-events: auto;
+}
+
 .map-chrome {
   position: absolute;
   top: 12px;
