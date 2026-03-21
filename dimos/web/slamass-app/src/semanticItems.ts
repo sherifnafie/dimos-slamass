@@ -73,9 +73,9 @@ export function buildSemanticItems(pois: Poi[], yoloObjects: YoloObject[]): Sema
       entity_id: poi.poi_id,
       title: poi.title,
       subtitle: poi.category,
-      world_x: poi.world_x,
-      world_y: poi.world_y,
-      world_yaw: poi.world_yaw,
+      world_x: poi.target_x,
+      world_y: poi.target_y,
+      world_yaw: poi.anchor_yaw,
       thumbnail_url: poi.thumbnail_url,
       updated_at: poi.updated_at,
     }));

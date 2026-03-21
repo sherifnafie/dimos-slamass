@@ -1,5 +1,6 @@
 import React, { startTransition } from "react";
 
+import { AgentToolsModal } from "./AgentToolsModal";
 import { LiveFeedPanel } from "./LiveFeedPanel";
 import { MapPane } from "./MapPane";
 import { OperatorRail, SelectedSemanticPreview } from "./OperatorRail";
@@ -21,6 +22,7 @@ import {
 import {
   AppState,
   ChatState,
+  ChatToolDefinition,
   InspectionSettings,
   ManualInspectionMode,
   Poi,
@@ -187,6 +189,10 @@ export default function App(): React.ReactElement {
   const [layoutMode, setLayoutModeState] = React.useState<LayoutMode>(getInitialLayoutMode);
   const [teleopEnabled, setTeleopEnabled] = React.useState(false);
   const [controlsMenuOpen, setControlsMenuOpen] = React.useState(false);
+  const [agentToolsOpen, setAgentToolsOpen] = React.useState(false);
+  const [agentToolsLoading, setAgentToolsLoading] = React.useState(false);
+  const [agentToolsError, setAgentToolsError] = React.useState<string | null>(null);
+  const [agentTools, setAgentTools] = React.useState<ChatToolDefinition[] | null>(null);
   const [activityEntries, setActivityEntries] = React.useState<ActivityEntry[]>(() => [
     {
       id: "boot",
@@ -663,6 +669,31 @@ export default function App(): React.ReactElement {
     },
     [reportActionError],
   );
+
+  const loadAgentTools = React.useCallback(async () => {
+    setAgentToolsLoading(true);
+    setAgentToolsError(null);
+    try {
+      const manifest = await fetchJson<ChatToolDefinition[]>("/api/chat/tools");
+      startTransition(() => {
+        setAgentTools(manifest);
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load agent tools.";
+      setAgentToolsError(message);
+      reportActionError("Loading agent tools failed", error);
+    } finally {
+      setAgentToolsLoading(false);
+    }
+  }, [reportActionError]);
+
+  const handleOpenAgentTools = React.useCallback(() => {
+    setControlsMenuOpen(false);
+    setAgentToolsOpen(true);
+    if (!agentToolsLoading && agentTools === null && agentToolsError === null) {
+      void loadAgentTools();
+    }
+  }, [agentTools, agentToolsError, agentToolsLoading, loadAgentTools]);
 
   const handleYoloModeChange = React.useCallback(
     async (mode: YoloRuntimeMode) => {
@@ -1159,6 +1190,15 @@ export default function App(): React.ReactElement {
                 <button
                   className="menu-item"
                   onClick={() => {
+                    handleOpenAgentTools();
+                  }}
+                  type="button"
+                >
+                  Agent tool calls
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
                     void handleYoloModeChange(state.yolo_runtime.mode === "live" ? "paused" : "live");
                     setControlsMenuOpen(false);
                   }}
@@ -1351,8 +1391,11 @@ export default function App(): React.ReactElement {
 
                   <div className="poi-meta">
                     <span>
-                      {selectedPoi.world_x.toFixed(2)}, {selectedPoi.world_y.toFixed(2)} |{" "}
-                      {formatYaw(selectedPoi.world_yaw)}
+                      Target {selectedPoi.target_x.toFixed(2)}, {selectedPoi.target_y.toFixed(2)}
+                    </span>
+                    <span>
+                      View {selectedPoi.anchor_x.toFixed(2)}, {selectedPoi.anchor_y.toFixed(2)} |{" "}
+                      {formatYaw(selectedPoi.anchor_yaw)}
                     </span>
                     <span>{formatTimestamp(selectedPoi.updated_at)}</span>
                   </div>
@@ -1515,6 +1558,20 @@ export default function App(): React.ReactElement {
             ) : null}
           </div>
         </div>
+      ) : null}
+
+      {agentToolsOpen ? (
+        <AgentToolsModal
+          error={agentToolsError}
+          loading={agentToolsLoading}
+          onClose={() => {
+            setAgentToolsOpen(false);
+          }}
+          onReload={() => {
+            void loadAgentTools();
+          }}
+          tools={agentTools}
+        />
       ) : null}
     </div>
   );

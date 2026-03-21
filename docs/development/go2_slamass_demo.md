@@ -26,7 +26,8 @@ The repo now already contains a working first pass of this concept:
 - floating VLM POI cards with detail modal and delete
 - a second semantic layer built from live YOLO detections, promoted into persistent world objects after repeated hits
 - YOLO object detail, `Go To`, delete, pause/resume ingestion, and layer visibility controls
-- `Go To` wired to the stored POI viewpoint pose, meaning `x`, `y`, and the recorded viewing `yaw`
+- VLM POIs now track both `anchor_x/y/yaw` for the capture viewpoint and `target_x/y` for the semantic place location
+- `Go To` wired to the stored POI viewpoint pose, meaning the saved anchor `x`, `y`, and viewing `yaw`
 - `Go To` for YOLO objects wired to the saved best-view robot pose rather than the object centroid
 - a service-owned UI command layer for map focus state, selection, highlights, and camera control, so future agent-driven zoom/highlight behavior has a clean path
 - an operator chat panel backed by a service-owned agent that can search semantic memory, manipulate the SLAMASS UI, inspect the current view, navigate to saved semantic items, toggle semantic layers, pause or resume YOLO ingestion, save the map, and use a curated set of robot MCP tools
@@ -138,10 +139,11 @@ This is the actual product memory layer.
 
 Each POI is a saved observation tied to:
 
-- `x`
-- `y`
-- optionally `z` later, but not needed for v1
-- `yaw` or viewing heading
+- `anchor_x`
+- `anchor_y`
+- `anchor_yaw`
+- `target_x`
+- `target_y`
 - a thumbnail image
 - the original full image
 - semantic summary
@@ -159,6 +161,10 @@ There are now two semantic modalities inside this memory layer:
 - `YOLO objects`: denser, automatically promoted world objects backed by repeated 3D detections and a best crop / best-view pose
 
 These should be treated as one semantic dataset with two different acquisition paths.
+
+Related dense design note for future agent work:
+
+- `docs/development/go2_slamass_agent_tools.md`
 
 ### Layer 3: UI Visualization
 

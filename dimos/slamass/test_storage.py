@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from pathlib import Path
+import sqlite3
 
 import numpy as np
 
@@ -87,6 +88,8 @@ def test_poi_upsert_and_soft_delete(tmp_path: Path) -> None:
         world_x=1.0,
         world_y=2.0,
         world_yaw=0.1,
+        target_x=1.6,
+        target_y=2.4,
         title="Window Nook",
         summary="A bright nook with a large window.",
         category="window",
@@ -101,10 +104,81 @@ def test_poi_upsert_and_soft_delete(tmp_path: Path) -> None:
     assert len(listed) == 1
     assert listed[0].title == "Window Nook"
     assert listed[0].objects == ["window", "chair"]
+    assert listed[0].anchor_x == 1.0
+    assert listed[0].anchor_y == 2.0
+    assert listed[0].anchor_yaw == 0.1
+    assert listed[0].target_x == 1.6
+    assert listed[0].target_y == 2.4
 
     storage.soft_delete_poi(poi.poi_id)
     assert storage.list_pois() == []
     assert storage.get_poi(poi.poi_id) is not None
+
+
+def test_storage_migrates_legacy_poi_rows_to_anchor_and_target(tmp_path: Path) -> None:
+    state_dir = tmp_path
+    state_dir.mkdir(parents=True, exist_ok=True)
+    db_path = state_dir / "slamass.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE pois (
+            poi_id TEXT PRIMARY KEY,
+            map_id TEXT NOT NULL,
+            world_x REAL NOT NULL,
+            world_y REAL NOT NULL,
+            world_yaw REAL NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            category TEXT NOT NULL,
+            interest_score REAL NOT NULL,
+            status TEXT NOT NULL,
+            thumbnail_path TEXT NOT NULL,
+            hero_image_path TEXT NOT NULL,
+            objects_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO pois (
+            poi_id, map_id, world_x, world_y, world_yaw, title, summary, category,
+            interest_score, status, thumbnail_path, hero_image_path, objects_json,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "legacy-poi",
+            "active",
+            1.25,
+            -0.5,
+            0.35,
+            "Legacy Window",
+            "Legacy row from pre-split schema.",
+            "window",
+            0.8,
+            "active",
+            "images/thumb.jpg",
+            "images/hero.jpg",
+            '["window"]',
+            "2026-03-21T00:00:00Z",
+            "2026-03-21T00:00:00Z",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    storage = SlamassStorage(state_dir)
+    listed = storage.list_pois()
+
+    assert len(listed) == 1
+    assert listed[0].anchor_x == 1.25
+    assert listed[0].anchor_y == -0.5
+    assert listed[0].anchor_yaw == 0.35
+    assert listed[0].target_x == 1.25
+    assert listed[0].target_y == -0.5
 
 
 def test_settings_round_trip(tmp_path: Path) -> None:

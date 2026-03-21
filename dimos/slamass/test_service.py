@@ -106,6 +106,25 @@ class FakeChatAgent:
         self.calls.append((user_message, len(history)))
         return ChatTurnResult(content=self.content, tools_used=["search_semantic_memory", "focus_semantic_item"])
 
+    def tool_manifest(self) -> list[dict[str, object]]:
+        return [
+            {
+                "name": "search_semantic_memory",
+                "description": "Search semantic memory.",
+                "parameters": [],
+            },
+            {
+                "name": "go_to_semantic_item",
+                "description": "Navigate to a semantic item.",
+                "parameters": [],
+            },
+            {
+                "name": "look_current_view",
+                "description": "Inspect the current view.",
+                "parameters": [],
+            },
+        ]
+
 
 def make_test_jpeg() -> bytes:
     image = np.zeros((90, 160, 3), dtype=np.uint8)
@@ -382,6 +401,8 @@ async def test_service_go_to_poi_uses_stored_view_pose(tmp_path: Path) -> None:
         world_x=1.25,
         world_y=-0.75,
         world_yaw=0.6,
+        target_x=2.75,
+        target_y=1.5,
         title="Window Nook",
         summary="A bright nook with a large window.",
         category="window",
@@ -392,7 +413,7 @@ async def test_service_go_to_poi_uses_stored_view_pose(tmp_path: Path) -> None:
     )
     storage.upsert_poi(poi)
     service.pois[poi.poi_id] = poi
-    service.robot_pose = RobotPose(x=poi.world_x, y=poi.world_y, z=0.0, yaw=0.1)
+    service.robot_pose = RobotPose(x=poi.anchor_x, y=poi.anchor_y, z=0.0, yaw=0.1)
     fake_map_client = FakeMapClient()
     service.map_client = fake_map_client  # type: ignore[assignment]
 
@@ -431,6 +452,8 @@ async def test_service_focus_poi_updates_ui_state(tmp_path: Path) -> None:
         world_x=1.25,
         world_y=-0.75,
         world_yaw=0.6,
+        target_x=0.15,
+        target_y=0.05,
         title="Window Nook",
         summary="A bright nook with a large window.",
         category="window",
@@ -444,13 +467,11 @@ async def test_service_focus_poi_updates_ui_state(tmp_path: Path) -> None:
 
     ui = await service.focus_poi(poi.poi_id, zoom=2.8)
     assert service.map_state is not None
-    max_x = service.map_state.origin_x + service.map_state.width * service.map_state.resolution
-    min_y = service.map_state.origin_y
 
     assert ui["selected_item"] == {"kind": "vlm_poi", "entity_id": poi.poi_id}
     assert ui["highlighted_items"] == [{"kind": "vlm_poi", "entity_id": poi.poi_id}]
-    assert ui["camera"]["center_x"] == pytest.approx(max_x)
-    assert ui["camera"]["center_y"] == pytest.approx(min_y)
+    assert ui["camera"]["center_x"] == pytest.approx(0.15)
+    assert ui["camera"]["center_y"] == pytest.approx(0.05)
     assert ui["camera"]["zoom"] == pytest.approx(1.0)
 
 
@@ -716,6 +737,28 @@ async def test_service_submit_chat_message_runs_agent_and_updates_state(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_service_chat_tools_manifest_reflects_exposed_agent_tools(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+        chat_agent=FakeChatAgent(),
+    )
+
+    manifest = await service.chat_tools_manifest()
+    tool_names = [tool["name"] for tool in manifest]
+
+    assert "search_semantic_memory" in tool_names
+    assert "go_to_semantic_item" in tool_names
+    assert "look_current_view" in tool_names
+    assert "relative_move" not in tool_names
+
+
+@pytest.mark.asyncio
 async def test_chat_search_semantic_memory_finds_matching_poi(tmp_path: Path) -> None:
     storage = SlamassStorage(tmp_path)
     service = SlamassService(
@@ -749,6 +792,47 @@ async def test_chat_search_semantic_memory_finds_matching_poi(tmp_path: Path) ->
 
     assert result["results"][0]["kind"] == "vlm_poi"
     assert result["results"][0]["entity_id"] == poi.poi_id
+
+
+@pytest.mark.asyncio
+async def test_chat_get_semantic_item_exposes_poi_anchor_and_target(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+        chat_agent=FakeChatAgent(),
+    )
+    hero = storage.create_image_asset(b"hero", ".jpg")
+    thumb = storage.create_image_asset(b"thumb", ".jpg")
+    poi = storage.new_poi(
+        map_id="active",
+        world_x=1.0,
+        world_y=2.0,
+        world_yaw=0.1,
+        target_x=1.75,
+        target_y=2.5,
+        title="Window Bay",
+        summary="Bright corner with a large exterior window and plants.",
+        category="window",
+        interest_score=0.8,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        objects=["window", "plant"],
+    )
+    storage.upsert_poi(poi)
+    service.pois[poi.poi_id] = poi
+
+    result = await service.chat_get_semantic_item(kind="vlm_poi", entity_id=poi.poi_id)
+
+    assert result["anchor_x"] == pytest.approx(1.0)
+    assert result["anchor_y"] == pytest.approx(2.0)
+    assert result["anchor_yaw"] == pytest.approx(0.1)
+    assert result["target_x"] == pytest.approx(1.75)
+    assert result["target_y"] == pytest.approx(2.5)
 
 
 @pytest.mark.asyncio

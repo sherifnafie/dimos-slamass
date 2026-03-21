@@ -180,3 +180,27 @@ async def test_chat_agent_dispatches_layer_and_save_tools() -> None:
         ("set_yolo_runtime", {"mode": "paused"}),
         ("save_map", {}),
     ]
+
+
+def test_chat_agent_tool_manifest_matches_scoped_surface() -> None:
+    agent = SlamassChatAgent(backend=SequentialBackend())
+
+    manifest = agent.tool_manifest()
+    tool_names = [tool["name"] for tool in manifest]
+
+    assert tool_names == [
+        "get_runtime_overview",
+        "search_semantic_memory",
+        "get_semantic_item",
+        "focus_semantic_item",
+        "highlight_semantic_items",
+        "set_layer_visibility",
+        "set_yolo_runtime",
+        "save_map",
+        "go_to_semantic_item",
+        "inspect_now",
+        "look_current_view",
+    ]
+    assert "relative_move" not in tool_names
+    assert "wait" not in tool_names
+    assert "execute_sport_command" not in tool_names

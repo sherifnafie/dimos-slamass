@@ -51,9 +51,11 @@ class ActiveMapRecord:
 class PoiRecord:
     poi_id: str
     map_id: str
-    world_x: float
-    world_y: float
-    world_yaw: float
+    anchor_x: float
+    anchor_y: float
+    anchor_yaw: float
+    target_x: float
+    target_y: float
     title: str
     summary: str
     category: str
@@ -69,6 +71,18 @@ class PoiRecord:
     def objects(self) -> list[str]:
         raw = json.loads(self.objects_json or "[]")
         return [str(item) for item in raw]
+
+    @property
+    def world_x(self) -> float:
+        return self.anchor_x
+
+    @property
+    def world_y(self) -> float:
+        return self.anchor_y
+
+    @property
+    def world_yaw(self) -> float:
+        return self.anchor_yaw
 
 
 @dataclass(slots=True)
@@ -180,6 +194,11 @@ class SlamassStorage:
                 world_x REAL NOT NULL,
                 world_y REAL NOT NULL,
                 world_yaw REAL NOT NULL,
+                anchor_x REAL,
+                anchor_y REAL,
+                anchor_yaw REAL,
+                target_x REAL,
+                target_y REAL,
                 title TEXT NOT NULL,
                 summary TEXT NOT NULL,
                 category TEXT NOT NULL,
@@ -256,7 +275,37 @@ class SlamassStorage:
             );
             """
         )
+        self._migrate_schema(conn)
         conn.commit()
+
+    def _migrate_schema(self, conn: sqlite3.Connection) -> None:
+        poi_columns = self._column_names(conn, "pois")
+        missing_columns = {
+            "anchor_x": "REAL",
+            "anchor_y": "REAL",
+            "anchor_yaw": "REAL",
+            "target_x": "REAL",
+            "target_y": "REAL",
+        }
+        for column_name, column_type in missing_columns.items():
+            if column_name in poi_columns:
+                continue
+            conn.execute(f"ALTER TABLE pois ADD COLUMN {column_name} {column_type}")
+        conn.execute(
+            """
+            UPDATE pois
+            SET
+                anchor_x = COALESCE(anchor_x, world_x),
+                anchor_y = COALESCE(anchor_y, world_y),
+                anchor_yaw = COALESCE(anchor_yaw, world_yaw),
+                target_x = COALESCE(target_x, anchor_x, world_x),
+                target_y = COALESCE(target_y, anchor_y, world_y)
+            """
+        )
+
+    def _column_names(self, conn: sqlite3.Connection, table_name: str) -> set[str]:
+        rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        return {str(row["name"]) for row in rows}
 
     def asset_path(self, relative_path: str) -> Path:
         return self.state_dir / relative_path
@@ -432,15 +481,21 @@ class SlamassStorage:
         conn.execute(
             """
             INSERT INTO pois (
-                poi_id, map_id, world_x, world_y, world_yaw, title, summary, category,
+                poi_id, map_id, world_x, world_y, world_yaw, anchor_x, anchor_y,
+                anchor_yaw, target_x, target_y, title, summary, category,
                 interest_score, status, thumbnail_path, hero_image_path, objects_json,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(poi_id) DO UPDATE SET
                 map_id = excluded.map_id,
                 world_x = excluded.world_x,
                 world_y = excluded.world_y,
                 world_yaw = excluded.world_yaw,
+                anchor_x = excluded.anchor_x,
+                anchor_y = excluded.anchor_y,
+                anchor_yaw = excluded.anchor_yaw,
+                target_x = excluded.target_x,
+                target_y = excluded.target_y,
                 title = excluded.title,
                 summary = excluded.summary,
                 category = excluded.category,
@@ -458,6 +513,11 @@ class SlamassStorage:
                 record.world_x,
                 record.world_y,
                 record.world_yaw,
+                record.anchor_x,
+                record.anchor_y,
+                record.anchor_yaw,
+                record.target_x,
+                record.target_y,
                 record.title,
                 record.summary,
                 record.category,
@@ -644,9 +704,14 @@ class SlamassStorage:
     def new_poi(
         *,
         map_id: str,
-        world_x: float,
-        world_y: float,
-        world_yaw: float,
+        anchor_x: float | None = None,
+        anchor_y: float | None = None,
+        anchor_yaw: float | None = None,
+        target_x: float | None = None,
+        target_y: float | None = None,
+        world_x: float | None = None,
+        world_y: float | None = None,
+        world_yaw: float | None = None,
         title: str,
         summary: str,
         category: str,
@@ -658,12 +723,19 @@ class SlamassStorage:
         created_at: str | None = None,
     ) -> PoiRecord:
         now = utc_now_iso()
+        resolved_anchor_x = anchor_x if anchor_x is not None else world_x
+        resolved_anchor_y = anchor_y if anchor_y is not None else world_y
+        resolved_anchor_yaw = anchor_yaw if anchor_yaw is not None else world_yaw
+        if resolved_anchor_x is None or resolved_anchor_y is None or resolved_anchor_yaw is None:
+            raise ValueError("POI anchor pose requires anchor_x/anchor_y/anchor_yaw")
         return PoiRecord(
             poi_id=poi_id or uuid.uuid4().hex,
             map_id=map_id,
-            world_x=world_x,
-            world_y=world_y,
-            world_yaw=world_yaw,
+            anchor_x=resolved_anchor_x,
+            anchor_y=resolved_anchor_y,
+            anchor_yaw=resolved_anchor_yaw,
+            target_x=target_x if target_x is not None else resolved_anchor_x,
+            target_y=target_y if target_y is not None else resolved_anchor_y,
             title=title,
             summary=summary,
             category=category,
@@ -793,9 +865,25 @@ class SlamassStorage:
         return PoiRecord(
             poi_id=str(row["poi_id"]),
             map_id=str(row["map_id"]),
-            world_x=float(row["world_x"]),
-            world_y=float(row["world_y"]),
-            world_yaw=float(row["world_yaw"]),
+            anchor_x=float(
+                row["anchor_x"] if row["anchor_x"] is not None else row["world_x"]
+            ),
+            anchor_y=float(
+                row["anchor_y"] if row["anchor_y"] is not None else row["world_y"]
+            ),
+            anchor_yaw=float(
+                row["anchor_yaw"] if row["anchor_yaw"] is not None else row["world_yaw"]
+            ),
+            target_x=float(
+                row["target_x"]
+                if row["target_x"] is not None
+                else (row["anchor_x"] if row["anchor_x"] is not None else row["world_x"])
+            ),
+            target_y=float(
+                row["target_y"]
+                if row["target_y"] is not None
+                else (row["anchor_y"] if row["anchor_y"] is not None else row["world_y"])
+            ),
             title=str(row["title"]),
             summary=str(row["summary"]),
             category=str(row["category"]),

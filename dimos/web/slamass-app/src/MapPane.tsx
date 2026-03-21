@@ -361,7 +361,12 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
             )}
             {layers.show_pois &&
               activePois.map((poi) => {
-                const [x, y] = worldToImagePixels(map, viewport, poi.world_x, poi.world_y);
+                const [anchorX, anchorY] = worldToImagePixels(
+                  map,
+                  viewport,
+                  poi.anchor_x,
+                  poi.anchor_y,
+                );
                 const itemRef = refFromPoi(poi.poi_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
@@ -374,12 +379,14 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                       <path
                         className={`poi-view-cone ${isSelected ? "is-selected" : "is-highlighted"}`}
                         d={[
-                          `M ${x} ${y}`,
-                          `L ${x + Math.cos(poi.world_yaw - coneSpread) * coneLength} ${
-                            y - Math.sin(poi.world_yaw - coneSpread) * coneLength
+                          `M ${anchorX} ${anchorY}`,
+                          `L ${anchorX + Math.cos(poi.anchor_yaw - coneSpread) * coneLength} ${
+                            anchorY - Math.sin(poi.anchor_yaw - coneSpread) * coneLength
                           }`,
-                          `A ${coneLength} ${coneLength} 0 0 1 ${x + Math.cos(poi.world_yaw + coneSpread) * coneLength} ${
-                            y - Math.sin(poi.world_yaw + coneSpread) * coneLength
+                          `A ${coneLength} ${coneLength} 0 0 1 ${
+                            anchorX + Math.cos(poi.anchor_yaw + coneSpread) * coneLength
+                          } ${
+                            anchorY - Math.sin(poi.anchor_yaw + coneSpread) * coneLength
                           }`,
                           "Z",
                         ].join(" ")}
@@ -387,16 +394,16 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                     )}
                     <line
                       className="poi-heading"
-                      x1={x}
-                      y1={y}
-                      x2={x + Math.cos(poi.world_yaw) * 16}
-                      y2={y - Math.sin(poi.world_yaw) * 16}
+                      x1={anchorX}
+                      y1={anchorY}
+                      x2={anchorX + Math.cos(poi.anchor_yaw) * 16}
+                      y2={anchorY - Math.sin(poi.anchor_yaw) * 16}
                     />
                     {(isSelected || isHighlighted) && (
                       <circle
                         className={`poi-anchor-halo ${isSelected ? "is-selected" : "is-highlighted"}`}
-                        cx={x}
-                        cy={y}
+                        cx={anchorX}
+                        cy={anchorY}
                         r={isSelected ? 10 : 8}
                       />
                     )}
@@ -464,7 +471,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
             })()}
             {layers.show_pois &&
               activePois.map((poi) => {
-                const [x, y] = worldToImagePixels(map, viewport, poi.world_x, poi.world_y);
+                const [x, y] = worldToImagePixels(map, viewport, poi.target_x, poi.target_y);
                 const itemRef = refFromPoi(poi.poi_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;

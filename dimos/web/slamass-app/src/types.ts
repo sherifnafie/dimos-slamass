@@ -49,9 +49,11 @@ export interface UiState {
 export interface Poi {
   poi_id: string;
   map_id: string;
-  world_x: number;
-  world_y: number;
-  world_yaw: number;
+  anchor_x: number;
+  anchor_y: number;
+  anchor_yaw: number;
+  target_x: number;
+  target_y: number;
   title: string;
   summary: string;
   category: string;
@@ -132,6 +134,21 @@ export interface ChatMessage {
 export interface ChatState {
   running: boolean;
   messages: ChatMessage[];
+}
+
+export interface ChatToolParameter {
+  name: string;
+  type: string;
+  required: boolean;
+  description?: string;
+  enum?: string[];
+  item_type?: string;
+}
+
+export interface ChatToolDefinition {
+  name: string;
+  description: string;
+  parameters: ChatToolParameter[];
 }
 
 export interface AppState {

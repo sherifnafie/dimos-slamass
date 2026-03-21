@@ -34,10 +34,8 @@ Operating rules:
 - For "where is ..." or "find ..." questions, search semantic memory first.
 - When answering a spatial question, usually also drive the UI so the operator can see the result:
   - focus or highlight the most relevant semantic item(s)
-  - focus the map or robot when useful
 - If a relevant layer is hidden, turn it on before trying to present the result.
 - Prefer go_to_semantic_item for meaningful destinations.
-- Use relative_move only for small local adjustments or when the user explicitly asks for relative motion.
 - Use inspect_now when the user asks to inspect, refresh, or capture the current place.
 - Use look_current_view when the question is about what the robot sees right now or when the saved map memory is insufficient.
 - Use set_yolo_runtime only when the user asks to pause or resume live YOLO labeling.
@@ -80,6 +78,225 @@ class ChatBackendToolCall:
 class ChatBackendResponse:
     content: str
     tool_calls: list[ChatBackendToolCall]
+
+
+EXPOSED_FUNCTION_TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_runtime_overview",
+            "description": "Get high-level SLAMASS runtime state: connectivity, robot pose, semantic counts, visible layers, and current UI focus state.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_semantic_memory",
+            "description": "Search saved VLM POIs and YOLO objects by natural language. Use this first for object and location questions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What to search for in semantic memory."},
+                    "kind": {
+                        "type": "string",
+                        "enum": ["all", "vlm_poi", "yolo_object"],
+                        "description": "Restrict search to one semantic modality when useful.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 8,
+                        "description": "Maximum number of results to return.",
+                    },
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_semantic_item",
+            "description": "Get full details for one semantic item after search identifies a candidate.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["vlm_poi", "yolo_object"],
+                        "description": "Semantic memory type.",
+                    },
+                    "entity_id": {"type": "string", "description": "ID of the semantic item."},
+                },
+                "required": ["kind", "entity_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "focus_semantic_item",
+            "description": "Move the SLAMASS map camera to a semantic item and select it in the UI.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["vlm_poi", "yolo_object"],
+                        "description": "Semantic memory type.",
+                    },
+                    "entity_id": {"type": "string", "description": "ID of the semantic item to focus."},
+                    "zoom": {"type": "number", "description": "Optional camera zoom override."},
+                },
+                "required": ["kind", "entity_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "highlight_semantic_items",
+            "description": "Highlight one or more semantic items in the UI. Use this for ambiguity handling or when presenting multiple relevant results.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "description": "Semantic items to highlight.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "kind": {
+                                    "type": "string",
+                                    "enum": ["vlm_poi", "yolo_object"],
+                                },
+                                "entity_id": {"type": "string"},
+                            },
+                            "required": ["kind", "entity_id"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "selected_item": {
+                        "type": "object",
+                        "description": "Optional semantic item to mark as the primary selection.",
+                        "properties": {
+                            "kind": {
+                                "type": "string",
+                                "enum": ["vlm_poi", "yolo_object"],
+                            },
+                            "entity_id": {"type": "string"},
+                        },
+                        "required": ["kind", "entity_id"],
+                        "additionalProperties": False,
+                    },
+                },
+                "required": ["items"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_layer_visibility",
+            "description": "Show or hide the VLM POI layer and the YOLO object layer in the SLAMASS UI.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "show_pois": {"type": "boolean", "description": "Whether the VLM POI layer should be visible."},
+                    "show_yolo": {"type": "boolean", "description": "Whether the YOLO object layer should be visible."},
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_yolo_runtime",
+            "description": "Pause or resume live YOLO ingestion in SLAMASS.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["live", "paused"],
+                        "description": "Requested YOLO runtime mode.",
+                    },
+                },
+                "required": ["mode"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_map",
+            "description": "Save the current SLAMASS map to persistent storage.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "go_to_semantic_item",
+            "description": "Navigate the robot to the saved viewpoint pose for a POI or YOLO object.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["vlm_poi", "yolo_object"],
+                        "description": "Semantic memory type.",
+                    },
+                    "entity_id": {"type": "string", "description": "ID of the semantic item to visit."},
+                },
+                "required": ["kind", "entity_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "inspect_now",
+            "description": "Run a manual VLM inspection at the robot's current pose.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "look_current_view",
+            "description": "Ask a question about the robot's current live camera view.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Question to answer from the current live view."},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
 
 
 class ChatRuntime(Protocol):
@@ -222,7 +439,14 @@ class SlamassChatAgent:
         tools_used: list[str] = []
 
         for _ in range(MAX_TOOL_ROUNDS):
-            backend_response = await asyncio.to_thread(self._backend.complete, messages, self._tools)
+            if isinstance(self._backend, OpenAIChatBackend):
+                backend_response = await asyncio.to_thread(
+                    self._backend.complete,
+                    messages,
+                    self._tools,
+                )
+            else:
+                backend_response = self._backend.complete(messages, self._tools)
 
             assistant_message: dict[str, Any] = {
                 "role": "assistant",
@@ -312,13 +536,6 @@ class SlamassChatAgent:
                         else None
                     ),
                 )
-            if tool_call.name == "focus_map":
-                return await runtime.chat_focus_map()
-            if tool_call.name == "focus_robot":
-                zoom = arguments.get("zoom")
-                return await runtime.chat_focus_robot(zoom=float(zoom) if zoom is not None else None)
-            if tool_call.name == "clear_map_focus":
-                return await runtime.chat_clear_map_focus()
             if tool_call.name == "set_layer_visibility":
                 show_pois = arguments.get("show_pois")
                 show_yolo = arguments.get("show_yolo")
@@ -339,327 +556,51 @@ class SlamassChatAgent:
                 return await runtime.chat_inspect_now()
             if tool_call.name == "look_current_view":
                 return await runtime.chat_look_current_view(query=str(arguments.get("query", "")))
-            if tool_call.name == "relative_move":
-                return await runtime.chat_relative_move(
-                    forward=float(arguments.get("forward", 0.0)),
-                    left=float(arguments.get("left", 0.0)),
-                    degrees=float(arguments.get("degrees", 0.0)),
-                )
-            if tool_call.name == "wait":
-                return await runtime.chat_wait(seconds=float(arguments.get("seconds", 0.0)))
-            if tool_call.name == "execute_sport_command":
-                return await runtime.chat_execute_sport_command(
-                    command_name=str(arguments.get("command_name", "")),
-                )
-            if tool_call.name == "list_sport_commands":
-                return await runtime.chat_list_sport_commands()
         except Exception as exc:
             return {"ok": False, "error": str(exc), "tool": tool_call.name}
 
         return {"ok": False, "error": f"Unknown tool: {tool_call.name}"}
 
     def _build_tools(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_runtime_overview",
-                    "description": "Get high-level SLAMASS runtime state: connectivity, robot pose, counts, active layers, and UI focus state.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "search_semantic_memory",
-                    "description": "Search saved VLM POIs and YOLO objects by natural language. Use this first for object and location questions.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string"},
-                            "kind": {
-                                "type": "string",
-                                "enum": ["all", "vlm_poi", "yolo_object"],
-                            },
-                            "limit": {"type": "integer", "minimum": 1, "maximum": 8},
-                        },
-                        "required": ["query"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_semantic_item",
-                    "description": "Get full details for one semantic item after search identifies a candidate.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "kind": {
-                                "type": "string",
-                                "enum": ["vlm_poi", "yolo_object"],
-                            },
-                            "entity_id": {"type": "string"},
-                        },
-                        "required": ["kind", "entity_id"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "focus_semantic_item",
-                    "description": "Move the SLAMASS map camera to a semantic item and select it in the UI.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "kind": {
-                                "type": "string",
-                                "enum": ["vlm_poi", "yolo_object"],
-                            },
-                            "entity_id": {"type": "string"},
-                            "zoom": {"type": "number"},
-                        },
-                        "required": ["kind", "entity_id"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "highlight_semantic_items",
-                    "description": "Highlight one or more semantic items in the UI. Use this for ambiguity handling or when presenting multiple relevant results.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "items": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "kind": {
-                                            "type": "string",
-                                            "enum": ["vlm_poi", "yolo_object"],
-                                        },
-                                        "entity_id": {"type": "string"},
-                                    },
-                                    "required": ["kind", "entity_id"],
-                                    "additionalProperties": False,
-                                },
-                            },
-                            "selected_item": {
-                                "type": "object",
-                                "properties": {
-                                    "kind": {
-                                        "type": "string",
-                                        "enum": ["vlm_poi", "yolo_object"],
-                                    },
-                                    "entity_id": {"type": "string"},
-                                },
-                                "required": ["kind", "entity_id"],
-                                "additionalProperties": False,
-                            },
-                        },
-                        "required": ["items"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "focus_map",
-                    "description": "Fit the SLAMASS map in view.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "focus_robot",
-                    "description": "Center the SLAMASS map on the current robot pose.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "zoom": {"type": "number"},
-                        },
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "clear_map_focus",
-                    "description": "Clear map highlights and selection.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "set_layer_visibility",
-                    "description": "Show or hide the VLM POI layer and the YOLO object layer in the SLAMASS UI.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "show_pois": {"type": "boolean"},
-                            "show_yolo": {"type": "boolean"},
-                        },
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "set_yolo_runtime",
-                    "description": "Pause or resume live YOLO ingestion in SLAMASS.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "mode": {
-                                "type": "string",
-                                "enum": ["live", "paused"],
-                            },
-                        },
-                        "required": ["mode"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "save_map",
-                    "description": "Save the current SLAMASS map to persistent storage.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "go_to_semantic_item",
-                    "description": "Navigate the robot to the saved viewpoint pose for a POI or YOLO object.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "kind": {
-                                "type": "string",
-                                "enum": ["vlm_poi", "yolo_object"],
-                            },
-                            "entity_id": {"type": "string"},
-                        },
-                        "required": ["kind", "entity_id"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "inspect_now",
-                    "description": "Run a manual VLM inspection at the robot's current pose.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "look_current_view",
-                    "description": "Ask a question about the robot's current live camera view.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string"},
-                        },
-                        "required": ["query"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "relative_move",
-                    "description": "Move the robot relative to its current pose. Use for small adjustments only.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "forward": {"type": "number"},
-                            "left": {"type": "number"},
-                            "degrees": {"type": "number"},
-                        },
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "wait",
-                    "description": "Pause for a number of seconds while carrying out a sequence.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "seconds": {"type": "number", "minimum": 0},
-                        },
-                        "required": ["seconds"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "list_sport_commands",
-                    "description": "List the named Unitree sport commands available for execute_sport_command.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "execute_sport_command",
-                    "description": "Run a named Unitree sport command after list_sport_commands confirms the command name.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "command_name": {"type": "string"},
-                        },
-                        "required": ["command_name"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-        ]
+        return [json.loads(json.dumps(tool)) for tool in EXPOSED_FUNCTION_TOOLS]
+
+    def tool_manifest(self) -> list[dict[str, Any]]:
+        manifest: list[dict[str, Any]] = []
+        for tool in self._tools:
+            function = tool.get("function", {})
+            parameters = function.get("parameters", {})
+            properties = parameters.get("properties", {})
+            required_names = set(parameters.get("required", []))
+            manifest_parameters: list[dict[str, Any]] = []
+            if isinstance(properties, dict):
+                for parameter_name, schema in properties.items():
+                    if not isinstance(schema, dict):
+                        continue
+                    item: dict[str, Any] = {
+                        "name": parameter_name,
+                        "type": str(schema.get("type", "object")),
+                        "required": parameter_name in required_names,
+                    }
+                    description = schema.get("description")
+                    if isinstance(description, str) and description:
+                        item["description"] = description
+                    enum_values = schema.get("enum")
+                    if isinstance(enum_values, list) and enum_values:
+                        item["enum"] = [str(value) for value in enum_values]
+                    nested_items = schema.get("items")
+                    if isinstance(nested_items, dict):
+                        nested_type = nested_items.get("type")
+                        if isinstance(nested_type, str):
+                            item["item_type"] = nested_type
+                    manifest_parameters.append(item)
+            manifest.append(
+                {
+                    "name": str(function.get("name", "")),
+                    "description": str(function.get("description", "")),
+                    "parameters": manifest_parameters,
+                }
+            )
+        return manifest
 
 
 __all__ = [

@@ -983,9 +983,9 @@ class SlamassService:
                 raise HTTPException(status_code=404, detail="POI not found")
         await self._go_to_view_pose(
             entity_id=poi.poi_id,
-            target_x=poi.world_x,
-            target_y=poi.world_y,
-            target_yaw=poi.world_yaw,
+            target_x=poi.anchor_x,
+            target_y=poi.anchor_y,
+            target_yaw=poi.anchor_yaw,
         )
 
     async def go_to_yolo_object(self, object_id: str) -> None:
@@ -1233,6 +1233,9 @@ class SlamassService:
         async with self._state_lock:
             return self._serialize_chat_locked()
 
+    async def chat_tools_manifest(self) -> list[dict[str, Any]]:
+        return self.chat_agent.tool_manifest()
+
     async def submit_chat_message(self, message: str) -> dict[str, Any]:
         content = message.strip()
         if not content:
@@ -1345,9 +1348,11 @@ class SlamassService:
                     "summary": poi.summary,
                     "category": poi.category,
                     "objects": poi.objects,
-                    "world_x": poi.world_x,
-                    "world_y": poi.world_y,
-                    "world_yaw": poi.world_yaw,
+                    "anchor_x": poi.anchor_x,
+                    "anchor_y": poi.anchor_y,
+                    "anchor_yaw": poi.anchor_yaw,
+                    "target_x": poi.target_x,
+                    "target_y": poi.target_y,
                     "updated_at": poi.updated_at,
                 }
             object_record = self._require_active_yolo_object_locked(item_ref.entity_id)
@@ -1536,9 +1541,9 @@ class SlamassService:
                         map_id = self.map_state.map_id if self.map_state is not None else "active"
                         poi = self.storage.new_poi(
                             map_id=map_id,
-                            world_x=pose.x,
-                            world_y=pose.y,
-                            world_yaw=pose.yaw,
+                            anchor_x=pose.x,
+                            anchor_y=pose.y,
+                            anchor_yaw=pose.yaw,
                             title=analysis.title,
                             summary=analysis.summary,
                             category=analysis.category,
@@ -1591,9 +1596,11 @@ class SlamassService:
             self.pois[poi_id] = PoiRecord(
                 poi_id=poi.poi_id,
                 map_id=poi.map_id,
-                world_x=poi.world_x,
-                world_y=poi.world_y,
-                world_yaw=poi.world_yaw,
+                anchor_x=poi.anchor_x,
+                anchor_y=poi.anchor_y,
+                anchor_yaw=poi.anchor_yaw,
+                target_x=poi.target_x,
+                target_y=poi.target_y,
                 title=poi.title,
                 summary=poi.summary,
                 category=poi.category,
@@ -2100,7 +2107,7 @@ class SlamassService:
     def _item_world_xy_locked(self, item_ref: SemanticItemRef) -> tuple[float, float]:
         if item_ref.kind == SEMANTIC_KIND_POI:
             poi = self._require_active_poi_locked(item_ref.entity_id)
-            return poi.world_x, poi.world_y
+            return poi.target_x, poi.target_y
         object_record = self._require_active_yolo_object_locked(item_ref.entity_id)
         return object_record.world_x, object_record.world_y
 
@@ -2140,9 +2147,11 @@ class SlamassService:
     ) -> PoiRecord:
         return self.storage.new_poi(
             map_id=existing.map_id,
-            world_x=pose.x,
-            world_y=pose.y,
-            world_yaw=pose.yaw,
+            anchor_x=pose.x,
+            anchor_y=pose.y,
+            anchor_yaw=pose.yaw,
+            target_x=existing.target_x,
+            target_y=existing.target_y,
             title=analysis.title,
             summary=analysis.summary,
             category=analysis.category,
@@ -2164,10 +2173,10 @@ class SlamassService:
                 continue
             if normalize_text(poi.title) != title:
                 continue
-            distance = math.hypot(poi.world_x - pose.x, poi.world_y - pose.y)
+            distance = math.hypot(poi.anchor_x - pose.x, poi.anchor_y - pose.y)
             if distance > 1.5:
                 continue
-            if yaw_distance(poi.world_yaw, pose.yaw) > math.radians(45):
+            if yaw_distance(poi.anchor_yaw, pose.yaw) > math.radians(45):
                 continue
             return poi
         return None
@@ -2212,9 +2221,11 @@ class SlamassService:
                             "title": poi.title,
                             "subtitle": poi.category,
                             "summary": poi.summary,
-                            "world_x": poi.world_x,
-                            "world_y": poi.world_y,
-                            "world_yaw": poi.world_yaw,
+                            "anchor_x": poi.anchor_x,
+                            "anchor_y": poi.anchor_y,
+                            "anchor_yaw": poi.anchor_yaw,
+                            "target_x": poi.target_x,
+                            "target_y": poi.target_y,
                             "score": round(score, 3),
                         },
                     )
@@ -2551,9 +2562,11 @@ class SlamassService:
         return {
             "poi_id": poi.poi_id,
             "map_id": poi.map_id,
-            "world_x": poi.world_x,
-            "world_y": poi.world_y,
-            "world_yaw": poi.world_yaw,
+            "anchor_x": poi.anchor_x,
+            "anchor_y": poi.anchor_y,
+            "anchor_yaw": poi.anchor_yaw,
+            "target_x": poi.target_x,
+            "target_y": poi.target_y,
             "title": poi.title,
             "summary": poi.summary,
             "category": poi.category,
@@ -2599,9 +2612,14 @@ class SlamassService:
                 "entity_id": poi.poi_id,
                 "title": poi.title,
                 "subtitle": poi.category,
-                "world_x": poi.world_x,
-                "world_y": poi.world_y,
-                "world_yaw": poi.world_yaw,
+                "world_x": poi.target_x,
+                "world_y": poi.target_y,
+                "world_yaw": poi.anchor_yaw,
+                "anchor_x": poi.anchor_x,
+                "anchor_y": poi.anchor_y,
+                "anchor_yaw": poi.anchor_yaw,
+                "target_x": poi.target_x,
+                "target_y": poi.target_y,
                 "thumbnail_url": f"/api/assets/{poi.thumbnail_path}",
                 "updated_at": poi.updated_at,
             }
@@ -2677,6 +2695,10 @@ def create_app(
     @app.get("/api/chat")
     async def get_chat_state() -> dict[str, Any]:
         return await slamass.chat_snapshot()
+
+    @app.get("/api/chat/tools")
+    async def get_chat_tools() -> list[dict[str, Any]]:
+        return await slamass.chat_tools_manifest()
 
     @app.get("/api/events")
     async def get_events() -> EventSourceResponse:
