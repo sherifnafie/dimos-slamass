@@ -173,19 +173,7 @@ class McpToolClient:
             await self._session.close()
 
     async def observe_jpeg(self) -> bytes | None:
-        await self.start()
-        assert self._session is not None
-        async with self._session.post(
-            self.mcp_url,
-            json={
-                "jsonrpc": "2.0",
-                "id": "observe",
-                "method": "tools/call",
-                "params": {"name": "observe", "arguments": {}},
-            },
-        ) as response:
-            response.raise_for_status()
-            body = await response.json()
+        body = await self.call_tool("observe")
         content = body.get("result", {}).get("content", [])
         if not isinstance(content, list):
             return None
@@ -199,6 +187,39 @@ class McpToolClient:
             _, encoded = image_url.split(",", 1)
             return base64.b64decode(encoded)
         return None
+
+    async def relative_move(
+        self, *, forward: float = 0.0, left: float = 0.0, degrees: float = 0.0
+    ) -> dict[str, Any]:
+        return await self.call_tool(
+            "relative_move",
+            {"forward": forward, "left": left, "degrees": degrees},
+        )
+
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        await self.start()
+        assert self._session is not None
+        async with self._session.post(
+            self.mcp_url,
+            json={
+                "jsonrpc": "2.0",
+                "id": request_id or name,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments or {}},
+            },
+        ) as response:
+            response.raise_for_status()
+            body = await response.json()
+        error = body.get("error")
+        if error is not None:
+            raise RuntimeError(f"MCP tool '{name}' failed: {error}")
+        return body
 
 
 class OpenAIInspectionAnalyzer:
@@ -326,6 +347,10 @@ def yaw_distance(a: float, b: float) -> float:
     return abs((a - b + math.pi) % (2 * math.pi) - math.pi)
 
 
+def angle_delta(target: float, current: float) -> float:
+    return math.atan2(math.sin(target - current), math.cos(target - current))
+
+
 class MapSocketClient:
     def __init__(
         self,
@@ -447,6 +472,10 @@ class SlamassService:
         storage: SlamassStorage | None = None,
         mcp_client: McpToolClient | None = None,
         analyzer: OpenAIInspectionAnalyzer | None = None,
+        poi_arrival_tolerance_m: float = POI_ARRIVAL_TOLERANCE_METERS,
+        poi_arrival_settle_seconds: float = POI_ARRIVAL_SETTLE_SECONDS,
+        poi_arrival_timeout_seconds: float = POI_ARRIVAL_TIMEOUT_SECONDS,
+        poi_rotation_threshold_degrees: float = POI_ROTATION_THRESHOLD_DEGREES,
     ) -> None:
         self.state_dir = state_dir
         self.storage = storage or SlamassStorage(state_dir)
@@ -465,6 +494,11 @@ class SlamassService:
         self._dirty_map = False
         self._stopped = False
         self._last_pose_event = 0.0
+        self._goto_poi_task: asyncio.Task[None] | None = None
+        self._poi_arrival_tolerance_m = poi_arrival_tolerance_m
+        self._poi_arrival_settle_seconds = poi_arrival_settle_seconds
+        self._poi_arrival_timeout_seconds = poi_arrival_timeout_seconds
+        self._poi_rotation_threshold_degrees = poi_rotation_threshold_degrees
 
         self.robot_pose: RobotPose | None = None
         self.path: list[list[float]] = []
@@ -493,6 +527,11 @@ class SlamassService:
 
     async def stop(self) -> None:
         self._stopped = True
+        if self._goto_poi_task is not None:
+            self._goto_poi_task.cancel()
+            with contextlib_suppress(asyncio.CancelledError):
+                await self._goto_poi_task
+            self._goto_poi_task = None
         await self.map_client.stop()
         for task in self._tasks:
             task.cancel()
@@ -552,7 +591,19 @@ class SlamassService:
             target_x = poi.world_x
             target_y = poi.world_y
             target_yaw = poi.world_yaw
-        await self.navigate(target_x, target_y, target_yaw)
+        await self.navigate(target_x, target_y)
+        if self._goto_poi_task is not None:
+            self._goto_poi_task.cancel()
+            with contextlib_suppress(asyncio.CancelledError):
+                await self._goto_poi_task
+        self._goto_poi_task = asyncio.create_task(
+            self._finish_poi_navigation(
+                poi_id=poi_id,
+                target_x=target_x,
+                target_y=target_y,
+                target_yaw=target_yaw,
+            )
+        )
 
     async def ui_snapshot(self) -> dict[str, Any]:
         async with self._state_lock:
