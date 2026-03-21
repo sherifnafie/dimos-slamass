@@ -37,6 +37,7 @@ from dimos.msgs.vision_msgs.Detection2DArray import Detection2DArray
 from dimos.perception.detection.module2D import Detection2DModule
 from dimos.perception.detection.type.detection2d.imageDetections2D import ImageDetections2D
 from dimos.perception.detection.type.detection3d.imageDetections3DPC import ImageDetections3DPC
+from dimos.slamass.yolo_protocol import SlamassYoloDetections
 from dimos.perception.detection.type.detection3d.pointcloud import Detection3DPC
 from dimos.spec.perception import Camera, Pointcloud
 from dimos.types.timestamped import align_timestamped
@@ -53,6 +54,7 @@ class Detection3DModule(Detection2DModule):
     detections: Out[Detection2DArray]
     annotations: Out[ImageAnnotations]
     scene_update: Out[SceneUpdate]
+    slamass_yolo_detections: Out[SlamassYoloDetections]
 
     # just for visualization,
     # emits latest pointclouds of detected objects in a frame
@@ -203,6 +205,9 @@ class Detection3DModule(Detection2DModule):
             pointcloud_topic.publish(detection.pointcloud)
 
         self.scene_update.publish(detections.to_foxglove_scene_update())
+        self.slamass_yolo_detections.publish(
+            SlamassYoloDetections.from_detection_batch(detections.detections, ts=detections.ts)
+        )
 
 
 def deploy(  # type: ignore[no-untyped-def]

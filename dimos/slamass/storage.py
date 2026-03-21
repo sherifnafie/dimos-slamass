@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
+import shutil
 import sqlite3
 import threading
 import uuid
@@ -81,6 +82,52 @@ class PoiObservationRecord:
     thumbnail_path: str
     model_payload_json: str
     gate_result: str
+    created_at: str
+
+
+@dataclass(slots=True)
+class YoloObjectRecord:
+    object_id: str
+    map_id: str
+    label: str
+    class_id: int
+    world_x: float
+    world_y: float
+    world_z: float
+    size_x: float
+    size_y: float
+    size_z: float
+    best_view_x: float
+    best_view_y: float
+    best_view_yaw: float
+    status: str
+    thumbnail_path: str
+    hero_image_path: str
+    detections_count: int
+    best_confidence: float
+    created_at: str
+    updated_at: str
+    last_seen_at: str
+
+
+@dataclass(slots=True)
+class YoloObservationRecord:
+    observation_id: str
+    object_id: str | None
+    label: str
+    class_id: int
+    confidence: float
+    world_x: float
+    world_y: float
+    world_z: float
+    size_x: float
+    size_y: float
+    size_z: float
+    view_x: float
+    view_y: float
+    view_yaw: float
+    image_path: str | None
+    thumbnail_path: str | None
     created_at: str
 
 
@@ -162,6 +209,50 @@ class SlamassStorage:
                 key TEXT PRIMARY KEY,
                 value_json TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS yolo_objects (
+                object_id TEXT PRIMARY KEY,
+                map_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                class_id INTEGER NOT NULL,
+                world_x REAL NOT NULL,
+                world_y REAL NOT NULL,
+                world_z REAL NOT NULL,
+                size_x REAL NOT NULL,
+                size_y REAL NOT NULL,
+                size_z REAL NOT NULL,
+                best_view_x REAL NOT NULL,
+                best_view_y REAL NOT NULL,
+                best_view_yaw REAL NOT NULL,
+                status TEXT NOT NULL,
+                thumbnail_path TEXT NOT NULL,
+                hero_image_path TEXT NOT NULL,
+                detections_count INTEGER NOT NULL,
+                best_confidence REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS yolo_object_observations (
+                observation_id TEXT PRIMARY KEY,
+                object_id TEXT,
+                label TEXT NOT NULL,
+                class_id INTEGER NOT NULL,
+                confidence REAL NOT NULL,
+                world_x REAL NOT NULL,
+                world_y REAL NOT NULL,
+                world_z REAL NOT NULL,
+                size_x REAL NOT NULL,
+                size_y REAL NOT NULL,
+                size_z REAL NOT NULL,
+                view_x REAL NOT NULL,
+                view_y REAL NOT NULL,
+                view_yaw REAL NOT NULL,
+                image_path TEXT,
+                thumbnail_path TEXT,
+                created_at TEXT NOT NULL
             );
             """
         )
@@ -245,6 +336,33 @@ class SlamassStorage:
         png_rel = Path("maps") / "active_map.png"
         (self.state_dir / png_rel).write_bytes(preview_png)
         return str(png_rel)
+
+    def clear_active_map(self) -> None:
+        conn = self._get_conn()
+        conn.execute("DELETE FROM active_map WHERE id = 1")
+        conn.commit()
+
+        for relative_path in ("maps/active_map.npz", "maps/active_map.png"):
+            path = self.asset_path(relative_path)
+            if path.exists():
+                path.unlink()
+
+    def clear_semantic_memory(self) -> None:
+        conn = self._get_conn()
+        conn.executescript(
+            """
+            DELETE FROM pois;
+            DELETE FROM poi_observations;
+            DELETE FROM yolo_objects;
+            DELETE FROM yolo_object_observations;
+            DELETE FROM app_settings WHERE key = 'chat_state';
+            """
+        )
+        conn.commit()
+
+        if self.images_dir.exists():
+            shutil.rmtree(self.images_dir)
+        self.images_dir.mkdir(parents=True, exist_ok=True)
 
     def load_json_setting(self, key: str) -> dict[str, object] | None:
         conn = self._get_conn()
@@ -403,6 +521,125 @@ class SlamassStorage:
         )
         conn.commit()
 
+    def upsert_yolo_object(self, record: YoloObjectRecord) -> None:
+        conn = self._get_conn()
+        conn.execute(
+            """
+            INSERT INTO yolo_objects (
+                object_id, map_id, label, class_id, world_x, world_y, world_z,
+                size_x, size_y, size_z, best_view_x, best_view_y, best_view_yaw,
+                status, thumbnail_path, hero_image_path, detections_count,
+                best_confidence, created_at, updated_at, last_seen_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(object_id) DO UPDATE SET
+                map_id = excluded.map_id,
+                label = excluded.label,
+                class_id = excluded.class_id,
+                world_x = excluded.world_x,
+                world_y = excluded.world_y,
+                world_z = excluded.world_z,
+                size_x = excluded.size_x,
+                size_y = excluded.size_y,
+                size_z = excluded.size_z,
+                best_view_x = excluded.best_view_x,
+                best_view_y = excluded.best_view_y,
+                best_view_yaw = excluded.best_view_yaw,
+                status = excluded.status,
+                thumbnail_path = excluded.thumbnail_path,
+                hero_image_path = excluded.hero_image_path,
+                detections_count = excluded.detections_count,
+                best_confidence = excluded.best_confidence,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at,
+                last_seen_at = excluded.last_seen_at
+            """,
+            (
+                record.object_id,
+                record.map_id,
+                record.label,
+                record.class_id,
+                record.world_x,
+                record.world_y,
+                record.world_z,
+                record.size_x,
+                record.size_y,
+                record.size_z,
+                record.best_view_x,
+                record.best_view_y,
+                record.best_view_yaw,
+                record.status,
+                record.thumbnail_path,
+                record.hero_image_path,
+                record.detections_count,
+                record.best_confidence,
+                record.created_at,
+                record.updated_at,
+                record.last_seen_at,
+            ),
+        )
+        conn.commit()
+
+    def get_yolo_object(self, object_id: str) -> YoloObjectRecord | None:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM yolo_objects WHERE object_id = ?",
+            (object_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._yolo_object_from_row(row)
+
+    def list_yolo_objects(self, include_deleted: bool = False) -> list[YoloObjectRecord]:
+        conn = self._get_conn()
+        if include_deleted:
+            rows = conn.execute(
+                "SELECT * FROM yolo_objects ORDER BY created_at ASC"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM yolo_objects WHERE status != 'deleted' ORDER BY created_at ASC"
+            ).fetchall()
+        return [self._yolo_object_from_row(row) for row in rows]
+
+    def soft_delete_yolo_object(self, object_id: str) -> None:
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE yolo_objects SET status = 'deleted', updated_at = ? WHERE object_id = ?",
+            (utc_now_iso(), object_id),
+        )
+        conn.commit()
+
+    def insert_yolo_observation(self, record: YoloObservationRecord) -> None:
+        conn = self._get_conn()
+        conn.execute(
+            """
+            INSERT INTO yolo_object_observations (
+                observation_id, object_id, label, class_id, confidence, world_x, world_y, world_z,
+                size_x, size_y, size_z, view_x, view_y, view_yaw, image_path, thumbnail_path, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record.observation_id,
+                record.object_id,
+                record.label,
+                record.class_id,
+                record.confidence,
+                record.world_x,
+                record.world_y,
+                record.world_z,
+                record.size_x,
+                record.size_y,
+                record.size_z,
+                record.view_x,
+                record.view_y,
+                record.view_yaw,
+                record.image_path,
+                record.thumbnail_path,
+                record.created_at,
+            ),
+        )
+        conn.commit()
+
     @staticmethod
     def new_poi(
         *,
@@ -465,6 +702,93 @@ class SlamassStorage:
         )
 
     @staticmethod
+    def new_yolo_object(
+        *,
+        map_id: str,
+        label: str,
+        class_id: int,
+        world_x: float,
+        world_y: float,
+        world_z: float,
+        size_x: float,
+        size_y: float,
+        size_z: float,
+        best_view_x: float,
+        best_view_y: float,
+        best_view_yaw: float,
+        thumbnail_path: str,
+        hero_image_path: str,
+        detections_count: int,
+        best_confidence: float,
+        object_id: str | None = None,
+        created_at: str | None = None,
+        last_seen_at: str | None = None,
+    ) -> YoloObjectRecord:
+        now = utc_now_iso()
+        return YoloObjectRecord(
+            object_id=object_id or uuid.uuid4().hex,
+            map_id=map_id,
+            label=label,
+            class_id=class_id,
+            world_x=world_x,
+            world_y=world_y,
+            world_z=world_z,
+            size_x=size_x,
+            size_y=size_y,
+            size_z=size_z,
+            best_view_x=best_view_x,
+            best_view_y=best_view_y,
+            best_view_yaw=best_view_yaw,
+            status="active",
+            thumbnail_path=thumbnail_path,
+            hero_image_path=hero_image_path,
+            detections_count=detections_count,
+            best_confidence=best_confidence,
+            created_at=created_at or now,
+            updated_at=now,
+            last_seen_at=last_seen_at or now,
+        )
+
+    @staticmethod
+    def new_yolo_observation(
+        *,
+        object_id: str | None,
+        label: str,
+        class_id: int,
+        confidence: float,
+        world_x: float,
+        world_y: float,
+        world_z: float,
+        size_x: float,
+        size_y: float,
+        size_z: float,
+        view_x: float,
+        view_y: float,
+        view_yaw: float,
+        image_path: str | None,
+        thumbnail_path: str | None,
+    ) -> YoloObservationRecord:
+        return YoloObservationRecord(
+            observation_id=uuid.uuid4().hex,
+            object_id=object_id,
+            label=label,
+            class_id=class_id,
+            confidence=confidence,
+            world_x=world_x,
+            world_y=world_y,
+            world_z=world_z,
+            size_x=size_x,
+            size_y=size_y,
+            size_z=size_z,
+            view_x=view_x,
+            view_y=view_y,
+            view_yaw=view_yaw,
+            image_path=image_path,
+            thumbnail_path=thumbnail_path,
+            created_at=utc_now_iso(),
+        )
+
+    @staticmethod
     def _poi_from_row(row: sqlite3.Row) -> PoiRecord:
         return PoiRecord(
             poi_id=str(row["poi_id"]),
@@ -482,4 +806,30 @@ class SlamassStorage:
             objects_json=str(row["objects_json"]),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
+        )
+
+    @staticmethod
+    def _yolo_object_from_row(row: sqlite3.Row) -> YoloObjectRecord:
+        return YoloObjectRecord(
+            object_id=str(row["object_id"]),
+            map_id=str(row["map_id"]),
+            label=str(row["label"]),
+            class_id=int(row["class_id"]),
+            world_x=float(row["world_x"]),
+            world_y=float(row["world_y"]),
+            world_z=float(row["world_z"]),
+            size_x=float(row["size_x"]),
+            size_y=float(row["size_y"]),
+            size_z=float(row["size_z"]),
+            best_view_x=float(row["best_view_x"]),
+            best_view_y=float(row["best_view_y"]),
+            best_view_yaw=float(row["best_view_yaw"]),
+            status=str(row["status"]),
+            thumbnail_path=str(row["thumbnail_path"]),
+            hero_image_path=str(row["hero_image_path"]),
+            detections_count=int(row["detections_count"]),
+            best_confidence=float(row["best_confidence"]),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+            last_seen_at=str(row["last_seen_at"]),
         )

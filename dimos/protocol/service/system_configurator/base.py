@@ -16,14 +16,17 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from functools import cache
-import logging
 import os
 import subprocess
+import sys
 from typing import Any
 
+import click
 import typer
 
-logger = logging.getLogger(__name__)
+from dimos.utils.logging_config import setup_logger
+
+logger = setup_logger()
 
 # sudo helpers
 
@@ -40,6 +43,13 @@ def sudo_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
     if _is_root_user():
         return subprocess.run(list(args), **kwargs)
     return subprocess.run(["sudo", *args], **kwargs)
+
+
+def _is_interactive_terminal() -> bool:
+    try:
+        return bool(sys.stdin.isatty() and sys.stderr.isatty())
+    except Exception:
+        return False
 
 
 def _read_sysctl_int(name: str) -> int | None:
@@ -108,13 +118,39 @@ def configure_system(checks: list[SystemConfigurator], check_only: bool = False)
     explanations: list[str] = [msg for check in failing if (msg := check.explanation()) is not None]
 
     if explanations:
-        logger.warning("System configuration changes are recommended/required:\n")
-        logger.warning("\n\n".join(explanations))
+        logger.warning(
+            "System configuration changes are recommended/required",
+            explanations=explanations,
+        )
 
     if check_only:
         return
 
-    if not typer.confirm("\nApply these changes now?"):
+    critical_failing = any(check.critical for check in failing)
+
+    if not _is_interactive_terminal():
+        logger.error(
+            "System configuration requires interactive confirmation but no TTY is available",
+            critical=critical_failing,
+            configurators=[type(check).__name__ for check in failing],
+        )
+        if critical_failing:
+            raise SystemExit(1)
+        return
+
+    try:
+        should_apply = typer.confirm("\nApply these changes now?")
+    except (click.Abort, EOFError, KeyboardInterrupt):
+        logger.error(
+            "System configuration prompt was aborted",
+            critical=critical_failing,
+            configurators=[type(check).__name__ for check in failing],
+        )
+        if critical_failing:
+            raise SystemExit(1)
+        return
+
+    if not should_apply:
         if any(check.critical for check in failing):
             raise SystemExit(1)
         return

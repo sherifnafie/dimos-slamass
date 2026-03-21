@@ -23,14 +23,17 @@ The repo now already contains a working first pass of this concept:
 - web UI: side-by-side POV and persisted SLAMASS map
 - persistent active-map storage under `~/.local/state/dimos/slamass/`
 - manual `Inspect Now` using OpenAI vision
-- floating POI cards with detail modal and delete
+- floating VLM POI cards with detail modal and delete
+- a second semantic layer built from live YOLO detections, promoted into persistent world objects after repeated hits
+- YOLO object detail, `Go To`, delete, pause/resume ingestion, and layer visibility controls
 - `Go To` wired to the stored POI viewpoint pose, meaning `x`, `y`, and the recorded viewing `yaw`
+- `Go To` for YOLO objects wired to the saved best-view robot pose rather than the object centroid
 - a service-owned UI command layer for map focus state, selection, highlights, and camera control, so future agent-driven zoom/highlight behavior has a clean path
+- an operator chat panel backed by a service-owned agent that can search semantic memory, manipulate the SLAMASS UI, inspect the current view, navigate to saved semantic items, toggle semantic layers, pause or resume YOLO ingestion, save the map, and use a curated set of robot MCP tools
 
 Still roadmap rather than current reality:
 
 - opportunistic autonomous inspection while moving
-- chat over POIs plus MCP
 - stronger dynamic-object suppression
 - first-class saved-SLAM relocalization across cold restarts
 
@@ -104,9 +107,13 @@ Clicking a floating window opens the POI:
 - why it was tagged
 - buttons like `Go To`, `Delete`, `Rescan`
 
-Longer term:
+The operator can now also use a chat panel:
 
-- a chat panel can search these POIs and use MCP tools to command the robot
+- the agent searches the saved semantic dataset first
+- the agent can highlight and focus the map while answering
+- the agent can also change layer visibility, pause or resume YOLO, and save the map when explicitly asked
+- the agent can command navigation back to saved POIs or YOLO object viewpoints
+- the agent can inspect the current view or use selected relative robot actions when needed
 - example: "go somewhere with a window"
 
 ## What the Product Actually Is
@@ -146,6 +153,13 @@ Each POI is a saved observation tied to:
 
 This is sparse, curated, and operator-meaningful.
 
+There are now two semantic modalities inside this memory layer:
+
+- `VLM anchors`: sparse, manually triggered scene/place observations backed by a full frame and a richer semantic summary
+- `YOLO objects`: denser, automatically promoted world objects backed by repeated 3D detections and a best crop / best-view pose
+
+These should be treated as one semantic dataset with two different acquisition paths.
+
 ### Layer 3: UI Visualization
 
 This is what judges see.
@@ -155,17 +169,19 @@ The UI must communicate:
 - where the robot is
 - what it is looking at
 - what interesting places it has found
+- what persistent concrete objects it has recognized
 - how those places relate to the map
 
 The UI should feel like an augmented memory of the space, not like a raw robotics dashboard.
 
 ### Layer 4: Agent Layer
 
-This is not the first thing to build, but it is the eventual reasoning layer.
+This is now part of the MVP, but still intentionally constrained.
 
 It should reason over:
 
 - the POI database
+- the YOLO object dataset
 - navigation actions
 - inspection actions
 - selected safe MCP tools
@@ -180,6 +196,14 @@ Important future capability:
 - example UI actions: zoom map to region, pan to POI, highlight one or more POIs, focus the selected POI card, open a POI detail panel, or briefly spotlight a search result
 
 This matters because a good live demo is interactive, not purely verbal. If a user asks "where is the window area?" the best response is not just text. The best response is for the agent to answer while simultaneously driving the UI toward the relevant part of the map.
+
+Current implementation stance:
+
+- the agent is service-owned, not embedded in the browser
+- the agent works through an explicit tool layer rather than raw frontend state mutation
+- semantic search, map focus/highlight, and semantic-item navigation are first-class tools
+- robot action tools are intentionally curated rather than fully open-ended
+- the agent should prefer semantic memory plus UI actions before using low-level robot motion
 
 ## Why This Pivot Is Better Than Dense Semantic Mapping
 

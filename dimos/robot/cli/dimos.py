@@ -193,7 +193,12 @@ def run(
             coordinator = blueprint.build(cli_config_overrides=cli_config_overrides)
             install_signal_handlers(entry, coordinator)
             coordinator.loop()
-        except Exception:
+        except BaseException:
+            logger.exception(
+                "DimOS daemon startup failed",
+                run_id=run_id,
+                blueprint=blueprint_name,
+            )
             entry.remove()
             if coordinator is not None:
                 try:

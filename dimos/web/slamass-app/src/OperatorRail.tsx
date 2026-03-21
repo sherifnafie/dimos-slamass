@@ -1,7 +1,8 @@
 import React from "react";
 
+import { ChatPanel } from "./ChatPanel";
 import { PanelShell } from "./PanelShell";
-import { InspectionState, Poi } from "./types";
+import { ChatState, SemanticItem, SemanticItemRef, SemanticKind } from "./types";
 
 type ActivityEntry = {
   id: string;
@@ -12,53 +13,61 @@ type ActivityEntry = {
   timestamp: string;
 };
 
-type RailView = "timeline" | "pois";
+type RailView = "timeline" | "semantic" | "chat";
+
+export type SelectedSemanticPreview = {
+  kind: SemanticKind;
+  entity_id: string;
+  title: string;
+  subtitle: string;
+  summary: string;
+  thumbnail_url: string;
+};
 
 type OperatorRailProps = {
   activityEntries: ActivityEntry[];
   busyAction: string | null;
-  inspection: InspectionState;
-  inspectionModeLabel: string;
-  pois: Poi[];
-  selectedPoi: Poi | null;
-  onSelectPoi: (poiId: string | null) => void;
-  onHighlightPoi: (poiId: string) => void;
-  onFocusPoi: (poiId: string) => void;
-  onGoToPoi: (poiId: string) => void;
+  chat: ChatState;
+  items: SemanticItem[];
+  selectedItem: SemanticItemRef | null;
+  selectedPreview: SelectedSemanticPreview | null;
+  onSelectItem: (item: SemanticItemRef | null) => void;
+  onHighlightItem: (item: SemanticItemRef) => void;
+  onFocusItem: (item: SemanticItemRef) => void;
+  onGoToItem: (item: SemanticItemRef) => void;
   onClearFocus: () => void;
+  onResetChat: () => void;
+  onSubmitChatMessage: (message: string) => void;
 };
+
+function itemLabel(kind: SemanticKind): string {
+  return kind === "vlm_poi" ? "POI" : "YOLO";
+}
 
 export function OperatorRail(props: OperatorRailProps): React.ReactElement {
   const {
     activityEntries,
     busyAction,
-    inspection,
-    inspectionModeLabel,
-    pois,
-    selectedPoi,
-    onSelectPoi,
-    onHighlightPoi,
-    onFocusPoi,
-    onGoToPoi,
+    chat,
+    items,
+    selectedItem,
+    selectedPreview,
+    onSelectItem,
+    onHighlightItem,
+    onFocusItem,
+    onGoToItem,
     onClearFocus,
+    onResetChat,
+    onSubmitChatMessage,
   } = props;
 
   const [railView, setRailView] = React.useState<RailView>("timeline");
-
-  const visiblePois = React.useMemo(
-    () =>
-      pois
-        .filter((poi) => poi.status !== "deleted")
-        .sort((left, right) => right.updated_at.localeCompare(left.updated_at)),
-    [pois],
-  );
-
   const visibleEntries = React.useMemo(() => activityEntries.slice(-8), [activityEntries]);
 
   return (
     <PanelShell
       aside={
-        <div className="rail-tabs" role="tablist" aria-label="Chat rail views">
+        <div className="rail-tabs" role="tablist" aria-label="Operator rail views">
           <button
             className={railView === "timeline" ? "is-active" : ""}
             onClick={() => {
@@ -69,49 +78,64 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
             Timeline
           </button>
           <button
-            className={railView === "pois" ? "is-active" : ""}
+            className={railView === "semantic" ? "is-active" : ""}
             onClick={() => {
-              setRailView("pois");
+              setRailView("semantic");
             }}
             type="button"
           >
-            POIs
+            Semantic
+          </button>
+          <button
+            className={railView === "chat" ? "is-active" : ""}
+            onClick={() => {
+              setRailView("chat");
+            }}
+            type="button"
+          >
+            Agent
           </button>
         </div>
       }
       bodyClassName="panel-body-console"
       className="console-panel"
       kicker="Operator"
-      title="Chat"
+      title="Console"
     >
       <div className="rail-stack">
-        <div className="rail-summary">
-          <span className={`toolbar-chip tone-${inspection.status}`}>{inspection.status}</span>
-          <span className="toolbar-chip">{inspectionModeLabel}</span>
-          <span className="toolbar-chip">{visiblePois.length} POIs</span>
-        </div>
-
-        {selectedPoi ? (
+        {selectedPreview ? (
           <section className="rail-selected-card">
-            <img alt={selectedPoi.title} src={selectedPoi.thumbnail_url} />
+            <img alt={selectedPreview.title} src={selectedPreview.thumbnail_url} />
             <div className="rail-selected-copy">
               <div className="rail-selected-topline">
-                <strong>{selectedPoi.title}</strong>
-                <span>{selectedPoi.category}</span>
+                <strong>{selectedPreview.title}</strong>
+                <span>{selectedPreview.subtitle}</span>
               </div>
-              <p>{selectedPoi.summary}</p>
+              <p>{selectedPreview.summary}</p>
             </div>
             <div className="rail-selected-actions">
-              <button className="mini-button" onClick={() => onFocusPoi(selectedPoi.poi_id)} type="button">
+              <button
+                className="mini-button"
+                onClick={() => onFocusItem({ kind: selectedPreview.kind, entity_id: selectedPreview.entity_id })}
+                type="button"
+              >
                 Focus
               </button>
-              <button className="mini-button" onClick={() => onHighlightPoi(selectedPoi.poi_id)} type="button">
+              <button
+                className="mini-button"
+                onClick={() =>
+                  onHighlightItem({ kind: selectedPreview.kind, entity_id: selectedPreview.entity_id })
+                }
+                type="button"
+              >
                 Highlight
               </button>
               <button
                 className="mini-button mini-button-primary"
-                disabled={busyAction === `go-${selectedPoi.poi_id}`}
-                onClick={() => onGoToPoi(selectedPoi.poi_id)}
+                disabled={busyAction === `go-${selectedPreview.kind}-${selectedPreview.entity_id}`}
+                onClick={() =>
+                  onGoToItem({ kind: selectedPreview.kind, entity_id: selectedPreview.entity_id })
+                }
                 type="button"
               >
                 Go
@@ -139,44 +163,45 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
                 </article>
               ))}
             </div>
-          ) : (
+          ) : railView === "semantic" ? (
             <div className="rail-poi-list">
-              {visiblePois.length > 0 ? (
-                visiblePois.map((poi) => (
-                  <article className="rail-poi-item" key={poi.poi_id}>
-                    <button
-                      className={`rail-poi-main ${selectedPoi?.poi_id === poi.poi_id ? "is-active" : ""}`}
-                      onClick={() => onSelectPoi(poi.poi_id)}
-                      type="button"
-                    >
-                      <img alt={poi.title} src={poi.thumbnail_url} />
-                      <span className="rail-poi-copy">
-                        <strong>{poi.title}</strong>
-                        <span>{poi.category}</span>
-                      </span>
-                    </button>
-                    <button
-                      className="mini-button mini-button-primary"
-                      disabled={busyAction === `go-${poi.poi_id}`}
-                      onClick={() => onGoToPoi(poi.poi_id)}
-                      type="button"
-                    >
-                      Go
-                    </button>
-                  </article>
-                ))
+              {items.length > 0 ? (
+                items.map((item) => {
+                  const isSelected =
+                    selectedItem?.kind === item.kind && selectedItem?.entity_id === item.entity_id;
+                  return (
+                    <article className="rail-poi-item" key={`${item.kind}:${item.entity_id}`}>
+                      <button
+                        className={`rail-poi-main ${isSelected ? "is-active" : ""}`}
+                        onClick={() => onSelectItem({ kind: item.kind, entity_id: item.entity_id })}
+                        type="button"
+                      >
+                        <img alt={item.title} src={item.thumbnail_url} />
+                        <span className="rail-poi-copy">
+                          <strong>{item.title}</strong>
+                          <span>
+                            {itemLabel(item.kind)} · {item.subtitle}
+                          </span>
+                        </span>
+                      </button>
+                      <button
+                        className="mini-button mini-button-primary"
+                        disabled={busyAction === `go-${item.kind}-${item.entity_id}`}
+                        onClick={() => onGoToItem({ kind: item.kind, entity_id: item.entity_id })}
+                        type="button"
+                      >
+                        Go
+                      </button>
+                    </article>
+                  );
+                })
               ) : (
-                <div className="thread-empty">No POIs yet.</div>
+                <div className="thread-empty">No semantic anchors yet.</div>
               )}
             </div>
+          ) : (
+            <ChatPanel chat={chat} onResetChat={onResetChat} onSubmitMessage={onSubmitChatMessage} />
           )}
-        </div>
-
-        <div className="rail-composer">
-          <input className="composer-input" disabled placeholder="Chat API not wired yet" />
-          <button className="mini-button" disabled type="button">
-            Send
-          </button>
         </div>
       </div>
     </PanelShell>
