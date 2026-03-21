@@ -72,15 +72,28 @@ def daemonize(log_dir: Path) -> None:
     if pid > 0:
         os._exit(0)
 
-    # Redirect all stdio to /dev/null — structlog FileHandler is the log path
-    sys.stdout.flush()
-    sys.stderr.flush()
+    # Redirect all stdio to /dev/null and replace Python's file objects so
+    # multiprocessing can still safely flush them during worker startup.
+    try:
+        sys.stdout.flush()
+    except Exception:
+        pass
+    try:
+        sys.stderr.flush()
+    except Exception:
+        pass
 
-    devnull = open(os.devnull)
-    os.dup2(devnull.fileno(), sys.stdin.fileno())
-    os.dup2(devnull.fileno(), sys.stdout.fileno())
-    os.dup2(devnull.fileno(), sys.stderr.fileno())
-    devnull.close()
+    stdin_null = open(os.devnull, "r")
+    stdout_null = open(os.devnull, "a+")
+    stderr_null = open(os.devnull, "a+")
+
+    os.dup2(stdin_null.fileno(), 0)
+    os.dup2(stdout_null.fileno(), 1)
+    os.dup2(stderr_null.fileno(), 2)
+
+    sys.stdin = stdin_null
+    sys.stdout = stdout_null
+    sys.stderr = stderr_null
 
 
 # ---------------------------------------------------------------------------

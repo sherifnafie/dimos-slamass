@@ -163,31 +163,17 @@ def run(
         disabled_classes = tuple(get_module_by_name(name).blueprints[0].module for name in disable)
         blueprint = blueprint.disabled_modules(*disabled_classes)
 
-    coordinator = blueprint.build(cli_config_overrides=cli_config_overrides)
-
     if daemon:
         from dimos.core.daemon import (
             daemonize,
             install_signal_handlers,
         )
 
-        # Health check before daemonizing — catch early crashes
-        if not coordinator.health_check():
-            typer.echo("Error: health check failed — a worker process died.", err=True)
-            coordinator.stop()
-            raise typer.Exit(1)
-
-        n_workers = coordinator.n_workers
-        n_modules = coordinator.n_modules
-        typer.echo(f"✓ All modules started ({n_modules} modules, {n_workers} workers)")
-        typer.echo("✓ Health check passed")
-        typer.echo("✓ DimOS running in background\n")
+        typer.echo("Starting DimOS in background...\n")
         typer.echo(f"  Run ID:    {run_id}")
         typer.echo(f"  Log:       {log_dir}")
         typer.echo("  Stop:      dimos stop")
         typer.echo("  Status:    dimos status")
-
-        coordinator.suppress_console()
 
         daemonize(log_dir)
 
@@ -202,9 +188,21 @@ def run(
             original_argv=sys.argv,
         )
         entry.save()
-        install_signal_handlers(entry, coordinator)
-        coordinator.loop()
+        coordinator: ModuleCoordinator | None = None
+        try:
+            coordinator = blueprint.build(cli_config_overrides=cli_config_overrides)
+            install_signal_handlers(entry, coordinator)
+            coordinator.loop()
+        except Exception:
+            entry.remove()
+            if coordinator is not None:
+                try:
+                    coordinator.stop()
+                except Exception:
+                    logger.error("Error stopping coordinator after daemon startup failure", exc_info=True)
+            raise
     else:
+        coordinator = blueprint.build(cli_config_overrides=cli_config_overrides)
         entry = RunEntry(
             run_id=run_id,
             pid=os.getpid(),

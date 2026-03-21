@@ -192,7 +192,7 @@ class Worker:
         self._process = ctx.Process(
             target=_worker_entrypoint,
             args=(child_conn, self._worker_id),
-            daemon=True,
+            daemon=False,
         )
         self._process.start()
 

@@ -20,6 +20,7 @@ import base64
 from collections.abc import Callable
 import functools
 import json
+import os
 import pickle
 import subprocess
 import sys
@@ -123,9 +124,14 @@ class MujocoConnection:
         try:
             # mjpython must be used macOS (because of launch_passive inside mujoco_process.py)
             executable = sys.executable if sys.platform != "darwin" else "mjpython"
+            env = os.environ.copy()
+            if self.global_config.viewer == "none" and sys.platform.startswith("linux"):
+                # Offscreen rendering is enough for the simulated POV/lidar feeds.
+                env.setdefault("MUJOCO_GL", "egl")
 
             self.process = subprocess.Popen(
                 [executable, str(LAUNCHER_PATH), config_pickle, shm_names_json],
+                env=env,
             )
 
         except Exception as e:
