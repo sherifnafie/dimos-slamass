@@ -168,22 +168,62 @@ class TestConfigureSystem:
 
     def test_prompts_user_and_fixes_on_yes(self, mocker) -> None:
         mock_check = MockConfigurator(passes=False)
+        mocker.patch(
+            "dimos.protocol.service.system_configurator.base._is_interactive_terminal",
+            return_value=True,
+        )
         mocker.patch("typer.confirm", return_value=True)
         configure_system([mock_check])
         assert mock_check.fix_called
 
     def test_does_not_fix_on_no(self, mocker) -> None:
         mock_check = MockConfigurator(passes=False)
+        mocker.patch(
+            "dimos.protocol.service.system_configurator.base._is_interactive_terminal",
+            return_value=True,
+        )
         mocker.patch("typer.confirm", return_value=False)
         configure_system([mock_check])
         assert not mock_check.fix_called
 
     def test_exits_on_no_with_critical_check(self, mocker) -> None:
         mock_check = MockConfigurator(passes=False, is_critical=True)
+        mocker.patch(
+            "dimos.protocol.service.system_configurator.base._is_interactive_terminal",
+            return_value=True,
+        )
         mocker.patch("typer.confirm", return_value=False)
         with pytest.raises(SystemExit) as exc_info:
             configure_system([mock_check])
         assert exc_info.value.code == 1
+
+    def test_non_interactive_optional_check_skips_prompt(self, mocker) -> None:
+        mock_check = MockConfigurator(passes=False)
+        confirm = mocker.patch("typer.confirm")
+        mocker.patch(
+            "dimos.protocol.service.system_configurator.base._is_interactive_terminal",
+            return_value=False,
+        )
+
+        configure_system([mock_check])
+
+        confirm.assert_not_called()
+        assert not mock_check.fix_called
+
+    def test_non_interactive_critical_check_exits_without_prompt(self, mocker) -> None:
+        mock_check = MockConfigurator(passes=False, is_critical=True)
+        confirm = mocker.patch("typer.confirm")
+        mocker.patch(
+            "dimos.protocol.service.system_configurator.base._is_interactive_terminal",
+            return_value=False,
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            configure_system([mock_check])
+
+        confirm.assert_not_called()
+        assert exc_info.value.code == 1
+        assert not mock_check.fix_called
 
 
 # ----------------------------- MulticastConfiguratorLinux tests -----------------------------

@@ -214,16 +214,14 @@ class Blueprint:
             configure_system(configurators)
         except SystemExit:
             labels = [type(c).__name__ for c in configurators]
-            print(
-                f"Required system configuration was declined: {', '.join(labels)}",
-                file=sys.stderr,
+            logger.error(
+                "Required system configuration was declined or could not be applied",
+                configurators=labels,
             )
-            sys.exit(1)
+            raise
 
     def _check_requirements(self) -> None:
         errors = []
-        red = "\033[31m"
-        reset = "\033[0m"
 
         for check in self.requirement_checks:
             error = check()
@@ -232,8 +230,8 @@ class Blueprint:
 
         if errors:
             for error in errors:
-                print(f"{red}Error: {error}{reset}", file=sys.stderr)
-            sys.exit(1)
+                logger.error("Blueprint requirement failed", error=error)
+            raise SystemExit(1)
 
     def _verify_no_name_conflicts(self) -> None:
         name_to_types = defaultdict(set)
