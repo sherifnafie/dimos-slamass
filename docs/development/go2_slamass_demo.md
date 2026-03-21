@@ -166,8 +166,17 @@ It should reason over:
 - navigation actions
 - inspection actions
 - selected safe MCP tools
+- selected UI-control tools for the SLAMASS map and POI layer
 
 It should not reason directly over raw locomotion and map pixels unless necessary.
+
+Important future capability:
+
+- the agent should not be limited to text responses and robot commands
+- it should also be able to manipulate the SLAMASS UI state in presenter-visible ways
+- example UI actions: zoom map to region, pan to POI, highlight one or more POIs, focus the selected POI card, open a POI detail panel, or briefly spotlight a search result
+
+This matters because a good live demo is interactive, not purely verbal. If a user asks "where is the window area?" the best response is not just text. The best response is for the agent to answer while simultaneously driving the UI toward the relevant part of the map.
 
 ## Why This Pivot Is Better Than Dense Semantic Mapping
 
@@ -844,6 +853,22 @@ Example:
 - choose best POI
 - call MCP navigation
 
+Extended desired behavior:
+
+- when answering a spatial question, the agent should also be able to trigger UI-side actions on the SLAMASS frontend
+- examples: zoom into the relevant region, highlight candidate POIs, select the best POI, open its detail card, or center the map on the current answer
+
+This implies the future chat layer should have a second tool family in addition to robot MCP:
+
+- robot tools: move, inspect, navigate, rescan
+- UI tools: zoom map, pan map, highlight POIs, select POI, clear highlight, open detail view
+
+The interaction target is a mixed initiative system:
+
+- the agent explains what it found
+- the UI visibly follows the explanation
+- the presenter can immediately see and validate what the agent means
+
 This makes the LLM operate over high-value semantic memory rather than raw robot primitives.
 
 ## Risks and Failure Modes
@@ -964,10 +989,12 @@ Definition of done:
 
 - query POI memory
 - navigate to POI from language
+- control the SLAMASS UI from language for presenter-visible interaction
 
 Definition of done:
 
 - "go somewhere with a window" works against stored semantic memory
+- "where is the window area" can answer while zooming and highlighting the relevant map content
 
 ## Technical Recommendations
 
