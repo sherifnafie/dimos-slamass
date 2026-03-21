@@ -34,6 +34,7 @@ class FakeMcpClient:
     def __init__(self, image_bytes: bytes) -> None:
         self._image_bytes = image_bytes
         self.relative_move_calls: list[tuple[float, float, float]] = []
+        self.set_yolo_inference_calls: list[bool] = []
 
     def observe_jpeg(self) -> bytes:
         return self._image_bytes
@@ -43,6 +44,10 @@ class FakeMcpClient:
     ) -> dict[str, str]:
         self.relative_move_calls.append((forward, left, degrees))
         return {"status": "ok"}
+
+    async def set_yolo_inference(self, *, enabled: bool) -> str:
+        self.set_yolo_inference_calls.append(enabled)
+        return f"YOLO inference {'enabled' if enabled else 'disabled'}."
 
 
 class FakeMapClient:
@@ -782,8 +787,30 @@ async def test_chat_set_yolo_runtime_updates_state(tmp_path: Path) -> None:
     result = await service.chat_set_yolo_runtime(mode="paused")
     snapshot = await service.snapshot()
 
-    assert result == {"ok": True, "yolo_runtime": {"mode": "paused"}}
-    assert snapshot["yolo_runtime"] == {"mode": "paused"}
+    assert result == {"ok": True, "yolo_runtime": {"mode": "paused", "inference_enabled": True}}
+    assert snapshot["yolo_runtime"] == {"mode": "paused", "inference_enabled": True}
+
+
+@pytest.mark.asyncio
+async def test_set_yolo_runtime_updates_detector_inference_flag(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_mcp = FakeMcpClient(make_test_jpeg())
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=fake_mcp,
+        analyzer=FakeAnalyzer(),
+        chat_agent=FakeChatAgent(),
+    )
+
+    result = await service.set_yolo_runtime(inference_enabled=False)
+    snapshot = await service.snapshot()
+
+    assert result == {"mode": "live", "inference_enabled": False}
+    assert snapshot["yolo_runtime"] == {"mode": "live", "inference_enabled": False}
+    assert fake_mcp.set_yolo_inference_calls == [False]
 
 
 @pytest.mark.asyncio

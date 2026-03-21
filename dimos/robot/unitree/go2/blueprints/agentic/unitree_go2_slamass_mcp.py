@@ -37,6 +37,7 @@ unitree_go2_slamass_mcp = autoconnect(
     detection3d_module(
         camera_info=GO2Connection.camera_info_static,
         detector=_slamass_detector,
+        max_freq=2,
     ),
     McpServer.blueprint(),
     unitree_skills(),

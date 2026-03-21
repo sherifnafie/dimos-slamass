@@ -57,6 +57,7 @@ const emptyState: AppState = {
   },
   yolo_runtime: {
     mode: "live",
+    inference_enabled: true,
   },
   layers: {
     show_pois: true,
@@ -680,6 +681,23 @@ export default function App(): React.ReactElement {
     [reportActionError],
   );
 
+  const handleYoloInferenceEnabledChange = React.useCallback(
+    async (inferenceEnabled: boolean) => {
+      try {
+        const payload = await fetchJson<AppState["yolo_runtime"]>("/api/yolo/runtime", {
+          method: "PUT",
+          body: JSON.stringify({ inference_enabled: inferenceEnabled }),
+        });
+        startTransition(() => {
+          setState((previous) => ({ ...previous, yolo_runtime: payload }));
+        });
+      } catch (error) {
+        reportActionError("YOLO inference update failed", error);
+      }
+    },
+    [reportActionError],
+  );
+
   const handleLayerToggle = React.useCallback(
     async (field: "show_pois" | "show_yolo", value: boolean) => {
       try {
@@ -1032,6 +1050,9 @@ export default function App(): React.ReactElement {
             <span className="toolbar-chip tone-running">Inspecting</span>
           ) : null}
           {state.chat.running ? <span className="toolbar-chip tone-accent">Agent thinking</span> : null}
+          {!state.yolo_runtime.inference_enabled ? (
+            <span className="toolbar-chip tone-danger">YOLO off</span>
+          ) : null}
           {state.yolo_runtime.mode !== "live" ? (
             <span className="toolbar-chip tone-accent">YOLO paused</span>
           ) : null}
@@ -1143,7 +1164,21 @@ export default function App(): React.ReactElement {
                   }}
                   type="button"
                 >
-                  {state.yolo_runtime.mode === "live" ? "Pause YOLO" : "Resume YOLO"}
+                  {state.yolo_runtime.mode === "live"
+                    ? "Pause YOLO labeling"
+                    : "Resume YOLO labeling"}
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    void handleYoloInferenceEnabledChange(!state.yolo_runtime.inference_enabled);
+                    setControlsMenuOpen(false);
+                  }}
+                  type="button"
+                >
+                  {state.yolo_runtime.inference_enabled
+                    ? "Turn YOLO inference off"
+                    : "Turn YOLO inference on"}
                 </button>
                 <button
                   className="menu-item"

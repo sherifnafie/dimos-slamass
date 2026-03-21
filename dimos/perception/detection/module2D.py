@@ -23,6 +23,7 @@ from reactivex.observable import Observable
 from reactivex.subject import Subject
 
 from dimos import spec
+from dimos.agents.annotation import skill
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.module_coordinator import ModuleCoordinator
@@ -74,12 +75,30 @@ class Detection2DModule(Module):
         self.detector = self.config.detector()  # type: ignore[call-arg, misc]
         self.vlm_detections_subject = Subject()  # type: ignore[var-annotated]
         self.previous_detection_count = 0
+        self._inference_enabled = True
 
     def process_image_frame(self, image: Image) -> ImageDetections2D:
+        if not self._inference_enabled:
+            return ImageDetections2D(image, [])
         imageDetections = self.detector.process_image(image)
         if not self.config.filter:
             return imageDetections
         return imageDetections.filter(*self.config.filter)  # type: ignore[misc, return-value]
+
+    @skill
+    def set_yolo_inference(self, enabled: bool) -> str:
+        """Enable or disable YOLO inference for this detector module.
+
+        Args:
+            enabled: True to run YOLO on incoming frames. False to skip model calls.
+        """
+        self._inference_enabled = bool(enabled)
+        if not self._inference_enabled:
+            stop = getattr(self.detector, "stop", None)
+            if callable(stop):
+                stop()
+        state = "enabled" if self._inference_enabled else "disabled"
+        return f"YOLO inference {state}."
 
     @simple_mcache
     def sharp_image_stream(self) -> Observable[Image]:

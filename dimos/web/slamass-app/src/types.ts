@@ -112,6 +112,7 @@ export interface InspectionSettings {
 
 export interface YoloRuntimeState {
   mode: YoloRuntimeMode;
+  inference_enabled: boolean;
 }
 
 export interface LayerVisibility {

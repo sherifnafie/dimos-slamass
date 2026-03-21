@@ -180,6 +180,7 @@ class InspectionSettings:
 @dataclass(slots=True)
 class YoloRuntimeState:
     mode: str = YOLO_MODE_LIVE
+    inference_enabled: bool = True
 
 
 @dataclass(slots=True)
@@ -323,7 +324,8 @@ class TeleopCommandRequest(BaseModel):
 
 
 class YoloRuntimeRequest(BaseModel):
-    mode: str
+    mode: str | None = None
+    inference_enabled: bool | None = None
 
 
 class LayerVisibilityRequest(BaseModel):
@@ -372,6 +374,12 @@ class McpToolClient:
             "relative_move",
             {"forward": forward, "left": left, "degrees": degrees},
         )
+
+    async def set_yolo_inference(self, *, enabled: bool) -> str:
+        text = await self.call_tool_text("set_yolo_inference", {"enabled": enabled})
+        if text.startswith("Tool not found:") or text.startswith("Error running tool"):
+            raise RuntimeError(text)
+        return text
 
     async def call_tool_text(
         self,
@@ -822,6 +830,10 @@ class SlamassService:
     async def start(self) -> None:
         self._load_from_storage()
         await self._maybe_start_mcp_client()
+        await self._set_yolo_inference_enabled(
+            self.yolo_runtime.inference_enabled,
+            best_effort=True,
+        )
         await self.map_client.start()
         self._tasks = [
             asyncio.create_task(self._pov_loop()),
@@ -995,13 +1007,32 @@ class SlamassService:
         return payload
 
     async def set_yolo_mode(self, mode: str) -> dict[str, Any]:
-        try:
-            normalized_mode = normalize_yolo_mode(mode)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return await self.set_yolo_runtime(mode=mode)
+
+    async def set_yolo_runtime(
+        self,
+        *,
+        mode: str | None = None,
+        inference_enabled: bool | None = None,
+    ) -> dict[str, Any]:
+        normalized_mode: str | None = None
+        if mode is not None:
+            try:
+                normalized_mode = normalize_yolo_mode(mode)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if inference_enabled is not None:
+            try:
+                await self._set_yolo_inference_enabled(bool(inference_enabled))
+            except RuntimeError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
 
         async with self._state_lock:
-            self.yolo_runtime.mode = normalized_mode
+            if normalized_mode is not None:
+                self.yolo_runtime.mode = normalized_mode
+            if inference_enabled is not None:
+                self.yolo_runtime.inference_enabled = bool(inference_enabled)
             payload = self._serialize_yolo_runtime_locked()
             self.storage.save_json_setting("yolo_runtime", payload)
         await self.publish_event("state_updated", {"yolo_runtime": payload})
@@ -1658,7 +1689,8 @@ class SlamassService:
         if yolo_runtime is not None:
             try:
                 self.yolo_runtime = YoloRuntimeState(
-                    mode=normalize_yolo_mode(str(yolo_runtime.get("mode", YOLO_MODE_LIVE)))
+                    mode=normalize_yolo_mode(str(yolo_runtime.get("mode", YOLO_MODE_LIVE))),
+                    inference_enabled=bool(yolo_runtime.get("inference_enabled", True)),
                 )
             except ValueError:
                 logger.warning("Ignoring invalid persisted YOLO runtime", settings=yolo_runtime)
@@ -1778,7 +1810,10 @@ class SlamassService:
 
         published_objects: list[dict[str, Any]] = []
         async with self._state_lock:
-            if self.yolo_runtime.mode != YOLO_MODE_LIVE:
+            if (
+                self.yolo_runtime.mode != YOLO_MODE_LIVE
+                or not self.yolo_runtime.inference_enabled
+            ):
                 return
             map_id = self.map_state.map_id if self.map_state is not None else "active"
             for item in detections_payload:
@@ -1901,6 +1936,37 @@ class SlamassService:
         if asyncio.iscoroutine(result):
             return await result
         return result
+
+    async def _set_yolo_inference_enabled(
+        self,
+        inference_enabled: bool,
+        *,
+        best_effort: bool = False,
+    ) -> None:
+        setter = getattr(self.mcp_client, "set_yolo_inference", None)
+        try:
+            if setter is not None:
+                result = setter(enabled=inference_enabled)
+            else:
+                result = self.mcp_client.call_tool_text(
+                    "set_yolo_inference",
+                    {"enabled": inference_enabled},
+                )
+            if asyncio.iscoroutine(result):
+                result = await result
+            if isinstance(result, str) and (
+                result.startswith("Tool not found:") or result.startswith("Error running tool")
+            ):
+                raise RuntimeError(result)
+        except Exception as exc:
+            if best_effort:
+                logger.warning(
+                    "Could not sync YOLO inference state to detector",
+                    error=str(exc),
+                    inference_enabled=inference_enabled,
+                )
+                return
+            raise RuntimeError(f"Failed to update YOLO inference: {exc}") from exc
 
     async def _maybe_start_mcp_client(self) -> None:
         start = getattr(self.mcp_client, "start", None)
@@ -2389,7 +2455,10 @@ class SlamassService:
         }
 
     def _serialize_yolo_runtime_locked(self) -> dict[str, Any]:
-        return {"mode": self.yolo_runtime.mode}
+        return {
+            "mode": self.yolo_runtime.mode,
+            "inference_enabled": self.yolo_runtime.inference_enabled,
+        }
 
     def _serialize_layers_locked(self) -> dict[str, Any]:
         return {
@@ -2702,7 +2771,10 @@ def create_app(
 
     @app.put("/api/yolo/runtime")
     async def put_yolo_runtime(request: YoloRuntimeRequest) -> dict[str, Any]:
-        return await slamass.set_yolo_mode(request.mode)
+        return await slamass.set_yolo_runtime(
+            mode=request.mode,
+            inference_enabled=request.inference_enabled,
+        )
 
     @app.put("/api/layers")
     async def put_layers(request: LayerVisibilityRequest) -> dict[str, Any]:
