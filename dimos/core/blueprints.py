@@ -215,7 +215,10 @@ class Blueprint:
         except SystemExit:
             labels = [type(c).__name__ for c in configurators]
             print(
-                f"Required system configuration was declined: {', '.join(labels)}",
+                "System configuration blocked startup "
+                f"({', '.join(labels)}). "
+                "If you used --daemon, run once without it and accept fixes, "
+                "or apply the printed sudo commands; see main.jsonl in the run log directory.",
                 file=sys.stderr,
             )
             sys.exit(1)

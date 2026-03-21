@@ -19,6 +19,7 @@ from functools import cache
 import logging
 import os
 import subprocess
+import sys
 from typing import Any
 
 import typer
@@ -112,6 +113,34 @@ def configure_system(checks: list[SystemConfigurator], check_only: bool = False)
         logger.warning("\n\n".join(explanations))
 
     if check_only:
+        return
+
+    # `dimos run ... --daemon` redirects stdin to /dev/null; `typer.confirm` then
+    # behaves like "no", which aborts critical checks (e.g. macOS LCM multicast).
+    if not sys.stdin.isatty():
+        from dimos.utils.logging_config import setup_logger
+
+        slog = setup_logger()
+        if any(check.critical for check in failing):
+            expl_text = "\n\n".join(explanations) if explanations else ""
+            slog.error(
+                "daemon_system_config_required",
+                failing_checks=[type(c).__name__ for c in failing],
+                changes_summary=expl_text,
+                hint=(
+                    "Stdin is not a TTY (e.g. dimos --daemon). Run once without "
+                    "--daemon and confirm applying fixes, or apply the printed "
+                    "sudo commands manually, then retry with --daemon."
+                ),
+            )
+            raise SystemExit(1)
+        slog.warning(
+            "daemon_system_config_skipped_optional",
+            hint=(
+                "Non-interactive run: continuing without optional system "
+                "configuration (sysctl / symlink). Apply manually if needed."
+            ),
+        )
         return
 
     if not typer.confirm("\nApply these changes now?"):

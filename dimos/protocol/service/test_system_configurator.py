@@ -185,6 +185,35 @@ class TestConfigureSystem:
             configure_system([mock_check])
         assert exc_info.value.code == 1
 
+    def test_non_interactive_skips_confirm_for_optional_checks(self, mocker) -> None:
+        mock_stdin = mocker.MagicMock()
+        mock_stdin.isatty.return_value = False
+        mocker.patch("sys.stdin", mock_stdin)
+        mock_check = MockConfigurator(passes=False)
+        confirm = mocker.patch("typer.confirm")
+        mocker.patch(
+            "dimos.utils.logging_config.setup_logger",
+            return_value=mocker.MagicMock(),
+        )
+        configure_system([mock_check])
+        confirm.assert_not_called()
+        assert not mock_check.fix_called
+
+    def test_non_interactive_exits_when_critical_check_fails(self, mocker) -> None:
+        mock_stdin = mocker.MagicMock()
+        mock_stdin.isatty.return_value = False
+        mocker.patch("sys.stdin", mock_stdin)
+        mock_check = MockConfigurator(passes=False, is_critical=True)
+        confirm = mocker.patch("typer.confirm")
+        mocker.patch(
+            "dimos.utils.logging_config.setup_logger",
+            return_value=mocker.MagicMock(),
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            configure_system([mock_check])
+        assert exc_info.value.code == 1
+        confirm.assert_not_called()
+
 
 # ----------------------------- MulticastConfiguratorLinux tests -----------------------------
 
