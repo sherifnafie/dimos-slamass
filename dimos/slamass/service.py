@@ -70,6 +70,10 @@ POI_ARRIVAL_TOLERANCE_METERS = 0.6
 POI_ARRIVAL_SETTLE_SECONDS = 1.0
 POI_ARRIVAL_TIMEOUT_SECONDS = 120.0
 POI_ROTATION_THRESHOLD_DEGREES = 8.0
+DEFAULT_POV_POLL_INTERVAL_SECONDS = 0.25
+MIN_POV_POLL_INTERVAL_SECONDS = 0.05
+DEFAULT_POV_MAX_WIDTH = 1024
+DEFAULT_POV_JPEG_QUALITY = 76
 INSPECTION_MODE_AI_GATE = "ai_gate"
 INSPECTION_MODE_ALWAYS_CREATE = "always_create"
 SEMANTIC_KIND_POI = "vlm_poi"
@@ -567,6 +571,22 @@ def make_thumbnail(image_bytes: bytes, width: int = 320) -> bytes:
         return output.getvalue()
 
 
+def prepare_pov_jpeg(
+    image_bytes: bytes,
+    *,
+    max_width: int | None,
+    quality: int,
+) -> bytes:
+    with Image.open(io_bytes(image_bytes)) as pil_image:
+        rgb = pil_image.convert("RGB")
+        if max_width is not None and max_width > 0 and rgb.width > max_width:
+            target_height = max(1, int(round(rgb.height * (max_width / rgb.width))))
+            rgb = rgb.resize((max_width, target_height), Image.Resampling.LANCZOS)
+        output = io_bytes()
+        rgb.save(output, format="JPEG", quality=max(1, min(100, quality)))
+        return output.getvalue()
+
+
 def make_placeholder_jpeg(width: int = 96, height: int = 72) -> bytes:
     image = Image.new("RGB", (width, height), color=(22, 24, 30))
     output = io_bytes()
@@ -776,6 +796,9 @@ class SlamassService:
         poi_arrival_settle_seconds: float = POI_ARRIVAL_SETTLE_SECONDS,
         poi_arrival_timeout_seconds: float = POI_ARRIVAL_TIMEOUT_SECONDS,
         poi_rotation_threshold_degrees: float = POI_ROTATION_THRESHOLD_DEGREES,
+        pov_poll_interval_seconds: float = DEFAULT_POV_POLL_INTERVAL_SECONDS,
+        pov_max_width: int | None = DEFAULT_POV_MAX_WIDTH,
+        pov_jpeg_quality: int = DEFAULT_POV_JPEG_QUALITY,
     ) -> None:
         self.state_dir = state_dir
         self.storage = storage or SlamassStorage(state_dir)
@@ -804,6 +827,12 @@ class SlamassService:
         self._poi_arrival_settle_seconds = poi_arrival_settle_seconds
         self._poi_arrival_timeout_seconds = poi_arrival_timeout_seconds
         self._poi_rotation_threshold_degrees = poi_rotation_threshold_degrees
+        self._pov_poll_interval_seconds = max(
+            MIN_POV_POLL_INTERVAL_SECONDS,
+            pov_poll_interval_seconds,
+        )
+        self._pov_max_width = max(1, pov_max_width) if pov_max_width is not None and pov_max_width > 0 else None
+        self._pov_jpeg_quality = max(1, min(100, pov_jpeg_quality))
 
         self.robot_pose: RobotPose | None = None
         self.path: list[list[float]] = []
@@ -1834,10 +1863,16 @@ class SlamassService:
             await self.publish_event("yolo_object_upserted", object_payload)
 
     async def _pov_loop(self) -> None:
+        next_poll_at = time.monotonic()
         while not self._stopped:
             try:
                 image_bytes = await self._observe_jpeg()
                 if image_bytes is not None:
+                    image_bytes = prepare_pov_jpeg(
+                        image_bytes,
+                        max_width=self._pov_max_width,
+                        quality=self._pov_jpeg_quality,
+                    )
                     async with self._state_lock:
                         self.latest_pov_jpeg = image_bytes
                         self.pov_seq += 1
@@ -1845,7 +1880,13 @@ class SlamassService:
                     await self.publish_event("state_updated", await self._state_delta())
             except Exception as exc:
                 logger.debug("POV polling failed", error=str(exc))
-            await asyncio.sleep(0.5)
+            next_poll_at += self._pov_poll_interval_seconds
+            sleep_for = next_poll_at - time.monotonic()
+            if sleep_for > 0:
+                await asyncio.sleep(sleep_for)
+            else:
+                next_poll_at = time.monotonic()
+                await asyncio.sleep(0)
 
     async def _checkpoint_loop(self) -> None:
         while not self._stopped:
@@ -2591,6 +2632,9 @@ def create_app(
     state_dir: Path | None = None,
     model_name: str = "gpt-5.4-mini",
     chat_model_name: str = "gpt-5.4",
+    pov_poll_interval_seconds: float = DEFAULT_POV_POLL_INTERVAL_SECONDS,
+    pov_max_width: int | None = DEFAULT_POV_MAX_WIDTH,
+    pov_jpeg_quality: int = DEFAULT_POV_JPEG_QUALITY,
     service: SlamassService | None = None,
 ) -> FastAPI:
     _state_dir = state_dir or default_state_dir()
@@ -2600,6 +2644,9 @@ def create_app(
         state_dir=_state_dir,
         model_name=model_name,
         chat_model_name=chat_model_name,
+        pov_poll_interval_seconds=pov_poll_interval_seconds,
+        pov_max_width=pov_max_width,
+        pov_jpeg_quality=pov_jpeg_quality,
     )
 
     @asynccontextmanager
@@ -2879,6 +2926,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=7780)
     parser.add_argument("--map-socket-url", default="http://localhost:7779")
     parser.add_argument("--mcp-url", default="http://localhost:9990/mcp")
+    parser.add_argument("--pov-poll-interval", type=float, default=DEFAULT_POV_POLL_INTERVAL_SECONDS)
+    parser.add_argument("--pov-max-width", type=int, default=DEFAULT_POV_MAX_WIDTH)
+    parser.add_argument("--pov-jpeg-quality", type=int, default=DEFAULT_POV_JPEG_QUALITY)
     parser.add_argument("--state-dir", type=Path, default=default_state_dir())
     parser.add_argument("--model", default="gpt-5.4-mini")
     parser.add_argument("--chat-model", default="gpt-5.4")
@@ -2892,6 +2942,9 @@ def main() -> None:
         create_app(
             map_socket_url=args.map_socket_url,
             mcp_url=args.mcp_url,
+            pov_poll_interval_seconds=args.pov_poll_interval,
+            pov_max_width=args.pov_max_width,
+            pov_jpeg_quality=args.pov_jpeg_quality,
             state_dir=args.state_dir,
             model_name=args.model,
             chat_model_name=args.chat_model,
