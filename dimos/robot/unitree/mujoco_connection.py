@@ -22,8 +22,10 @@ import functools
 import json
 import os
 import pickle
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from typing import Any, TypeVar
@@ -91,6 +93,8 @@ class MujocoConnection:
         self._stream_threads: list[threading.Thread] = []
         self._stop_events: list[threading.Event] = []
         self._is_cleaned_up = False
+        self._stdout_log_path: str | None = None
+        self._stderr_log_path: str | None = None
 
     @staticmethod
     def _compute_camera_info() -> CameraInfo:
@@ -118,6 +122,40 @@ class MujocoConnection:
 
     camera_info_static: CameraInfo = _compute_camera_info()
 
+    def _prepare_subprocess_logs(self) -> tuple[Any, Any]:
+        stdout_fd, stdout_path = tempfile.mkstemp(prefix="dimos_mujoco_stdout_", suffix=".log")
+        stderr_fd, stderr_path = tempfile.mkstemp(prefix="dimos_mujoco_stderr_", suffix=".log")
+        self._stdout_log_path = stdout_path
+        self._stderr_log_path = stderr_path
+        return os.fdopen(stdout_fd, "wb"), os.fdopen(stderr_fd, "wb")
+
+    def _read_subprocess_log_tail(self, path: str | None, *, max_chars: int = 4000) -> str:
+        if not path:
+            return ""
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except OSError:
+            return ""
+        if not data:
+            return ""
+        tail = data.decode("utf-8", errors="replace")[-max_chars:].strip()
+        return tail
+
+    def _format_subprocess_failure(self, base_message: str) -> str:
+        stdout_tail = self._read_subprocess_log_tail(self._stdout_log_path)
+        stderr_tail = self._read_subprocess_log_tail(self._stderr_log_path)
+        details = [base_message]
+        if self._stderr_log_path:
+            details.append(f"stderr_log={self._stderr_log_path}")
+        if stderr_tail:
+            details.append(f"stderr_tail:\n{stderr_tail}")
+        if self._stdout_log_path:
+            details.append(f"stdout_log={self._stdout_log_path}")
+        if stdout_tail:
+            details.append(f"stdout_tail:\n{stdout_tail}")
+        return "\n".join(details)
+
     def start(self) -> None:
         self.shm_data = ShmWriter()
 
@@ -126,17 +164,29 @@ class MujocoConnection:
 
         # Launch the subprocess
         try:
-            # mjpython must be used macOS (because of launch_passive inside mujoco_process.py)
-            executable = sys.executable if sys.platform != "darwin" else "mjpython"
+            # On macOS, mjpython is only needed when launching the native MuJoCo
+            # viewer. Headless mode (`viewer == "none"`) can use the current
+            # interpreter and avoids requiring a separate mjpython binary.
+            use_mjpython = sys.platform == "darwin" and self.global_config.viewer != "none"
+            executable = "mjpython" if use_mjpython else sys.executable
+            if use_mjpython and shutil.which(executable) is None:
+                raise RuntimeError(
+                    "mjpython is required on macOS when running MuJoCo with a viewer. "
+                    "Re-run with '--viewer none' or install/configure mjpython."
+                )
             env = os.environ.copy()
             if self.global_config.viewer == "none" and sys.platform.startswith("linux"):
                 # Offscreen rendering is enough for the simulated POV/lidar feeds.
                 env.setdefault("MUJOCO_GL", "egl")
 
-            self.process = subprocess.Popen(
-                [executable, str(LAUNCHER_PATH), config_pickle, shm_names_json],
-                env=env,
-            )
+            stdout_log, stderr_log = self._prepare_subprocess_logs()
+            with stdout_log, stderr_log:
+                self.process = subprocess.Popen(
+                    [executable, str(LAUNCHER_PATH), config_pickle, shm_names_json],
+                    env=env,
+                    stdout=stdout_log,
+                    stderr=stderr_log,
+                )
 
         except Exception as e:
             self.shm_data.cleanup()
@@ -150,7 +200,11 @@ class MujocoConnection:
             if self.process.poll() is not None:
                 exit_code = self.process.returncode
                 self.stop()
-                raise RuntimeError(f"MuJoCo process failed to start (exit code {exit_code})")
+                raise RuntimeError(
+                    self._format_subprocess_failure(
+                        f"MuJoCo process failed to start (exit code {exit_code})"
+                    )
+                )
             if self.shm_data.is_ready():
                 logger.info("MuJoCo process started successfully")
                 # Register atexit handler to ensure subprocess is cleaned up
@@ -170,7 +224,7 @@ class MujocoConnection:
 
         # Timeout
         self.stop()
-        raise RuntimeError("MuJoCo process failed to start (timeout)")
+        raise RuntimeError(self._format_subprocess_failure("MuJoCo process failed to start (timeout)"))
 
     def stop(self) -> None:
         if self._is_cleaned_up:

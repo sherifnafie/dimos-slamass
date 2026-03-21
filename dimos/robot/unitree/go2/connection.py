@@ -230,12 +230,15 @@ class GO2Connection(Module[_Config], Camera, Pointcloud):
     def start(self) -> None:
         super().start()
 
+        logger.info("GO2Connection start: starting connection backend")
         self.connection.start()
+        logger.info("GO2Connection start: backend ready")
 
         def onimage(image: Image) -> None:
             self.color_image.publish(image)
             self._latest_video_frame = image
 
+        logger.info("GO2Connection start: subscribing to streams")
         self._disposables.add(self.connection.lidar_stream().subscribe(self.lidar.publish))
         self._disposables.add(self.connection.odom_stream().subscribe(self._publish_tf))
         self._disposables.add(self.connection.video_stream().subscribe(onimage))
@@ -246,11 +249,15 @@ class GO2Connection(Module[_Config], Camera, Pointcloud):
             daemon=True,
         )
         self._camera_info_thread.start()
+        logger.info("GO2Connection start: camera info thread started")
 
         self.standup()
+        logger.info("GO2Connection start: standup complete")
         time.sleep(3)
         self.connection.balance_stand()
+        logger.info("GO2Connection start: balance stand complete")
         self.connection.set_obstacle_avoidance(self.config.g.obstacle_avoidance)
+        logger.info("GO2Connection start: obstacle avoidance configured")
 
         # self.record("go2_bigoffice")
 

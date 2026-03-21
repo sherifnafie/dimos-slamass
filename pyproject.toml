@@ -290,6 +290,7 @@ psql = [
 sim = [
     # Simulation
     "mujoco>=3.3.4",
+    "onnxruntime",
     "playground>=0.0.5",
     "pygame>=2.6.1",
 ]

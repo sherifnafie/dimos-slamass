@@ -139,17 +139,36 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
 
     def start_all_modules(self) -> None:
         modules = list(self._deployed_modules.values())
+        def _start_module(module: ModuleProxy) -> None:
+            module_name = getattr(module, "remote_name", type(module).__name__)
+            logger.info("Starting module", module=module_name)
+            module.start()
+            logger.info("Started module", module=module_name)
+
         if isinstance(self._client, WorkerManager):
             with ThreadPoolExecutor(max_workers=len(modules)) as executor:
-                list(executor.map(lambda m: m.start(), modules))
+                list(executor.map(_start_module, modules))
         else:
             for module in modules:
-                module.start()
+                _start_module(module)
 
         module_list = list(self._deployed_modules.values())
         for module in modules:
-            if hasattr(module, "on_system_modules"):
-                module.on_system_modules(module_list)
+            module_name = getattr(module, "remote_name", type(module).__name__)
+            try:
+                on_system_modules = getattr(module, "on_system_modules")
+            except AttributeError:
+                continue
+            except Exception:
+                logger.exception("Failed to resolve on_system_modules", module=module_name)
+                continue
+
+            logger.info(
+                "Dispatching on_system_modules",
+                module=module_name,
+                n_modules=len(module_list),
+            )
+            on_system_modules(module_list)
 
     def get_instance(self, module: type[ModuleBase]) -> ModuleProxy:
         return self._deployed_modules.get(module)  # type: ignore[return-value, no-any-return]

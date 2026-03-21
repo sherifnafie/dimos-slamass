@@ -94,32 +94,6 @@ def default_state_dir() -> Path:
     return base / "dimos" / "slamass"
 
 
-def resolve_slamass_dist_dir() -> Path | None:
-    candidates: list[Path] = [
-        Path(__file__).resolve().parents[1] / "web" / "slamass-app" / "dist",
-    ]
-
-    cwd = Path.cwd().resolve()
-    for base in (cwd, *cwd.parents):
-        candidates.extend(
-            [
-                base / "dimos" / "web" / "slamass-app" / "dist",
-                base / "web" / "slamass-app" / "dist",
-            ]
-        )
-
-    seen: set[Path] = set()
-    for candidate in candidates:
-        resolved = candidate.resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        if resolved.exists():
-            return resolved
-
-    return None
-
-
 @dataclass(slots=True)
 class RobotPose:
     x: float
@@ -1456,16 +1430,16 @@ def create_app(
     async def get_asset(relative_path: str) -> Response:
         return FileResponse(slamass.resolve_asset(relative_path))
 
-    dist_dir = resolve_slamass_dist_dir()
-    dist_assets = dist_dir / "assets" if dist_dir is not None else None
-    if dist_assets is not None and dist_assets.exists():
+    dist_dir = Path(__file__).resolve().parents[1] / "web" / "slamass-app" / "dist"
+    dist_assets = dist_dir / "assets"
+    if dist_assets.exists():
         app.mount("/assets", StaticFiles(directory=str(dist_assets)), name="slamass_assets")
 
     @app.get("/{full_path:path}")
     async def serve_app(full_path: str) -> Response:
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="Not found")
-        if dist_dir is not None and dist_dir.exists():
+        if dist_dir.exists():
             requested = (dist_dir / full_path).resolve()
             if requested.exists() and requested.is_file() and dist_dir.resolve() in requested.parents:
                 return FileResponse(requested)

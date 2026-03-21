@@ -54,7 +54,6 @@ from dimos.core.stream import In, Out
 from dimos.mapping.models import LatLon
 from dimos.mapping.occupancy.gradient import gradient
 from dimos.mapping.occupancy.inflation import simple_inflate
-from dimos.mapping.types import LatLon
 from dimos.msgs.geometry_msgs import PoseStamped, Quaternion, Twist, TwistStamped, Vector3
 from dimos.msgs.nav_msgs import OccupancyGrid, Path
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped

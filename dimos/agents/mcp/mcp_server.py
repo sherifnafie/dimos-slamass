@@ -190,15 +190,28 @@ class McpServer(Module):
     @rpc
     def on_system_modules(self, modules: list[RPCClient]) -> None:
         assert self.rpc is not None
-        app.state.skills = [
-            skill_info for module in modules for skill_info in (module.get_skills() or [])
-        ]
+        skills: list[SkillInfo] = []
+        for module in modules:
+            module_name = getattr(module, "remote_name", type(module).__name__)
+            try:
+                skills.extend(module.get_skills() or [])
+            except Exception:
+                logger.exception("Failed to collect skills from module", module=module_name)
+
+        skills.extend(self.get_skills())
+        app.state.skills = list(dict.fromkeys(skills))
         app.state.rpc_calls = {
             skill_info.func_name: RpcCall(
                 None, self.rpc, skill_info.func_name, skill_info.class_name, []
             )
             for skill_info in app.state.skills
         }
+        logger.info(
+            "Registered MCP skills",
+            n_modules=len(modules),
+            n_skills=len(app.state.skills),
+            skills=[skill.func_name for skill in app.state.skills],
+        )
 
     @skill
     def server_status(self) -> str:
