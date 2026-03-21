@@ -1,8 +1,17 @@
+export type SemanticKind = "vlm_poi" | "yolo_object";
+export type ManualInspectionMode = "ai_gate" | "always_create";
+export type YoloRuntimeMode = "live" | "paused";
+
 export interface RobotPose {
   x: number;
   y: number;
   z: number;
   yaw: number;
+}
+
+export interface SemanticItemRef {
+  kind: SemanticKind;
+  entity_id: string;
 }
 
 export interface PovState {
@@ -33,8 +42,8 @@ export interface UiCameraState {
 export interface UiState {
   revision: number;
   camera: UiCameraState;
-  selected_poi_id: string | null;
-  highlighted_poi_ids: string[];
+  selected_item: SemanticItemRef | null;
+  highlighted_items: SemanticItemRef[];
 }
 
 export interface Poi {
@@ -55,16 +64,59 @@ export interface Poi {
   hero_image_url: string;
 }
 
+export interface YoloObject {
+  object_id: string;
+  map_id: string;
+  label: string;
+  class_id: number;
+  world_x: number;
+  world_y: number;
+  world_z: number;
+  size_x: number;
+  size_y: number;
+  size_z: number;
+  best_view_x: number;
+  best_view_y: number;
+  best_view_yaw: number;
+  status: string;
+  detections_count: number;
+  best_confidence: number;
+  created_at: string;
+  updated_at: string;
+  last_seen_at: string;
+  thumbnail_url: string;
+  hero_image_url: string;
+}
+
+export interface SemanticItem {
+  kind: SemanticKind;
+  entity_id: string;
+  title: string;
+  subtitle: string;
+  world_x: number;
+  world_y: number;
+  world_yaw: number;
+  thumbnail_url: string;
+  updated_at: string;
+}
+
 export interface InspectionState {
   status: string;
   message: string;
   poi_id: string | null;
 }
 
-export type ManualInspectionMode = "ai_gate" | "always_create";
-
 export interface InspectionSettings {
   manual_mode: ManualInspectionMode;
+}
+
+export interface YoloRuntimeState {
+  mode: YoloRuntimeMode;
+}
+
+export interface LayerVisibility {
+  show_pois: boolean;
+  show_yolo: boolean;
 }
 
 export interface AppState {
@@ -74,7 +126,10 @@ export interface AppState {
   pov: PovState;
   map: MapState | null;
   pois: Poi[];
+  yolo_objects: YoloObject[];
   inspection: InspectionState;
   inspection_settings: InspectionSettings;
+  yolo_runtime: YoloRuntimeState;
+  layers: LayerVisibility;
   ui: UiState;
 }

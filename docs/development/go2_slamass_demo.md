@@ -23,8 +23,11 @@ The repo now already contains a working first pass of this concept:
 - web UI: side-by-side POV and persisted SLAMASS map
 - persistent active-map storage under `~/.local/state/dimos/slamass/`
 - manual `Inspect Now` using OpenAI vision
-- floating POI cards with detail modal and delete
+- floating VLM POI cards with detail modal and delete
+- a second semantic layer built from live YOLO detections, promoted into persistent world objects after repeated hits
+- YOLO object detail, `Go To`, delete, pause/resume ingestion, and layer visibility controls
 - `Go To` wired to the stored POI viewpoint pose, meaning `x`, `y`, and the recorded viewing `yaw`
+- `Go To` for YOLO objects wired to the saved best-view robot pose rather than the object centroid
 - a service-owned UI command layer for map focus state, selection, highlights, and camera control, so future agent-driven zoom/highlight behavior has a clean path
 
 Still roadmap rather than current reality:
@@ -146,6 +149,13 @@ Each POI is a saved observation tied to:
 
 This is sparse, curated, and operator-meaningful.
 
+There are now two semantic modalities inside this memory layer:
+
+- `VLM anchors`: sparse, manually triggered scene/place observations backed by a full frame and a richer semantic summary
+- `YOLO objects`: denser, automatically promoted world objects backed by repeated 3D detections and a best crop / best-view pose
+
+These should be treated as one semantic dataset with two different acquisition paths.
+
 ### Layer 3: UI Visualization
 
 This is what judges see.
@@ -155,6 +165,7 @@ The UI must communicate:
 - where the robot is
 - what it is looking at
 - what interesting places it has found
+- what persistent concrete objects it has recognized
 - how those places relate to the map
 
 The UI should feel like an augmented memory of the space, not like a raw robotics dashboard.

@@ -2,9 +2,26 @@ import React, { startTransition } from "react";
 
 import { LiveFeedPanel } from "./LiveFeedPanel";
 import { MapPane } from "./MapPane";
-import { OperatorRail } from "./OperatorRail";
+import { OperatorRail, SelectedSemanticPreview } from "./OperatorRail";
 import { PanelShell } from "./PanelShell";
-import { AppState, InspectionSettings, ManualInspectionMode, Poi, UiCameraState, UiState } from "./types";
+import {
+  buildSemanticItems,
+  mergePoi,
+  mergeYoloObject,
+  resolveSelectedPoi,
+  resolveSelectedYoloObject,
+} from "./semanticItems";
+import {
+  AppState,
+  InspectionSettings,
+  ManualInspectionMode,
+  Poi,
+  SemanticItemRef,
+  UiCameraState,
+  UiState,
+  YoloObject,
+  YoloRuntimeMode,
+} from "./types";
 
 const LAYOUT_STORAGE_KEY = "slamass-layout-mode";
 const MAX_ACTIVITY_ENTRIES = 10;
@@ -21,6 +38,7 @@ const emptyState: AppState = {
   },
   map: null,
   pois: [],
+  yolo_objects: [],
   inspection: {
     status: "idle",
     message: "",
@@ -29,6 +47,13 @@ const emptyState: AppState = {
   inspection_settings: {
     manual_mode: "ai_gate",
   },
+  yolo_runtime: {
+    mode: "live",
+  },
+  layers: {
+    show_pois: true,
+    show_yolo: true,
+  },
   ui: {
     revision: 0,
     camera: {
@@ -36,8 +61,8 @@ const emptyState: AppState = {
       center_y: null,
       zoom: 1,
     },
-    selected_poi_id: null,
-    highlighted_poi_ids: [],
+    selected_item: null,
+    highlighted_items: [],
   },
 };
 
@@ -52,16 +77,6 @@ type ActivityEntry = {
   detail: string;
   timestamp: string;
 };
-
-function upsertPoi(existing: Poi[], nextPoi: Poi): Poi[] {
-  const index = existing.findIndex((poi) => poi.poi_id === nextPoi.poi_id);
-  if (index === -1) {
-    return [...existing, nextPoi];
-  }
-  const copy = existing.slice();
-  copy[index] = nextPoi;
-  return copy;
-}
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -83,12 +98,10 @@ function formatTimestamp(value: string | null): string {
   if (!value) {
     return "No data";
   }
-
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-
   return new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",
     minute: "2-digit",
@@ -107,7 +120,6 @@ function formatPoseLabel(state: AppState): string | null {
   if (!state.robot_pose) {
     return null;
   }
-
   return `${state.robot_pose.x.toFixed(2)}, ${state.robot_pose.y.toFixed(2)} | ${formatYaw(
     state.robot_pose.yaw,
   )}`;
@@ -125,12 +137,10 @@ function getInitialLayoutMode(): LayoutMode {
   if (typeof window === "undefined") {
     return "duo";
   }
-
   const stored = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
   if (stored === "duo" || stored === "trio") {
     return stored;
   }
-
   return window.innerWidth >= 1280 ? "trio" : "duo";
 }
 
@@ -148,14 +158,14 @@ function toneForInspection(status: string): ActivityTone {
   if (status === "failed") {
     return "danger";
   }
-  if (status === "running") {
+  if (status === "running" || status === "rejected") {
     return "accent";
   }
   return "neutral";
 }
 
-function inspectionLabel(manualMode: ManualInspectionMode): string {
-  return manualMode === "always_create" ? "Always Create" : "AI Gate";
+function describeSemanticItem(item: SemanticItemRef): string {
+  return item.kind === "vlm_poi" ? "POI" : "YOLO object";
 }
 
 export default function App(): React.ReactElement {
@@ -182,9 +192,41 @@ export default function App(): React.ReactElement {
   const didLogInitialSnapshotRef = React.useRef(false);
 
   const selectedPoi = React.useMemo(
-    () => state.pois.find((poi) => poi.poi_id === state.ui.selected_poi_id) ?? null,
-    [state.pois, state.ui.selected_poi_id],
+    () => resolveSelectedPoi(state.pois, state.ui.selected_item),
+    [state.pois, state.ui.selected_item],
   );
+  const selectedYoloObject = React.useMemo(
+    () => resolveSelectedYoloObject(state.yolo_objects, state.ui.selected_item),
+    [state.yolo_objects, state.ui.selected_item],
+  );
+  const semanticItems = React.useMemo(
+    () => buildSemanticItems(state.pois, state.yolo_objects),
+    [state.pois, state.yolo_objects],
+  );
+
+  const selectedPreview = React.useMemo<SelectedSemanticPreview | null>(() => {
+    if (selectedPoi) {
+      return {
+        kind: "vlm_poi",
+        entity_id: selectedPoi.poi_id,
+        title: selectedPoi.title,
+        subtitle: selectedPoi.category,
+        summary: selectedPoi.summary,
+        thumbnail_url: selectedPoi.thumbnail_url,
+      };
+    }
+    if (selectedYoloObject) {
+      return {
+        kind: "yolo_object",
+        entity_id: selectedYoloObject.object_id,
+        title: selectedYoloObject.label,
+        subtitle: `${Math.round(selectedYoloObject.best_confidence * 100)}% confidence`,
+        summary: `${selectedYoloObject.detections_count} linked detections. Best view stored for revisit.`,
+        thumbnail_url: selectedYoloObject.thumbnail_url,
+      };
+    }
+    return null;
+  }, [selectedPoi, selectedYoloObject]);
 
   const appendActivity = React.useCallback(
     (role: ActivityRole, title: string, detail: string, tone: ActivityTone = "neutral") => {
@@ -264,7 +306,6 @@ export default function App(): React.ReactElement {
       if (cameraSyncTimerRef.current !== null) {
         window.clearTimeout(cameraSyncTimerRef.current);
       }
-
       cameraSyncTimerRef.current = window.setTimeout(() => {
         void issueUiCommand("/api/ui/camera", {
           method: "PUT",
@@ -330,18 +371,19 @@ export default function App(): React.ReactElement {
           ...previous,
           ...payload,
           pov: payload.pov ? { ...previous.pov, ...payload.pov } : previous.pov,
+          yolo_runtime: payload.yolo_runtime ?? previous.yolo_runtime,
+          layers: payload.layers ?? previous.layers,
+          inspection_settings: payload.inspection_settings ?? previous.inspection_settings,
         }));
       });
     });
 
     source.addEventListener("map_updated", (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as AppState["map"];
-
       if (!mapReadyRef.current && payload) {
         mapReadyRef.current = true;
         appendActivity("system", "Map ready", "Occupancy map is rendering.", "success");
       }
-
       startTransition(() => {
         setState((previous) => ({ ...previous, map: payload }));
       });
@@ -350,30 +392,21 @@ export default function App(): React.ReactElement {
     source.addEventListener("poi_upserted", (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as Poi;
       const existed = stateRef.current.pois.some((poi) => poi.poi_id === payload.poi_id);
-
-      appendActivity(
-        "system",
-        existed ? "POI updated" : "POI added",
-        payload.title,
-        "success",
-      );
-
+      appendActivity("system", existed ? "POI updated" : "POI added", payload.title, "success");
       startTransition(() => {
-        setState((previous) => ({ ...previous, pois: upsertPoi(previous.pois, payload) }));
+        setState((previous) => ({ ...previous, pois: mergePoi(previous.pois, payload) }));
       });
     });
 
     source.addEventListener("poi_deleted", (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as { poi_id: string };
       const deletedPoi = stateRef.current.pois.find((poi) => poi.poi_id === payload.poi_id);
-
       appendActivity(
         "system",
         "POI deleted",
         deletedPoi ? deletedPoi.title : "Semantic anchor removed.",
         "danger",
       );
-
       startTransition(() => {
         setState((previous) => ({
           ...previous,
@@ -382,10 +415,49 @@ export default function App(): React.ReactElement {
       });
     });
 
+    source.addEventListener("yolo_object_upserted", (event) => {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as YoloObject;
+      const existed = stateRef.current.yolo_objects.some(
+        (object) => object.object_id === payload.object_id,
+      );
+      appendActivity(
+        "system",
+        existed ? "YOLO object updated" : "YOLO object promoted",
+        payload.label,
+        "success",
+      );
+      startTransition(() => {
+        setState((previous) => ({
+          ...previous,
+          yolo_objects: mergeYoloObject(previous.yolo_objects, payload),
+        }));
+      });
+    });
+
+    source.addEventListener("yolo_object_deleted", (event) => {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as { object_id: string };
+      const deletedObject = stateRef.current.yolo_objects.find(
+        (object) => object.object_id === payload.object_id,
+      );
+      appendActivity(
+        "system",
+        "YOLO object deleted",
+        deletedObject ? deletedObject.label : "Tracked object removed.",
+        "danger",
+      );
+      startTransition(() => {
+        setState((previous) => ({
+          ...previous,
+          yolo_objects: previous.yolo_objects.filter(
+            (object) => object.object_id !== payload.object_id,
+          ),
+        }));
+      });
+    });
+
     source.addEventListener("inspection_updated", (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as AppState["inspection"];
       const signature = inspectionSignature(payload);
-
       if (signature !== lastInspectionRef.current) {
         lastInspectionRef.current = signature;
         appendActivity(
@@ -395,7 +467,6 @@ export default function App(): React.ReactElement {
           toneForInspection(payload.status),
         );
       }
-
       startTransition(() => {
         setState((previous) => ({ ...previous, inspection: payload }));
       });
@@ -414,7 +485,6 @@ export default function App(): React.ReactElement {
 
   const handleInspectNow = React.useCallback(async () => {
     appendActivity("operator", "Inspect", "Manual semantic inspection started.", "accent");
-
     setBusyAction("inspect");
     try {
       await fetchJson("/api/inspect/now", { method: "POST" });
@@ -427,7 +497,6 @@ export default function App(): React.ReactElement {
 
   const handleSaveMap = React.useCallback(async () => {
     appendActivity("operator", "Save map", "Checkpoint requested.", "accent");
-
     setBusyAction("save");
     try {
       await fetchJson("/api/map/save", { method: "POST" });
@@ -459,14 +528,47 @@ export default function App(): React.ReactElement {
     [reportActionError],
   );
 
+  const handleYoloModeChange = React.useCallback(
+    async (mode: YoloRuntimeMode) => {
+      try {
+        const payload = await fetchJson<AppState["yolo_runtime"]>("/api/yolo/runtime", {
+          method: "PUT",
+          body: JSON.stringify({ mode }),
+        });
+        startTransition(() => {
+          setState((previous) => ({ ...previous, yolo_runtime: payload }));
+        });
+      } catch (error) {
+        reportActionError("YOLO runtime update failed", error);
+      }
+    },
+    [reportActionError],
+  );
+
+  const handleLayerToggle = React.useCallback(
+    async (field: "show_pois" | "show_yolo", value: boolean) => {
+      try {
+        const payload = await fetchJson<AppState["layers"]>("/api/layers", {
+          method: "PUT",
+          body: JSON.stringify({ [field]: value }),
+        });
+        startTransition(() => {
+          setState((previous) => ({ ...previous, layers: payload }));
+        });
+      } catch (error) {
+        reportActionError("Layer update failed", error);
+      }
+    },
+    [reportActionError],
+  );
+
   const handleNavigate = React.useCallback(
     async (x: number, y: number) => {
       appendActivity("operator", "Navigate", `${x.toFixed(2)}, ${y.toFixed(2)}`, "accent");
-
       try {
-        await issueUiCommand("/api/ui/select-poi", {
+        await issueUiCommand("/api/ui/select-item", {
           method: "POST",
-          body: JSON.stringify({ poi_id: null }),
+          body: JSON.stringify({ kind: null, entity_id: null }),
         });
         await fetchJson("/api/navigate", {
           method: "POST",
@@ -479,14 +581,17 @@ export default function App(): React.ReactElement {
     [appendActivity, issueUiCommand, reportActionError],
   );
 
-  const handleGoToPoi = React.useCallback(
-    async (poiId: string) => {
-      const poi = stateRef.current.pois.find((candidate) => candidate.poi_id === poiId);
-      appendActivity("operator", "Go to POI", poi ? poi.title : poiId, "accent");
-
-      setBusyAction(`go-${poiId}`);
+  const handleGoToItem = React.useCallback(
+    async (item: SemanticItemRef) => {
+      const actionKey = `go-${item.kind}-${item.entity_id}`;
+      appendActivity("operator", "Go to item", describeSemanticItem(item), "accent");
+      setBusyAction(actionKey);
       try {
-        await fetchJson(`/api/pois/${poiId}/go`, { method: "POST" });
+        if (item.kind === "vlm_poi") {
+          await fetchJson(`/api/pois/${item.entity_id}/go`, { method: "POST" });
+        } else {
+          await fetchJson(`/api/yolo-objects/${item.entity_id}/go`, { method: "POST" });
+        }
       } catch (error) {
         reportActionError("Go To request failed", error);
       } finally {
@@ -496,18 +601,22 @@ export default function App(): React.ReactElement {
     [appendActivity, reportActionError],
   );
 
-  const handleDeletePoi = React.useCallback(
-    async (poiId: string) => {
-      const confirmed = window.confirm("Delete this POI from the SLAMASS map?");
+  const handleDeleteItem = React.useCallback(
+    async (item: SemanticItemRef) => {
+      const confirmed = window.confirm("Delete this semantic item from the SLAMASS map?");
       if (!confirmed) {
         return;
       }
-
-      setBusyAction(`delete-${poiId}`);
+      const actionKey = `delete-${item.kind}-${item.entity_id}`;
+      setBusyAction(actionKey);
       try {
-        await fetchJson(`/api/pois/${poiId}/delete`, { method: "POST" });
+        if (item.kind === "vlm_poi") {
+          await fetchJson(`/api/pois/${item.entity_id}/delete`, { method: "POST" });
+        } else {
+          await fetchJson(`/api/yolo-objects/${item.entity_id}/delete`, { method: "POST" });
+        }
       } catch (error) {
-        reportActionError("Delete POI failed", error);
+        reportActionError("Delete item failed", error);
       } finally {
         setBusyAction(null);
       }
@@ -515,53 +624,58 @@ export default function App(): React.ReactElement {
     [reportActionError],
   );
 
-  const handleSelectPoi = React.useCallback(
-    async (poiId: string | null) => {
+  const handleSelectItem = React.useCallback(
+    async (item: SemanticItemRef | null) => {
       startTransition(() => {
         setState((previous) => ({
           ...previous,
           ui: {
             ...previous.ui,
-            selected_poi_id: poiId,
+            selected_item: item,
           },
         }));
       });
-
       try {
-        await issueUiCommand("/api/ui/select-poi", {
+        await issueUiCommand("/api/ui/select-item", {
           method: "POST",
-          body: JSON.stringify({ poi_id: poiId }),
+          body: JSON.stringify({
+            kind: item?.kind ?? null,
+            entity_id: item?.entity_id ?? null,
+          }),
         });
       } catch (error) {
-        reportActionError("Select POI failed", error);
+        reportActionError("Select item failed", error);
       }
     },
     [issueUiCommand, reportActionError],
   );
 
-  const handleFocusPoi = React.useCallback(
-    async (poiId: string) => {
+  const handleFocusItem = React.useCallback(
+    async (item: SemanticItemRef) => {
       try {
-        await issueUiCommand(`/api/ui/focus-poi/${poiId}`, {
+        await issueUiCommand(`/api/ui/focus-item/${item.kind}/${item.entity_id}`, {
           method: "POST",
           body: JSON.stringify({}),
         });
       } catch (error) {
-        reportActionError("Focus POI failed", error);
+        reportActionError("Focus item failed", error);
       }
     },
     [issueUiCommand, reportActionError],
   );
 
-  const handleHighlightPoi = React.useCallback(
-    async (poiId: string) => {
+  const handleHighlightItem = React.useCallback(
+    async (item: SemanticItemRef) => {
       try {
-        await issueUiCommand("/api/ui/highlight-pois", {
+        await issueUiCommand("/api/ui/highlight-items", {
           method: "POST",
-          body: JSON.stringify({ poi_ids: [poiId], selected_poi_id: poiId }),
+          body: JSON.stringify({
+            items: [item],
+            selected_item: item,
+          }),
         });
       } catch (error) {
-        reportActionError("Highlight POI failed", error);
+        reportActionError("Highlight item failed", error);
       }
     },
     [issueUiCommand, reportActionError],
@@ -603,7 +717,6 @@ export default function App(): React.ReactElement {
   const poseLabel = formatPoseLabel(state);
   const povLabel = state.pov.updated_at ? formatTimestamp(state.pov.updated_at) : "No frame";
   const mapLabel = state.map ? formatTimestamp(state.map.updated_at) : "No map";
-
   return (
     <div className="app-shell">
       <div className="app-shell-noise" />
@@ -621,8 +734,12 @@ export default function App(): React.ReactElement {
           <span className={`toolbar-chip status-pill ${state.connected ? "is-live" : "is-offline"}`}>
             {state.connected ? "Online" : "Offline"}
           </span>
-          <span className="toolbar-chip">{state.pois.length} POIs</span>
+          <span className="toolbar-chip">{state.pois.length} VLM</span>
+          <span className="toolbar-chip">{state.yolo_objects.length} YOLO</span>
           <span className={`toolbar-chip tone-${state.inspection.status}`}>{state.inspection.status}</span>
+          <span className={`toolbar-chip ${state.yolo_runtime.mode === "live" ? "tone-success" : ""}`}>
+            YOLO {state.yolo_runtime.mode}
+          </span>
           {poseLabel ? <span className="toolbar-chip monospace-chip">{poseLabel}</span> : null}
         </div>
 
@@ -666,6 +783,36 @@ export default function App(): React.ReactElement {
           </label>
 
           <button
+            className="action-button secondary"
+            onClick={() => {
+              void handleYoloModeChange(state.yolo_runtime.mode === "live" ? "paused" : "live");
+            }}
+            type="button"
+          >
+            {state.yolo_runtime.mode === "live" ? "Pause YOLO" : "Resume YOLO"}
+          </button>
+
+          <button
+            className={`action-button secondary ${state.layers.show_yolo ? "" : "is-off"}`}
+            onClick={() => {
+              void handleLayerToggle("show_yolo", !state.layers.show_yolo);
+            }}
+            type="button"
+          >
+            {state.layers.show_yolo ? "Hide YOLO" : "Show YOLO"}
+          </button>
+
+          <button
+            className={`action-button secondary ${state.layers.show_pois ? "" : "is-off"}`}
+            onClick={() => {
+              void handleLayerToggle("show_pois", !state.layers.show_pois);
+            }}
+            type="button"
+          >
+            {state.layers.show_pois ? "Hide VLM" : "Show VLM"}
+          </button>
+
+          <button
             className="action-button"
             disabled={busyAction !== null || state.inspection.status === "running"}
             onClick={() => {
@@ -700,7 +847,8 @@ export default function App(): React.ReactElement {
         <PanelShell
           aside={
             <div className="panel-chip-row">
-              <span className="toolbar-chip">{state.pois.length} POIs</span>
+              <span className="toolbar-chip">{state.pois.length} VLM</span>
+              <span className="toolbar-chip">{state.yolo_objects.length} YOLO</span>
               <span className="toolbar-chip">Map {mapLabel}</span>
             </div>
           }
@@ -710,16 +858,17 @@ export default function App(): React.ReactElement {
           title="Map"
         >
           <MapPane
+            layers={state.layers}
             map={state.map}
             onCameraChange={queueCameraSync}
             onClearFocus={() => {
               void handleClearFocus();
             }}
+            onFocusItem={(item) => {
+              void handleFocusItem(item);
+            }}
             onFocusMap={() => {
               void handleFocusMap();
-            }}
-            onFocusPoi={(poiId) => {
-              void handleFocusPoi(poiId);
             }}
             onFocusRobot={() => {
               void handleFocusRobot();
@@ -727,13 +876,14 @@ export default function App(): React.ReactElement {
             onNavigate={(x, y) => {
               void handleNavigate(x, y);
             }}
-            onSelectPoi={(poiId) => {
-              void handleSelectPoi(poiId);
+            onSelectItem={(item) => {
+              void handleSelectItem(item);
             }}
             path={state.path}
             pois={state.pois}
             robotPose={state.robot_pose}
             ui={state.ui}
+            yoloObjects={state.yolo_objects}
           />
         </PanelShell>
 
@@ -741,118 +891,227 @@ export default function App(): React.ReactElement {
           <OperatorRail
             activityEntries={activityEntries}
             busyAction={busyAction}
-            inspection={state.inspection}
-            inspectionModeLabel={inspectionLabel(state.inspection_settings.manual_mode)}
-            onGoToPoi={(poiId) => {
-              void handleGoToPoi(poiId);
-            }}
-            onHighlightPoi={(poiId) => {
-              void handleHighlightPoi(poiId);
-            }}
-            onSelectPoi={(poiId) => {
-              void handleSelectPoi(poiId);
-            }}
-            onFocusPoi={(poiId) => {
-              void handleFocusPoi(poiId);
-            }}
+            items={semanticItems}
             onClearFocus={() => {
               void handleClearFocus();
             }}
-            pois={state.pois}
-            selectedPoi={selectedPoi}
+            onFocusItem={(item) => {
+              void handleFocusItem(item);
+            }}
+            onGoToItem={(item) => {
+              void handleGoToItem(item);
+            }}
+            onHighlightItem={(item) => {
+              void handleHighlightItem(item);
+            }}
+            onSelectItem={(item) => {
+              void handleSelectItem(item);
+            }}
+            selectedItem={state.ui.selected_item}
+            selectedPreview={selectedPreview}
           />
         ) : null}
       </main>
 
-      {selectedPoi ? (
+      {selectedPoi || selectedYoloObject ? (
         <div
           className="poi-modal-backdrop"
           onClick={() => {
-            void handleSelectPoi(null);
+            void handleSelectItem(null);
           }}
         >
           <div className="poi-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="poi-modal-media">
-              <img alt={selectedPoi.title} src={selectedPoi.hero_image_url} />
-            </div>
-            <div className="poi-modal-body">
-              <div className="poi-modal-header">
-                <div>
-                  <p className="eyebrow">{selectedPoi.category}</p>
-                  <h3>{selectedPoi.title}</h3>
+            {selectedPoi ? (
+              <>
+                <div className="poi-modal-media">
+                  <img alt={selectedPoi.title} src={selectedPoi.hero_image_url} />
                 </div>
-                <div className="poi-modal-header-actions">
-                  <span className="score-pill">{selectedPoi.interest_score.toFixed(2)}</span>
-                  <button
-                    className="close-button"
-                    onClick={() => {
-                      void handleSelectPoi(null);
-                    }}
-                    type="button"
-                  >
-                    Close
-                  </button>
+                <div className="poi-modal-body">
+                  <div className="poi-modal-header">
+                    <div>
+                      <p className="eyebrow">{selectedPoi.category}</p>
+                      <h3>{selectedPoi.title}</h3>
+                    </div>
+                    <div className="poi-modal-header-actions">
+                      <span className="score-pill">{selectedPoi.interest_score.toFixed(2)}</span>
+                      <button
+                        className="close-button"
+                        onClick={() => {
+                          void handleSelectItem(null);
+                        }}
+                        type="button"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="poi-summary">{selectedPoi.summary}</p>
+
+                  <div className="poi-meta">
+                    <span>
+                      {selectedPoi.world_x.toFixed(2)}, {selectedPoi.world_y.toFixed(2)} |{" "}
+                      {formatYaw(selectedPoi.world_yaw)}
+                    </span>
+                    <span>{formatTimestamp(selectedPoi.updated_at)}</span>
+                  </div>
+
+                  {selectedPoi.objects.length > 0 ? (
+                    <div className="poi-tags">
+                      {selectedPoi.objects.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="poi-actions">
+                    <button
+                      className="action-button secondary"
+                      onClick={() => {
+                        void handleHighlightItem({ kind: "vlm_poi", entity_id: selectedPoi.poi_id });
+                      }}
+                      type="button"
+                    >
+                      Highlight
+                    </button>
+                    <button
+                      className="action-button secondary"
+                      onClick={() => {
+                        void handleFocusItem({ kind: "vlm_poi", entity_id: selectedPoi.poi_id });
+                      }}
+                      type="button"
+                    >
+                      Focus
+                    </button>
+                    <button
+                      className="action-button"
+                      disabled={busyAction === `go-vlm_poi-${selectedPoi.poi_id}`}
+                      onClick={() => {
+                        void handleGoToItem({ kind: "vlm_poi", entity_id: selectedPoi.poi_id });
+                      }}
+                      type="button"
+                    >
+                      Go To
+                    </button>
+                    <button
+                      className="action-button danger"
+                      disabled={busyAction === `delete-vlm_poi-${selectedPoi.poi_id}`}
+                      onClick={() => {
+                        void handleDeleteItem({ kind: "vlm_poi", entity_id: selectedPoi.poi_id });
+                      }}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </>
+            ) : null}
 
-              <p className="poi-summary">{selectedPoi.summary}</p>
-
-              <div className="poi-meta">
-                <span>
-                  {selectedPoi.world_x.toFixed(2)}, {selectedPoi.world_y.toFixed(2)} | {formatYaw(selectedPoi.world_yaw)}
-                </span>
-                <span>{formatTimestamp(selectedPoi.updated_at)}</span>
-              </div>
-
-              {selectedPoi.objects.length > 0 ? (
-                <div className="poi-tags">
-                  {selectedPoi.objects.map((item) => (
-                    <span key={item}>{item}</span>
-                  ))}
+            {selectedYoloObject ? (
+              <>
+                <div className="poi-modal-media">
+                  <img alt={selectedYoloObject.label} src={selectedYoloObject.hero_image_url} />
                 </div>
-              ) : null}
+                <div className="poi-modal-body">
+                  <div className="poi-modal-header">
+                    <div>
+                      <p className="eyebrow">YOLO object</p>
+                      <h3>{selectedYoloObject.label}</h3>
+                    </div>
+                    <div className="poi-modal-header-actions">
+                      <span className="score-pill">
+                        {(selectedYoloObject.best_confidence * 100).toFixed(0)}%
+                      </span>
+                      <button
+                        className="close-button"
+                        onClick={() => {
+                          void handleSelectItem(null);
+                        }}
+                        type="button"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
 
-              <div className="poi-actions">
-                <button
-                  className="action-button secondary"
-                  onClick={() => {
-                    void handleHighlightPoi(selectedPoi.poi_id);
-                  }}
-                  type="button"
-                >
-                  Highlight
-                </button>
-                <button
-                  className="action-button secondary"
-                  onClick={() => {
-                    void handleFocusPoi(selectedPoi.poi_id);
-                  }}
-                  type="button"
-                >
-                  Focus
-                </button>
-                <button
-                  className="action-button"
-                  disabled={busyAction === `go-${selectedPoi.poi_id}`}
-                  onClick={() => {
-                    void handleGoToPoi(selectedPoi.poi_id);
-                  }}
-                  type="button"
-                >
-                  Go To
-                </button>
-                <button
-                  className="action-button danger"
-                  disabled={busyAction === `delete-${selectedPoi.poi_id}`}
-                  onClick={() => {
-                    void handleDeletePoi(selectedPoi.poi_id);
-                  }}
-                  type="button"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
+                  <p className="poi-summary">
+                    Stable YOLO object promoted from {selectedYoloObject.detections_count} detections.
+                    Navigation will restore the best recorded viewing pose.
+                  </p>
+
+                  <div className="poi-meta">
+                    <span>
+                      Object {selectedYoloObject.world_x.toFixed(2)}, {selectedYoloObject.world_y.toFixed(2)}
+                    </span>
+                    <span>
+                      View {selectedYoloObject.best_view_x.toFixed(2)}, {selectedYoloObject.best_view_y.toFixed(2)} |{" "}
+                      {formatYaw(selectedYoloObject.best_view_yaw)}
+                    </span>
+                    <span>{formatTimestamp(selectedYoloObject.last_seen_at)}</span>
+                  </div>
+
+                  <div className="poi-tags">
+                    <span>{selectedYoloObject.label}</span>
+                    <span>{selectedYoloObject.detections_count} hits</span>
+                    <span>{selectedYoloObject.size_x.toFixed(2)}m × {selectedYoloObject.size_y.toFixed(2)}m</span>
+                  </div>
+
+                  <div className="poi-actions">
+                    <button
+                      className="action-button secondary"
+                      onClick={() => {
+                        void handleHighlightItem({
+                          kind: "yolo_object",
+                          entity_id: selectedYoloObject.object_id,
+                        });
+                      }}
+                      type="button"
+                    >
+                      Highlight
+                    </button>
+                    <button
+                      className="action-button secondary"
+                      onClick={() => {
+                        void handleFocusItem({
+                          kind: "yolo_object",
+                          entity_id: selectedYoloObject.object_id,
+                        });
+                      }}
+                      type="button"
+                    >
+                      Focus
+                    </button>
+                    <button
+                      className="action-button"
+                      disabled={busyAction === `go-yolo_object-${selectedYoloObject.object_id}`}
+                      onClick={() => {
+                        void handleGoToItem({
+                          kind: "yolo_object",
+                          entity_id: selectedYoloObject.object_id,
+                        });
+                      }}
+                      type="button"
+                    >
+                      Go To
+                    </button>
+                    <button
+                      className="action-button danger"
+                      disabled={busyAction === `delete-yolo_object-${selectedYoloObject.object_id}`}
+                      onClick={() => {
+                        void handleDeleteItem({
+                          kind: "yolo_object",
+                          entity_id: selectedYoloObject.object_id,
+                        });
+                      }}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
       ) : null}

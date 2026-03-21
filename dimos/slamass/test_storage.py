@@ -118,3 +118,38 @@ def test_settings_round_trip(tmp_path: Path) -> None:
     loaded = storage.load_json_setting("inspection_settings")
 
     assert loaded == {"manual_mode": "always_create"}
+
+
+def test_yolo_object_upsert_and_soft_delete(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    hero = storage.create_image_asset(b"hero", ".jpg")
+    thumb = storage.create_image_asset(b"thumb", ".jpg")
+
+    object_record = storage.new_yolo_object(
+        map_id="active",
+        label="chair",
+        class_id=56,
+        world_x=1.5,
+        world_y=-0.25,
+        world_z=0.4,
+        size_x=0.5,
+        size_y=0.5,
+        size_z=0.9,
+        best_view_x=1.0,
+        best_view_y=-0.75,
+        best_view_yaw=0.3,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        detections_count=4,
+        best_confidence=0.91,
+    )
+    storage.upsert_yolo_object(object_record)
+
+    listed = storage.list_yolo_objects()
+    assert len(listed) == 1
+    assert listed[0].label == "chair"
+    assert listed[0].best_view_yaw == 0.3
+
+    storage.soft_delete_yolo_object(object_record.object_id)
+    assert storage.list_yolo_objects() == []
+    assert storage.get_yolo_object(object_record.object_id) is not None

@@ -15,13 +15,21 @@
 
 from dimos.agents.mcp.mcp_server import McpServer
 from dimos.core.blueprints import autoconnect
-from dimos.robot.unitree.go2.blueprints.smart.unitree_go2 import unitree_go2
+from dimos.core.transport import pLCMTransport
+from dimos.perception.detection.module3D import Detection3DModule
+from dimos.robot.unitree.go2.blueprints.smart.unitree_go2_detection import unitree_go2_detection
 from dimos.robot.unitree.unitree_skill_container import unitree_skills
+from dimos.web.websocket_vis.websocket_vis_module import WebsocketVisModule
 
 unitree_go2_slamass_mcp = autoconnect(
-    unitree_go2,
+    unitree_go2_detection,
     McpServer.blueprint(),
     unitree_skills(),
+).transports(
+    {
+        ("slamass_yolo_detections", Detection3DModule): pLCMTransport("/slamass/yolo_detections"),
+        ("slamass_yolo_detections", WebsocketVisModule): pLCMTransport("/slamass/yolo_detections"),
+    }
 )
 
 __all__ = ["unitree_go2_slamass_mcp"]

@@ -321,6 +321,11 @@ img {
   color: var(--text);
 }
 
+.action-button.secondary.is-off {
+  color: var(--text-muted);
+  opacity: 0.74;
+}
+
 .action-button.danger {
   background: rgba(248, 113, 113, 0.18);
   border: 1px solid rgba(248, 113, 113, 0.24);
@@ -583,7 +588,8 @@ img {
 }
 
 .legend-swatch.robot,
-.legend-swatch.poi {
+.legend-swatch.poi,
+.legend-swatch.yolo {
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -595,6 +601,10 @@ img {
 
 .legend-swatch.poi {
   background: var(--accent);
+}
+
+.legend-swatch.yolo {
+  background: #60a5fa;
 }
 
 .legend-swatch.path {
@@ -665,6 +675,31 @@ img {
   stroke: rgba(246, 173, 85, 0.72);
 }
 
+.yolo-halo {
+  fill: rgba(96, 165, 250, 0.14);
+  stroke: rgba(96, 165, 250, 0.38);
+  stroke-width: 1.5;
+}
+
+.yolo-halo.is-selected {
+  fill: rgba(96, 165, 250, 0.2);
+  stroke: rgba(125, 211, 252, 0.72);
+}
+
+.yolo-dot {
+  fill: rgba(96, 165, 250, 0.92);
+  stroke: rgba(7, 10, 16, 0.76);
+  stroke-width: 1.5;
+}
+
+.yolo-dot.is-selected {
+  fill: #7dd3fc;
+}
+
+.yolo-dot.is-highlighted {
+  fill: #93c5fd;
+}
+
 .poi-card {
   position: absolute;
   width: 132px;
@@ -717,6 +752,62 @@ img {
 
 .poi-card.is-muted {
   opacity: 0.4;
+}
+
+.yolo-chip {
+  position: absolute;
+  min-width: 10px;
+  min-height: 10px;
+  padding: 0;
+  border: 1px solid rgba(96, 165, 250, 0.34);
+  border-radius: 999px;
+  background: rgba(10, 16, 24, 0.82);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+  color: #dbeafe;
+  cursor: pointer;
+  z-index: 2;
+  transition:
+    transform 140ms ease,
+    opacity 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.yolo-chip.dot-only {
+  width: 12px;
+  height: 12px;
+}
+
+.yolo-chip.has-label {
+  min-height: 24px;
+  padding: 0 10px;
+}
+
+.yolo-chip.has-label span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.yolo-chip:hover {
+  transform: translate(-50%, calc(-50% - 1px));
+}
+
+.yolo-chip.is-selected {
+  border-color: rgba(125, 211, 252, 0.86);
+  background: rgba(14, 24, 38, 0.96);
+  z-index: 4;
+}
+
+.yolo-chip.is-highlighted {
+  border-color: rgba(96, 165, 250, 0.58);
+}
+
+.yolo-chip.is-muted {
+  opacity: 0.36;
 }
 
 .rail-stack {

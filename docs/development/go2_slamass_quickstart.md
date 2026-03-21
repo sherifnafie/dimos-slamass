@@ -1,13 +1,15 @@
 # Go2 SLAMASS Quick Start
 
-This runbook starts the SLAMASS MVP: a live two-pane web UI with robot POV on the left and a persisted semantic occupancy map on the right.
+This runbook starts the SLAMASS MVP: a live two-pane web UI with robot POV on the left and a persisted semantic occupancy map on the right, now with both VLM POIs and live-promoted YOLO objects.
 
 ## What You Get
 
 - Live first-person robot feed from `observe()`
 - Persisted downsampled BEV occupancy memory built from the raw SLAM costmap
 - Manual `Inspect Now` flow using OpenAI vision
-- Floating POI cards on the map with thumbnail, title, detail view, `Go To`, and `Delete`
+- Floating VLM POI cards on the map with thumbnail, title, detail view, `Go To`, and `Delete`
+- Live YOLO ingestion that promotes repeated detections into persistent map objects
+- YOLO layer visibility toggle and live/pause runtime control in the UI
 - Saved map and POIs under `~/.local/state/dimos/slamass/`
 
 ## Important Scope Note
@@ -102,7 +104,10 @@ http://localhost:7780
 6. If the frame is interesting, a floating POI card should appear on the map.
 7. Click the POI card. The detail modal should open with the full image and semantic description.
 8. Press `Go To` in the POI modal. The robot should navigate back to that POI anchor.
-9. Press `Save Map`.
+9. Let the robot look at a stable whitelisted object for a few seconds. A small YOLO object marker should promote onto the map.
+10. Click the YOLO object marker. The detail modal should open with the best crop and stored best-view pose.
+11. Press `Go To` on the YOLO object. The robot should return to the saved viewing pose for that object.
+12. Press `Save Map`.
 
 ## Persistence Check
 
@@ -131,6 +136,7 @@ Expected result:
 
 - the right-side map reloads from disk
 - existing POIs reappear
+- existing YOLO objects reappear
 - the live POV resumes once the service reconnects to MCP
 
 ## Useful Commands
@@ -150,6 +156,8 @@ dimos-slamass --help
 - `Inspect Now` captures the robot's current frame only. There is no autonomous sweep capture yet.
 - OpenAI vision returns both the semantic description and the create/reject gate in one call.
 - Duplicate inspections near the same pose and facing the same direction update an existing POI instead of creating a new one.
+- YOLO objects are promoted only after repeated hits and are stored separately from VLM POIs.
+- `person` is intentionally excluded from the default YOLO persistent whitelist.
 
 ## If Something Looks Broken
 

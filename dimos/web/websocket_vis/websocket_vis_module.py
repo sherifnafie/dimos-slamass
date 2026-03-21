@@ -57,6 +57,7 @@ from dimos.mapping.occupancy.inflation import simple_inflate
 from dimos.mapping.types import LatLon
 from dimos.msgs.geometry_msgs import PoseStamped, Quaternion, Twist, TwistStamped, Vector3
 from dimos.msgs.nav_msgs import OccupancyGrid, Path
+from dimos.slamass.yolo_protocol import SlamassYoloDetections
 from dimos.utils.logging_config import setup_logger
 
 from .optimized_costmap import OptimizedCostmapEncoder
@@ -91,6 +92,7 @@ class WebsocketVisModule(Module):
     gps_location: In[LatLon]
     path: In[Path]
     global_costmap: In[OccupancyGrid]
+    slamass_yolo_detections: In[SlamassYoloDetections]
 
     # LCM outputs
     goal_request: Out[PoseStamped]
@@ -193,6 +195,12 @@ class WebsocketVisModule(Module):
 
         try:
             unsub = self.global_costmap.subscribe(self._on_global_costmap)
+            self._disposables.add(Disposable(unsub))
+        except Exception:
+            ...
+
+        try:
+            unsub = self.slamass_yolo_detections.subscribe(self._on_slamass_yolo_detections)
             self._disposables.add(Disposable(unsub))
         except Exception:
             ...
@@ -411,6 +419,46 @@ class WebsocketVisModule(Module):
         raw_costmap_data = self._process_raw_costmap(msg)
         self.vis_state["raw_costmap"] = raw_costmap_data
         self._emit("raw_costmap", raw_costmap_data)
+
+    def _on_slamass_yolo_detections(self, batch: SlamassYoloDetections) -> None:
+        robot_pose = self.vis_state.get("robot_pose")
+        pose_payload: dict[str, float] | None = None
+        if isinstance(robot_pose, dict):
+            coords = robot_pose.get("c", [])
+            if isinstance(coords, list) and len(coords) >= 4:
+                pose_payload = {
+                    "x": float(coords[0]),
+                    "y": float(coords[1]),
+                    "z": float(coords[2]),
+                    "yaw": float(coords[3]),
+                }
+
+        payload = {
+            "ts": float(batch.ts),
+            "view_pose": pose_payload,
+            "detections": [
+                {
+                    "track_id": detection.track_id,
+                    "class_id": detection.class_id,
+                    "label": detection.label,
+                    "confidence": detection.confidence,
+                    "world_x": detection.world_x,
+                    "world_y": detection.world_y,
+                    "world_z": detection.world_z,
+                    "size_x": detection.size_x,
+                    "size_y": detection.size_y,
+                    "size_z": detection.size_z,
+                    "crop_base64": (
+                        base64.b64encode(detection.crop_jpeg).decode("ascii")
+                        if detection.crop_jpeg
+                        else ""
+                    ),
+                }
+                for detection in batch.detections
+            ],
+        }
+        self.vis_state["yolo_detections"] = payload
+        self._emit("yolo_detections", payload)
 
     def _process_costmap(self, costmap: OccupancyGrid) -> dict[str, Any]:
         """Convert OccupancyGrid to visualization format."""

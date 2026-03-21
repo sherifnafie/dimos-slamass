@@ -8,7 +8,17 @@ import {
   worldToScreen,
   zoomCameraAtScreenPoint,
 } from "./mapViewport";
-import { MapState, Poi, RobotPose, UiCameraState, UiState } from "./types";
+import { refFromPoi, refFromYoloObject, semanticKey } from "./semanticItems";
+import {
+  LayerVisibility,
+  MapState,
+  Poi,
+  RobotPose,
+  SemanticItemRef,
+  UiCameraState,
+  UiState,
+  YoloObject,
+} from "./types";
 
 function useSize<T extends HTMLElement>(): [React.RefObject<T>, { width: number; height: number }] {
   const ref = React.useRef<T>(null);
@@ -50,16 +60,26 @@ function isInsideMapFrame(
 }
 
 function describeHighlightState(ui: UiState): string {
-  if (ui.selected_poi_id) {
-    return "Selected POI";
+  if (ui.selected_item) {
+    return "Selected";
   }
-  if (ui.highlighted_poi_ids.length > 1) {
-    return `${ui.highlighted_poi_ids.length} highlights`;
+  if (ui.highlighted_items.length > 1) {
+    return `${ui.highlighted_items.length} highlights`;
   }
-  if (ui.highlighted_poi_ids.length === 1) {
+  if (ui.highlighted_items.length === 1) {
     return "1 highlight";
   }
   return "No highlights";
+}
+
+function yoloLabelVisibility(zoom: number): "none" | "priority" | "all" {
+  if (zoom < 1.6) {
+    return "none";
+  }
+  if (zoom < 2.4) {
+    return "priority";
+  }
+  return "all";
 }
 
 type MapPaneProps = {
@@ -67,11 +87,13 @@ type MapPaneProps = {
   robotPose: RobotPose | null;
   path: Array<[number, number]>;
   pois: Poi[];
+  yoloObjects: YoloObject[];
+  layers: LayerVisibility;
   ui: UiState;
   onCameraChange: (camera: UiCameraState) => void;
   onNavigate: (x: number, y: number) => void;
-  onSelectPoi: (poiId: string | null) => void;
-  onFocusPoi: (poiId: string) => void;
+  onSelectItem: (item: SemanticItemRef | null) => void;
+  onFocusItem: (item: SemanticItemRef) => void;
   onFocusMap: () => void;
   onFocusRobot: () => void;
   onClearFocus: () => void;
@@ -91,11 +113,13 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     robotPose,
     path,
     pois,
+    yoloObjects,
+    layers,
     ui,
     onCameraChange,
     onNavigate,
-    onSelectPoi,
-    onFocusPoi,
+    onSelectItem,
+    onFocusItem,
     onFocusMap,
     onFocusRobot,
     onClearFocus,
@@ -110,11 +134,43 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     return buildViewport(map, size.width, size.height, ui.camera);
   }, [map, size.height, size.width, ui.camera]);
 
-  const highlightedPoiIds = React.useMemo(
-    () => new Set(ui.highlighted_poi_ids),
-    [ui.highlighted_poi_ids],
+  const selectedKey = semanticKey(ui.selected_item);
+  const highlightedKeys = React.useMemo(
+    () => new Set(ui.highlighted_items.map((item) => semanticKey(item))),
+    [ui.highlighted_items],
   );
-  const hasHighlights = highlightedPoiIds.size > 0;
+  const hasHighlights = highlightedKeys.size > 0;
+
+  const activePois = React.useMemo(
+    () => pois.filter((poi) => poi.status !== "deleted"),
+    [pois],
+  );
+
+  const activeYoloObjects = React.useMemo(
+    () => yoloObjects.filter((object) => object.status !== "deleted"),
+    [yoloObjects],
+  );
+
+  const labelVisibility = yoloLabelVisibility(ui.camera.zoom);
+  const labeledYoloIds = React.useMemo(() => {
+    if (labelVisibility === "none") {
+      return new Set<string>();
+    }
+    const sorted = activeYoloObjects
+      .slice()
+      .sort((left, right) => {
+        if (right.updated_at !== left.updated_at) {
+          return right.updated_at.localeCompare(left.updated_at);
+        }
+        return right.best_confidence - left.best_confidence;
+      })
+      .map((object) => object.object_id);
+
+    if (labelVisibility === "all") {
+      return new Set(sorted);
+    }
+    return new Set(sorted.slice(0, 24));
+  }, [activeYoloObjects, labelVisibility]);
 
   const stopEvent = React.useCallback((event: React.SyntheticEvent) => {
     event.stopPropagation();
@@ -196,10 +252,10 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       }
 
       const [worldX, worldY] = screenToWorld(map, viewport, localX, localY);
-      onSelectPoi(null);
+      onSelectItem(null);
       onNavigate(worldX, worldY);
     },
-    [map, onNavigate, onSelectPoi, viewport],
+    [map, onNavigate, onSelectItem, viewport],
   );
 
   const handlePointerCancel = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -269,10 +325,10 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
               </button>
               <button
                 className="map-tool"
-                disabled={!ui.selected_poi_id}
+                disabled={!ui.selected_item}
                 onClick={() => {
-                  if (ui.selected_poi_id) {
-                    onFocusPoi(ui.selected_poi_id);
+                  if (ui.selected_item) {
+                    onFocusItem(ui.selected_item);
                   }
                 }}
                 type="button"
@@ -281,7 +337,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
               </button>
               <button
                 className="map-tool"
-                disabled={!ui.selected_poi_id && ui.highlighted_poi_ids.length === 0}
+                disabled={!ui.selected_item && ui.highlighted_items.length === 0}
                 onClick={onClearFocus}
                 type="button"
               >
@@ -328,12 +384,13 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 </g>
               );
             })()}
-            {pois
-              .filter((poi) => poi.status !== "deleted")
-              .map((poi) => {
+            {layers.show_pois &&
+              activePois.map((poi) => {
                 const [x, y] = worldToScreen(map, viewport, poi.world_x, poi.world_y);
-                const isSelected = poi.poi_id === ui.selected_poi_id;
-                const isHighlighted = highlightedPoiIds.has(poi.poi_id);
+                const itemRef = refFromPoi(poi.poi_id);
+                const itemKey = semanticKey(itemRef);
+                const isSelected = selectedKey === itemKey;
+                const isHighlighted = highlightedKeys.has(itemKey);
                 const coneLength = isSelected ? 58 : isHighlighted ? 46 : 0;
                 const coneSpread = isSelected ? 0.34 : 0.24;
                 return (
@@ -360,13 +417,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                       x2={x + Math.cos(poi.world_yaw) * 16}
                       y2={y - Math.sin(poi.world_yaw) * 16}
                     />
-                    <line
-                      className="poi-tether"
-                      x1={x}
-                      y1={y}
-                      x2={x}
-                      y2={y - 36}
-                    />
+                    <line className="poi-tether" x1={x} y1={y} x2={x} y2={y - 36} />
                     {(isSelected || isHighlighted) && (
                       <circle
                         className={`poi-anchor-halo ${isSelected ? "is-selected" : "is-highlighted"}`}
@@ -378,13 +429,40 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                   </g>
                 );
               })}
+            {layers.show_yolo &&
+              activeYoloObjects.map((object) => {
+                const [x, y] = worldToScreen(map, viewport, object.world_x, object.world_y);
+                const itemRef = refFromYoloObject(object.object_id);
+                const itemKey = semanticKey(itemRef);
+                const isSelected = selectedKey === itemKey;
+                const isHighlighted = highlightedKeys.has(itemKey);
+                return (
+                  <g key={`${object.object_id}-marker`}>
+                    {(isSelected || isHighlighted) && (
+                      <circle
+                        className={`yolo-halo ${isSelected ? "is-selected" : "is-highlighted"}`}
+                        cx={x}
+                        cy={y}
+                        r={isSelected ? 12 : 10}
+                      />
+                    )}
+                    <circle
+                      className={`yolo-dot ${isSelected ? "is-selected" : isHighlighted ? "is-highlighted" : ""}`}
+                      cx={x}
+                      cy={y}
+                      r={isSelected ? 6 : 4.5}
+                    />
+                  </g>
+                );
+              })}
           </svg>
-          {pois
-            .filter((poi) => poi.status !== "deleted")
-            .map((poi) => {
+          {layers.show_pois &&
+            activePois.map((poi) => {
               const [x, y] = worldToScreen(map, viewport, poi.world_x, poi.world_y);
-              const isSelected = poi.poi_id === ui.selected_poi_id;
-              const isHighlighted = highlightedPoiIds.has(poi.poi_id);
+              const itemRef = refFromPoi(poi.poi_id);
+              const itemKey = semanticKey(itemRef);
+              const isSelected = selectedKey === itemKey;
+              const isHighlighted = highlightedKeys.has(itemKey);
               const isMuted = hasHighlights && !isHighlighted && !isSelected;
               return (
                 <button
@@ -399,7 +477,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                   key={poi.poi_id}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onSelectPoi(poi.poi_id);
+                    onSelectItem(itemRef);
                   }}
                   onDragStart={preventNativeDrag}
                   onPointerDown={stopEvent}
@@ -409,8 +487,42 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                   <img alt={poi.title} draggable={false} onDragStart={preventNativeDrag} src={poi.thumbnail_url} />
                   <span>{poi.title}</span>
                 </button>
-                );
-              })}
+              );
+            })}
+          {layers.show_yolo &&
+            activeYoloObjects.map((object) => {
+              const [x, y] = worldToScreen(map, viewport, object.world_x, object.world_y);
+              const itemRef = refFromYoloObject(object.object_id);
+              const itemKey = semanticKey(itemRef);
+              const isSelected = selectedKey === itemKey;
+              const isHighlighted = highlightedKeys.has(itemKey);
+              const isMuted = hasHighlights && !isHighlighted && !isSelected;
+              const showLabel = labeledYoloIds.has(object.object_id);
+              return (
+                <button
+                  className={[
+                    "yolo-chip",
+                    showLabel ? "has-label" : "dot-only",
+                    isSelected ? "is-selected" : "",
+                    isHighlighted ? "is-highlighted" : "",
+                    isMuted ? "is-muted" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  key={object.object_id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectItem(itemRef);
+                  }}
+                  onDragStart={preventNativeDrag}
+                  onPointerDown={stopEvent}
+                  style={{ left: `${x}px`, top: `${y + 12}px` }}
+                  type="button"
+                >
+                  {showLabel ? <span>{object.label}</span> : null}
+                </button>
+              );
+            })}
           <div className="map-legend" onPointerDown={stopEvent}>
             <span>
               <i className="legend-swatch robot" />
@@ -422,7 +534,11 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
             </span>
             <span>
               <i className="legend-swatch poi" />
-              Semantic POIs
+              VLM anchors
+            </span>
+            <span>
+              <i className="legend-swatch yolo" />
+              YOLO objects
             </span>
           </div>
         </>
