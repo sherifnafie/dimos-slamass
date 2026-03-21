@@ -939,6 +939,82 @@ class SlamassService:
             except Exception:
                 logger.exception("Periodic SLAMASS map checkpoint failed")
 
+    async def _finish_poi_navigation(
+        self,
+        *,
+        poi_id: str,
+        target_x: float,
+        target_y: float,
+        target_yaw: float,
+    ) -> None:
+        try:
+            arrived = await self._wait_for_poi_arrival(target_x=target_x, target_y=target_y)
+            if not arrived:
+                logger.warning(
+                    "POI Go To timed out before reaching target pose",
+                    poi_id=poi_id,
+                    x=round(target_x, 3),
+                    y=round(target_y, 3),
+                )
+                return
+
+            async with self._state_lock:
+                current_pose = self.robot_pose
+            if current_pose is None:
+                logger.warning("POI Go To lost robot pose before yaw restore", poi_id=poi_id)
+                return
+
+            rotation_degrees = math.degrees(angle_delta(target_yaw, current_pose.yaw))
+            if abs(rotation_degrees) < self._poi_rotation_threshold_degrees:
+                logger.info(
+                    "POI Go To arrived already aligned with saved viewpoint",
+                    poi_id=poi_id,
+                    yaw_error_degrees=round(rotation_degrees, 1),
+                )
+                return
+
+            logger.info(
+                "POI Go To restoring saved viewpoint yaw",
+                poi_id=poi_id,
+                degrees=round(rotation_degrees, 1),
+            )
+            await self._relative_rotate(rotation_degrees)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("POI Go To yaw restoration failed", poi_id=poi_id)
+        finally:
+            current_task = asyncio.current_task()
+            if self._goto_poi_task is current_task:
+                self._goto_poi_task = None
+
+    async def _wait_for_poi_arrival(self, *, target_x: float, target_y: float) -> bool:
+        deadline = time.monotonic() + self._poi_arrival_timeout_seconds
+        in_tolerance_since: float | None = None
+
+        while not self._stopped and time.monotonic() < deadline:
+            async with self._state_lock:
+                pose = self.robot_pose
+
+            if pose is not None:
+                distance = math.hypot(pose.x - target_x, pose.y - target_y)
+                if distance <= self._poi_arrival_tolerance_m:
+                    if in_tolerance_since is None:
+                        in_tolerance_since = time.monotonic()
+                    elif time.monotonic() - in_tolerance_since >= self._poi_arrival_settle_seconds:
+                        return True
+                else:
+                    in_tolerance_since = None
+
+            await asyncio.sleep(0.25)
+
+        return False
+
+    async def _relative_rotate(self, degrees: float) -> None:
+        result = self.mcp_client.relative_move(forward=0.0, left=0.0, degrees=degrees)
+        if asyncio.iscoroutine(result):
+            await result
+
     async def _observe_jpeg(self) -> bytes | None:
         result = self.mcp_client.observe_jpeg()
         if asyncio.iscoroutine(result):
