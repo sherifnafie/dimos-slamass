@@ -17,9 +17,14 @@ import time
 import numpy as np
 import pytest
 
+import dimos.navigation.frontier_exploration.wavefront_frontier_goal_selector as wavefront_module
+from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from dimos.msgs.nav_msgs.OccupancyGrid import CostValues, OccupancyGrid
+from dimos.msgs.nav_msgs.Path import Path
+from dimos.navigation.base import NavigationState
 from dimos.navigation.frontier_exploration.wavefront_frontier_goal_selector import (
+    CandidateTrajectory,
     WavefrontFrontierExplorer,
 )
 
@@ -116,6 +121,59 @@ def create_test_costmap(width: int = 40, height: int = 40, resolution: float = 0
             self.origin = Vector3(0.0, 0.0, 0.0)
 
     return occupancy_grid, MockLidar()
+
+
+def make_pose(x: float, y: float) -> PoseStamped:
+    return PoseStamped(
+        position=[x, y, 0.0],
+        orientation=[0.0, 0.0, 0.0, 1.0],
+        frame_id="world",
+        ts=time.time(),
+    )
+
+
+def make_candidate(
+    goal: Vector3,
+    path_length_m: float,
+    segment_id: str,
+    *,
+    direction: int = 1,
+    entry_end: str = "A",
+    frontier_rank: int = 0,
+    continuity_score: float = 0.0,
+    failure_count: int = 0,
+) -> CandidateTrajectory:
+    return CandidateTrajectory(
+        goal=goal,
+        path=Path(poses=[make_pose(0.0, 0.0), make_pose(path_length_m, 0.0)]),
+        path_length_m=path_length_m,
+        segment_id=segment_id,
+        direction=direction,
+        entry_end=entry_end,
+        label=entry_end,
+        frontier_rank=frontier_rank,
+        continuity_score=continuity_score,
+        failure_count=failure_count,
+    )
+
+
+def install_fake_publish(explorer: WavefrontFrontierExplorer):
+    published = []
+
+    def fake_publish(goal, action, *, frontier_goal=None, frontier_id=None):  # type: ignore[no-untyped-def]
+        goal_msg = explorer._make_goal_msg(goal)
+        explorer.active_nav_goal = goal_msg
+        explorer.current_frontier_goal = frontier_goal or Vector3(goal_msg.x, goal_msg.y, goal_msg.z)
+        explorer.current_frontier_id = frontier_id or explorer._goal_id(explorer.current_frontier_goal)
+        now = time.monotonic()
+        explorer.last_goal_publish_time = now
+        if explorer.commitment_active:
+            explorer.committed_last_goal_publish_time = now
+        explorer.current_state = "navigating"
+        published.append((action, explorer.current_frontier_id, goal_msg.x, goal_msg.y))
+
+    explorer._publish_navigation_goal = fake_publish  # type: ignore[method-assign]
+    return published
 
 
 def test_frontier_detection_with_office_lidar(explorer, quick_costmap) -> None:
@@ -228,20 +286,20 @@ def test_exploration_session_reset(explorer) -> None:
 
 
 def test_frontier_ranking(explorer) -> None:
-    """Test frontier ranking and scoring logic."""
+    """Test that direct goal selection still returns a reachable frontier."""
     # Get test costmap
     costmap, first_lidar = create_test_costmap()
 
     robot_pose = first_lidar.origin
 
-    # Get first set of frontiers
-    frontiers1 = explorer.detect_frontiers(robot_pose, costmap)
+    candidates = explorer._build_candidate_trajectories(robot_pose, costmap)
     goal1 = explorer.get_exploration_goal(robot_pose, costmap)
 
     if goal1:
-        # Verify the selected goal is the first in the ranked list
-        assert frontiers1[0].x == goal1.x and frontiers1[0].y == goal1.y, (
-            "Selected goal should be the highest ranked frontier"
+        assert candidates, "At least one reachable frontier candidate should exist"
+        candidate_ids = {candidate.segment_id for candidate in candidates}
+        assert explorer._goal_id(goal1) in candidate_ids, (
+            "Selected goal should correspond to one of the reachable evaluated trajectories"
         )
 
         # Test that goals are being marked as explored
@@ -266,7 +324,7 @@ def test_frontier_ranking(explorer) -> None:
         )
 
         print(f"Frontier ranking test passed - selected goal at ({goal1.x:.2f}, {goal1.y:.2f})")
-        print(f"Total frontiers detected: {len(frontiers1)}")
+        print(f"Total reachable candidates detected: {len(candidates)}")
     else:
         print("No frontiers found for ranking test")
 
@@ -274,7 +332,7 @@ def test_frontier_ranking(explorer) -> None:
 
 
 def test_exploration_with_no_gain_detection() -> None:
-    """Test information gain detection and exploration termination."""
+    """Low information gain should not terminate exploration on its own."""
     # Get initial costmap
     costmap1, first_lidar = create_test_costmap()
 
@@ -293,19 +351,311 @@ def test_exploration_with_no_gain_detection() -> None:
         # Now use same costmap repeatedly to trigger no-gain detection
         initial_counter = explorer.no_gain_counter
 
-        # This should increment no-gain counter
+        # This should increment no-gain counter without stopping exploration.
         goal = explorer.get_exploration_goal(robot_pose, costmap1)
         assert explorer.no_gain_counter > initial_counter, "No-gain counter should increment"
+        assert goal is not None, "Low information gain should not force a stop"
 
-        # Continue until exploration stops
-        for _ in range(3):
-            goal = explorer.get_exploration_goal(robot_pose, costmap1)
-            if goal is None:
-                break
+        goal = explorer.get_exploration_goal(robot_pose, costmap1)
+        assert goal is not None, "Explorer should keep producing goals while frontiers remain"
+        assert explorer.no_gain_counter >= 1, "Low-gain streak should remain observable"
+    finally:
+        explorer.stop()
 
-        # Should have stopped due to no information gain
-        assert goal is None, "Exploration should stop after no-gain threshold"
-        assert explorer.no_gain_counter == 0, "Counter should reset after stopping"
+
+def test_watchdog_requests_replan_when_idle_without_goal() -> None:
+    """The watchdog should recover from an idle no-goal state automatically."""
+    explorer = WavefrontFrontierExplorer()
+
+    try:
+        explorer.exploration_active = True
+        explorer.current_state = "idle"
+        explorer.last_goal_publish_time = time.monotonic() - 5.0
+        explorer.last_progress_time = time.monotonic()
+        explorer.intentional_cooldown_until = 0.0
+
+        explorer._estimate_remaining_frontiers = lambda: 2  # type: ignore[method-assign]
+        explorer._get_navigation_state = lambda: None  # type: ignore[method-assign]
+
+        action = explorer._watchdog_tick()
+
+        assert action == "resume_no_goal"
+        assert explorer.replan_requested.is_set()
+        assert explorer.exploration_active
+    finally:
+        explorer.stop()
+
+
+def test_watchdog_requires_multiple_empty_cycles_before_stopping() -> None:
+    """A single empty planning cycle should not be treated as mission complete."""
+    explorer = WavefrontFrontierExplorer(done_confirmation_cycles=3)
+
+    try:
+        explorer.exploration_active = True
+        explorer.current_state = "idle"
+        explorer.last_goal_publish_time = time.monotonic() - 5.0
+        explorer.last_progress_time = time.monotonic() - 5.0
+        explorer.intentional_cooldown_until = 0.0
+
+        explorer._estimate_remaining_frontiers = lambda: 0  # type: ignore[method-assign]
+        explorer._get_navigation_state = lambda: None  # type: ignore[method-assign]
+
+        action = explorer._watchdog_tick()
+        assert action == "resume_no_goal"
+        assert explorer.exploration_active
+        assert explorer.done_streak == 1
+
+        explorer.replan_requested.clear()
+        action = explorer._watchdog_tick()
+        assert action == "resume_no_goal"
+        assert explorer.exploration_active
+        assert explorer.done_streak == 2
+
+        explorer.replan_requested.clear()
+        action = explorer._watchdog_tick()
+        assert action == "stop_confirmed_done"
+        assert not explorer.exploration_active
+        assert explorer.done_confidence
+    finally:
+        explorer.stop()
+
+
+def test_select_candidate_prefers_shorter_astar_path(quick_costmap) -> None:
+    explorer = WavefrontFrontierExplorer(candidate_tie_margin=0.1)
+    costmap, _ = quick_costmap
+
+    try:
+        robot_pose = Vector3(0.0, 0.0, 0.0)
+        candidates = [
+            make_candidate(Vector3(3.0, 0.0, 0.0), 5.8, "wall_a", entry_end="A", frontier_rank=0),
+            make_candidate(Vector3(1.0, 0.0, 0.0), 2.4, "wall_b", entry_end="B", frontier_rank=1),
+        ]
+        explorer._build_candidate_trajectories = (  # type: ignore[method-assign]
+            lambda *_args, **_kwargs: candidates
+        )
+
+        selected = explorer._select_candidate_trajectory(robot_pose, costmap, "test")
+
+        assert selected is not None
+        assert selected.segment_id == "wall_b"
+        assert selected.entry_end == "B"
+    finally:
+        explorer.stop()
+
+
+def test_committed_trajectory_publishes_final_endpoint_goal() -> None:
+    explorer = WavefrontFrontierExplorer()
+
+    try:
+        explorer.latest_odometry = make_pose(0.0, 0.0)
+        published = install_fake_publish(explorer)
+        candidate = CandidateTrajectory(
+            goal=Vector3(3.0, 0.0, 0.0),
+            path=Path(poses=[make_pose(0.0, 0.0), make_pose(1.0, 0.0), make_pose(2.0, 0.0), make_pose(3.0, 0.0)]),
+            path_length_m=3.0,
+            segment_id="wall_12",
+            direction=1,
+            entry_end="A",
+            label="A",
+            frontier_rank=0,
+            continuity_score=1.0,
+            failure_count=0,
+        )
+
+        assert explorer._activate_commitment(candidate, "test")
+        assert explorer.commitment_active
+        assert explorer.current_frontier_id == "wall_12"
+        assert len(published) == 1
+        assert published[0][2:] == (3.0, 0.0)
+        assert len(explorer.committed_waypoints) == 1
+
+        explorer._handle_goal_reached()
+
+        assert not explorer.commitment_active
+        assert explorer.current_state == "planning"
+        assert len(published) == 1
+    finally:
+        explorer.stop()
+
+
+def test_watchdog_holds_committed_trajectory_while_progressing() -> None:
+    explorer = WavefrontFrontierExplorer()
+
+    try:
+        explorer.exploration_active = True
+        explorer.commitment_active = True
+        explorer.committed_wall_segment_id = "wall_12"
+        explorer.committed_direction = 1
+        explorer.committed_entry_end = "A"
+        explorer.committed_end_target = Vector3(2.0, 0.0, 0.0)
+        explorer.active_nav_goal = make_pose(1.0, 0.0)
+        explorer.current_state = "navigating"
+        explorer.committed_last_goal_publish_time = time.monotonic() - 1.0
+        explorer.committed_last_progress_time = time.monotonic() - 1.0
+        explorer.intentional_cooldown_until = 0.0
+
+        explorer._estimate_remaining_frontiers = lambda: 2  # type: ignore[method-assign]
+        explorer._get_navigation_state = lambda: NavigationState.FOLLOWING_PATH  # type: ignore[method-assign]
+        explorer._committed_target_reachable = lambda: True  # type: ignore[method-assign]
+
+        action = explorer._watchdog_tick()
+
+        assert action == "hold"
+        assert not explorer.replan_requested.is_set()
+    finally:
+        explorer.stop()
+
+
+def test_watchdog_holds_committed_goal_while_following_path() -> None:
+    explorer = WavefrontFrontierExplorer(stuck_timeout=12.0, following_path_stuck_timeout=28.0)
+
+    try:
+        explorer.exploration_active = True
+        explorer.commitment_active = True
+        explorer.committed_wall_segment_id = "wall_12"
+        explorer.committed_direction = 1
+        explorer.committed_entry_end = "A"
+        explorer.committed_end_target = Vector3(2.0, 0.0, 0.0)
+        explorer.active_nav_goal = make_pose(1.0, 0.0)
+        explorer.current_state = "navigating"
+        explorer.committed_last_goal_publish_time = time.monotonic() - 5.0
+        explorer.committed_last_progress_time = time.monotonic() - 13.0
+        explorer.intentional_cooldown_until = 0.0
+
+        explorer._estimate_remaining_frontiers = lambda: 2  # type: ignore[method-assign]
+        explorer._get_navigation_state = lambda: NavigationState.FOLLOWING_PATH  # type: ignore[method-assign]
+        explorer._committed_target_reachable = lambda: True  # type: ignore[method-assign]
+
+        action = explorer._watchdog_tick()
+
+        assert action == "hold"
+        assert not explorer.replan_requested.is_set()
+    finally:
+        explorer.stop()
+
+
+def test_watchdog_requests_recovery_when_committed_goal_goes_idle() -> None:
+    explorer = WavefrontFrontierExplorer(stuck_timeout=12.0)
+
+    try:
+        explorer.exploration_active = True
+        explorer.commitment_active = True
+        explorer.committed_wall_segment_id = "wall_12"
+        explorer.committed_direction = 1
+        explorer.committed_entry_end = "A"
+        explorer.committed_end_target = Vector3(2.0, 0.0, 0.0)
+        explorer.active_nav_goal = make_pose(1.0, 0.0)
+        explorer.current_state = "navigating"
+        explorer.committed_last_goal_publish_time = time.monotonic() - 5.0
+        explorer.committed_last_progress_time = time.monotonic() - 13.0
+        explorer.intentional_cooldown_until = 0.0
+
+        explorer._estimate_remaining_frontiers = lambda: 2  # type: ignore[method-assign]
+        explorer._get_navigation_state = lambda: NavigationState.IDLE  # type: ignore[method-assign]
+        explorer._committed_target_reachable = lambda: True  # type: ignore[method-assign]
+
+        action = explorer._watchdog_tick()
+
+        assert action == "recover_idle_nav"
+        assert explorer.replan_requested.is_set()
+    finally:
+        explorer.stop()
+
+
+def test_watchdog_invalidates_shadowed_target_after_no_path_timeout() -> None:
+    explorer = WavefrontFrontierExplorer(target_invalidation_timeout=0.0, target_invalidation_failures=1)
+
+    try:
+        explorer.exploration_active = True
+        explorer.commitment_active = True
+        explorer.committed_wall_segment_id = "wall_12"
+        explorer.committed_direction = 1
+        explorer.committed_entry_end = "A"
+        explorer.committed_end_target = Vector3(2.0, 0.0, 0.0)
+        explorer.active_nav_goal = make_pose(2.0, 0.0)
+        explorer.current_state = "navigating"
+        explorer.committed_last_goal_publish_time = time.monotonic() - 5.0
+        explorer.committed_last_progress_time = time.monotonic() - 1.0
+        explorer.intentional_cooldown_until = 0.0
+
+        explorer._estimate_remaining_frontiers = lambda: 2  # type: ignore[method-assign]
+        explorer._get_navigation_state = lambda: NavigationState.FOLLOWING_PATH  # type: ignore[method-assign]
+        explorer._committed_target_reachable = lambda: False  # type: ignore[method-assign]
+
+        action = explorer._watchdog_tick()
+
+        assert action == "target_invalid_no_path"
+        assert explorer.replan_requested.is_set()
+    finally:
+        explorer.stop()
+
+
+def test_recover_same_wall_replaces_unreachable_target(quick_costmap, monkeypatch) -> None:
+    explorer = WavefrontFrontierExplorer()
+    costmap, _ = quick_costmap
+
+    try:
+        explorer.latest_costmap = costmap
+        explorer.latest_odometry = make_pose(0.0, 0.0)
+        explorer.commitment_active = True
+        explorer.committed_wall_segment_id = "wall_12"
+        explorer.committed_direction = 1
+        explorer.committed_entry_end = "A"
+        explorer.committed_end_target = Vector3(2.0, 0.0, 0.0)
+        explorer.committed_waypoints = [make_pose(2.0, 0.0)]
+        published = install_fake_publish(explorer)
+
+        replacement = make_candidate(
+            Vector3(1.2, 0.4, 0.0),
+            1.3,
+            "wall_12",
+            direction=1,
+            entry_end="A",
+        )
+        monkeypatch.setattr(wavefront_module, "min_cost_astar", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            explorer,
+            "_find_same_wall_replacement",
+            lambda *_args, **_kwargs: replacement,
+        )
+
+        recovered = explorer._recover_committed_trajectory("target_invalid_no_path")
+
+        assert recovered
+        assert explorer.commitment_active
+        assert explorer.committed_wall_segment_id == "wall_12"
+        assert explorer.committed_direction == 1
+        assert explorer.committed_end_target == replacement.goal
+        assert published[-1][0] == "recover_same_wall"
+    finally:
+        explorer.stop()
+
+
+def test_same_wall_recovery_failure_switches_away(quick_costmap, monkeypatch) -> None:
+    explorer = WavefrontFrontierExplorer(max_committed_plan_failures=1, max_committed_recovery_failures=1)
+    costmap, _ = quick_costmap
+
+    try:
+        explorer.latest_costmap = costmap
+        explorer.latest_odometry = make_pose(0.0, 0.0)
+        explorer.commitment_active = True
+        explorer.committed_wall_segment_id = "wall_12"
+        explorer.committed_direction = 1
+        explorer.committed_entry_end = "A"
+        explorer.committed_end_target = Vector3(2.0, 0.0, 0.0)
+        explorer.committed_waypoints = [make_pose(2.0, 0.0)]
+
+        monkeypatch.setattr(wavefront_module, "min_cost_astar", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            explorer,
+            "_find_same_wall_replacement",
+            lambda *_args, **_kwargs: None,
+        )
+
+        recovered = explorer._recover_committed_trajectory("target_invalid_no_path")
+
+        assert not recovered
+        assert not explorer.commitment_active
     finally:
         explorer.stop()
 

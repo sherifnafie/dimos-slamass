@@ -237,3 +237,8 @@ def deploy(  # type: ignore[no-untyped-def]
     detector.start()
 
     return detector
+
+
+detection3d_module = Detection3DModule.blueprint
+
+__all__ = ["Detection3DModule", "detection3d_module", "deploy"]

@@ -164,6 +164,12 @@ def run(
         blueprint = blueprint.disabled_modules(*disabled_classes)
 
     if daemon:
+        # Run interactive configurator / validation checks before daemonizing.
+        # Once detached there is no TTY available for confirmation prompts.
+        blueprint._run_configurators()
+        blueprint._check_requirements()
+        blueprint._verify_no_name_conflicts()
+
         from dimos.core.daemon import (
             daemonize,
             install_signal_handlers,
@@ -190,7 +196,10 @@ def run(
         entry.save()
         coordinator: ModuleCoordinator | None = None
         try:
-            coordinator = blueprint.build(cli_config_overrides=cli_config_overrides)
+            coordinator = blueprint.build(
+                cli_config_overrides=cli_config_overrides,
+                skip_preflight_checks=True,
+            )
             install_signal_handlers(entry, coordinator)
             coordinator.loop()
         except BaseException:

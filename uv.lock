@@ -1903,6 +1903,7 @@ base = [
     { name = "mujoco" },
     { name = "ollama" },
     { name = "omegaconf" },
+    { name = "onnxruntime" },
     { name = "openai" },
     { name = "openai-whisper" },
     { name = "pillow" },
@@ -2087,6 +2088,7 @@ psql = [
 ]
 sim = [
     { name = "mujoco" },
+    { name = "onnxruntime" },
     { name = "playground" },
     { name = "pygame" },
 ]
@@ -2111,6 +2113,7 @@ unitree = [
     { name = "mujoco" },
     { name = "ollama" },
     { name = "omegaconf" },
+    { name = "onnxruntime" },
     { name = "openai" },
     { name = "openai-whisper" },
     { name = "pillow" },
@@ -2202,6 +2205,7 @@ requires-dist = [
     { name = "omegaconf", marker = "extra == 'perception'", specifier = ">=2.3.0" },
     { name = "onnx", marker = "extra == 'misc'" },
     { name = "onnxruntime", marker = "extra == 'cpu'" },
+    { name = "onnxruntime", marker = "extra == 'sim'" },
     { name = "onnxruntime-gpu", marker = "platform_machine == 'x86_64' and extra == 'cuda'", specifier = ">=1.17.1" },
     { name = "open-clip-torch", marker = "extra == 'misc'", specifier = "==3.2.0" },
     { name = "open3d", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'", specifier = ">=0.18.0" },

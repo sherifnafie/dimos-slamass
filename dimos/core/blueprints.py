@@ -472,15 +472,17 @@ class Blueprint:
     def build(
         self,
         cli_config_overrides: Mapping[str, Any] | None = None,
+        skip_preflight_checks: bool = False,
     ) -> ModuleCoordinator:
         logger.info("Building the blueprint")
         global_config.update(**dict(self.global_config_overrides))
         if cli_config_overrides:
             global_config.update(**dict(cli_config_overrides))
 
-        self._run_configurators()
-        self._check_requirements()
-        self._verify_no_name_conflicts()
+        if not skip_preflight_checks:
+            self._run_configurators()
+            self._check_requirements()
+            self._verify_no_name_conflicts()
 
         logger.info("Starting the modules")
         module_coordinator = ModuleCoordinator(cfg=global_config)
