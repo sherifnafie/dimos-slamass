@@ -17,11 +17,8 @@ export function LiveFeedPanel(props: LiveFeedPanelProps): React.ReactElement {
     <PanelShell
       aside={
         <div className="panel-chip-row">
-          <span className={`toolbar-chip status-pill ${connected ? "is-live" : "is-offline"}`}>
-            {connected ? "Live" : "Standby"}
-          </span>
           {poseLabel ? <span className="toolbar-chip monospace-chip">{poseLabel}</span> : null}
-          <span className="toolbar-chip">Frame {frameLabel}</span>
+          <span className="toolbar-chip">{pov.available ? `Updated ${frameLabel}` : frameLabel}</span>
         </div>
       }
       bodyClassName="panel-body-stage"

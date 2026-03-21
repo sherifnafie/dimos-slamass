@@ -12,6 +12,13 @@ import {
   resolveSelectedYoloObject,
 } from "./semanticItems";
 import {
+  calculateTeleopCommand,
+  isEditableTarget,
+  normalizeTeleopKey,
+  PUBLISH_RATE_HZ,
+  teleopKeys,
+} from "./teleop";
+import {
   AppState,
   InspectionSettings,
   ManualInspectionMode,
@@ -172,6 +179,8 @@ export default function App(): React.ReactElement {
   const [state, setState] = React.useState<AppState>(emptyState);
   const [busyAction, setBusyAction] = React.useState<string | null>(null);
   const [layoutMode, setLayoutModeState] = React.useState<LayoutMode>(getInitialLayoutMode);
+  const [teleopEnabled, setTeleopEnabled] = React.useState(false);
+  const [controlsMenuOpen, setControlsMenuOpen] = React.useState(false);
   const [activityEntries, setActivityEntries] = React.useState<ActivityEntry[]>(() => [
     {
       id: "boot",
@@ -184,6 +193,11 @@ export default function App(): React.ReactElement {
   ]);
 
   const cameraSyncTimerRef = React.useRef<number | null>(null);
+  const teleopIntervalRef = React.useRef<number | null>(null);
+  const teleopKeysRef = React.useRef<Set<string>>(new Set());
+  const teleopRequestInFlightRef = React.useRef(false);
+  const teleopErrorMessageRef = React.useRef<string | null>(null);
+  const controlsMenuRef = React.useRef<HTMLDivElement>(null);
   const activityCounterRef = React.useRef(1);
   const stateRef = React.useRef<AppState>(emptyState);
   const lastConnectedRef = React.useRef<boolean | null>(null);
@@ -261,8 +275,36 @@ export default function App(): React.ReactElement {
       if (cameraSyncTimerRef.current !== null) {
         window.clearTimeout(cameraSyncTimerRef.current);
       }
+      if (teleopIntervalRef.current !== null) {
+        window.clearInterval(teleopIntervalRef.current);
+      }
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!controlsMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (!controlsMenuRef.current?.contains(event.target as Node)) {
+        setControlsMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setControlsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [controlsMenuOpen]);
 
   const setLayoutMode = React.useCallback((next: LayoutMode) => {
     setLayoutModeState(next);
@@ -714,6 +756,132 @@ export default function App(): React.ReactElement {
     }
   }, [issueUiCommand, reportActionError]);
 
+  const handleToggleTeleop = React.useCallback(() => {
+    teleopKeysRef.current.clear();
+    setTeleopEnabled((current) => {
+      const next = !current;
+      appendActivity(
+        "operator",
+        next ? "Teleop enabled" : "Teleop disabled",
+        next ? "Keyboard control armed." : "Keyboard control released.",
+        next ? "accent" : "neutral",
+      );
+      return next;
+    });
+  }, [appendActivity]);
+
+  const handleStopMotion = React.useCallback(async () => {
+    try {
+      await fetchJson("/api/teleop/stop", { method: "POST" });
+    } catch {
+      // Best-effort stop path. If the service is unavailable, there is nothing
+      // useful to surface here during cleanup.
+    }
+  }, []);
+
+  const handleStopDimos = React.useCallback(async () => {
+    const confirmed = window.confirm("Stop the active DimOS run?");
+    if (!confirmed) {
+      return;
+    }
+
+    appendActivity("operator", "Stop DimOS", "Graceful shutdown requested.", "danger");
+    setBusyAction("system-stop");
+    setTeleopEnabled(false);
+    try {
+      await fetchJson("/api/system/stop", { method: "POST" });
+      appendActivity("system", "DimOS stopping", "Stop signal sent to the active run.", "danger");
+    } catch (error) {
+      reportActionError("Stop DimOS failed", error);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [appendActivity, reportActionError]);
+
+  React.useEffect(() => {
+    teleopKeysRef.current.clear();
+    teleopErrorMessageRef.current = null;
+
+    if (!teleopEnabled) {
+      void handleStopMotion();
+      return undefined;
+    }
+
+    const sendCurrentCommand = async (): Promise<void> => {
+      if (teleopRequestInFlightRef.current) {
+        return;
+      }
+      teleopRequestInFlightRef.current = true;
+      try {
+        await fetchJson("/api/teleop/command", {
+          method: "POST",
+          body: JSON.stringify(calculateTeleopCommand(teleopKeysRef.current)),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Teleop request failed";
+        if (teleopErrorMessageRef.current !== message) {
+          teleopErrorMessageRef.current = message;
+          reportActionError("Teleop command failed", error);
+          appendActivity("system", "Teleop disabled", "Control path lost.", "danger");
+        }
+        setTeleopEnabled(false);
+      } finally {
+        teleopRequestInFlightRef.current = false;
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      const normalizedKey = normalizeTeleopKey(event.key);
+      if (!teleopKeys.has(normalizedKey) || isEditableTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      teleopKeysRef.current.add(normalizedKey);
+      if (normalizedKey === " ") {
+        void handleStopMotion();
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent): void => {
+      const normalizedKey = normalizeTeleopKey(event.key);
+      if (!teleopKeys.has(normalizedKey) || isEditableTarget(event.target)) {
+        return;
+      }
+      teleopKeysRef.current.delete(normalizedKey);
+    };
+
+    const handleBlur = (): void => {
+      teleopKeysRef.current.clear();
+      setTeleopEnabled(false);
+    };
+
+    const handleFocus = (): void => {
+      teleopKeysRef.current.clear();
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
+    teleopIntervalRef.current = window.setInterval(() => {
+      void sendCurrentCommand();
+    }, 1000 / PUBLISH_RATE_HZ);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+      if (teleopIntervalRef.current !== null) {
+        window.clearInterval(teleopIntervalRef.current);
+        teleopIntervalRef.current = null;
+      }
+      teleopKeysRef.current.clear();
+      void handleStopMotion();
+    };
+  }, [appendActivity, handleStopMotion, reportActionError, teleopEnabled]);
+
   const poseLabel = formatPoseLabel(state);
   const povLabel = state.pov.updated_at ? formatTimestamp(state.pov.updated_at) : "No frame";
   const mapLabel = state.map ? formatTimestamp(state.map.updated_at) : "No map";
@@ -734,13 +902,13 @@ export default function App(): React.ReactElement {
           <span className={`toolbar-chip status-pill ${state.connected ? "is-live" : "is-offline"}`}>
             {state.connected ? "Online" : "Offline"}
           </span>
-          <span className="toolbar-chip">{state.pois.length} VLM</span>
-          <span className="toolbar-chip">{state.yolo_objects.length} YOLO</span>
-          <span className={`toolbar-chip tone-${state.inspection.status}`}>{state.inspection.status}</span>
-          <span className={`toolbar-chip ${state.yolo_runtime.mode === "live" ? "tone-success" : ""}`}>
-            YOLO {state.yolo_runtime.mode}
-          </span>
-          {poseLabel ? <span className="toolbar-chip monospace-chip">{poseLabel}</span> : null}
+          {teleopEnabled ? <span className="toolbar-chip tone-danger">Teleop armed</span> : null}
+          {state.inspection.status === "running" ? (
+            <span className="toolbar-chip tone-running">Inspecting</span>
+          ) : null}
+          {state.yolo_runtime.mode !== "live" ? (
+            <span className="toolbar-chip tone-accent">YOLO paused</span>
+          ) : null}
         </div>
 
         <div className="topbar-actions">
@@ -769,49 +937,6 @@ export default function App(): React.ReactElement {
             </button>
           </div>
 
-          <label className="mode-select">
-            <span>Inspect</span>
-            <select
-              onChange={(event) => {
-                void handleInspectionModeChange(event.target.value as ManualInspectionMode);
-              }}
-              value={state.inspection_settings.manual_mode}
-            >
-              <option value="ai_gate">AI Gate</option>
-              <option value="always_create">Always Create</option>
-            </select>
-          </label>
-
-          <button
-            className="action-button secondary"
-            onClick={() => {
-              void handleYoloModeChange(state.yolo_runtime.mode === "live" ? "paused" : "live");
-            }}
-            type="button"
-          >
-            {state.yolo_runtime.mode === "live" ? "Pause YOLO" : "Resume YOLO"}
-          </button>
-
-          <button
-            className={`action-button secondary ${state.layers.show_yolo ? "" : "is-off"}`}
-            onClick={() => {
-              void handleLayerToggle("show_yolo", !state.layers.show_yolo);
-            }}
-            type="button"
-          >
-            {state.layers.show_yolo ? "Hide YOLO" : "Show YOLO"}
-          </button>
-
-          <button
-            className={`action-button secondary ${state.layers.show_pois ? "" : "is-off"}`}
-            onClick={() => {
-              void handleLayerToggle("show_pois", !state.layers.show_pois);
-            }}
-            type="button"
-          >
-            {state.layers.show_pois ? "Hide VLM" : "Show VLM"}
-          </button>
-
           <button
             className="action-button"
             disabled={busyAction !== null || state.inspection.status === "running"}
@@ -833,6 +958,90 @@ export default function App(): React.ReactElement {
           >
             Save
           </button>
+
+          <button
+            className={`action-button ${teleopEnabled ? "danger" : "success"}`}
+            disabled={busyAction === "system-stop"}
+            onClick={() => {
+              handleToggleTeleop();
+            }}
+            type="button"
+          >
+            {teleopEnabled ? "Teleop On" : "Teleop Off"}
+          </button>
+
+          <button
+            className="action-button danger"
+            disabled={busyAction === "system-stop"}
+            onClick={() => {
+              void handleStopDimos();
+            }}
+            type="button"
+          >
+            {busyAction === "system-stop" ? "Stopping" : "Stop"}
+          </button>
+
+          <div className="topbar-menu" ref={controlsMenuRef}>
+            <button
+              aria-expanded={controlsMenuOpen}
+              aria-haspopup="menu"
+              className="action-button secondary"
+              onClick={() => {
+                setControlsMenuOpen((current) => !current);
+              }}
+              type="button"
+            >
+              Settings
+            </button>
+
+            {controlsMenuOpen ? (
+              <div className="menu-popover">
+                <label className="menu-field">
+                  <span>Inspect mode</span>
+                  <select
+                    onChange={(event) => {
+                      void handleInspectionModeChange(event.target.value as ManualInspectionMode);
+                      setControlsMenuOpen(false);
+                    }}
+                    value={state.inspection_settings.manual_mode}
+                  >
+                    <option value="ai_gate">AI Gate</option>
+                    <option value="always_create">Always Create</option>
+                  </select>
+                </label>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    void handleYoloModeChange(state.yolo_runtime.mode === "live" ? "paused" : "live");
+                    setControlsMenuOpen(false);
+                  }}
+                  type="button"
+                >
+                  {state.yolo_runtime.mode === "live" ? "Pause YOLO" : "Resume YOLO"}
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    void handleLayerToggle("show_yolo", !state.layers.show_yolo);
+                    setControlsMenuOpen(false);
+                  }}
+                  type="button"
+                >
+                  {state.layers.show_yolo ? "Hide YOLO layer" : "Show YOLO layer"}
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    void handleLayerToggle("show_pois", !state.layers.show_pois);
+                    setControlsMenuOpen(false);
+                  }}
+                  type="button"
+                >
+                  {state.layers.show_pois ? "Hide VLM layer" : "Show VLM layer"}
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -847,9 +1056,7 @@ export default function App(): React.ReactElement {
         <PanelShell
           aside={
             <div className="panel-chip-row">
-              <span className="toolbar-chip">{state.pois.length} VLM</span>
-              <span className="toolbar-chip">{state.yolo_objects.length} YOLO</span>
-              <span className="toolbar-chip">Map {mapLabel}</span>
+              <span className="toolbar-chip">Updated {mapLabel}</span>
             </div>
           }
           bodyClassName="panel-body-stage"

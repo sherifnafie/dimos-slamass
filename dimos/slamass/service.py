@@ -24,6 +24,8 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import time
 from typing import Any
 import zlib
@@ -299,6 +301,15 @@ class InspectionSettingsRequest(BaseModel):
     manual_mode: str
 
 
+class TeleopCommandRequest(BaseModel):
+    linear_x: float = 0.0
+    linear_y: float = 0.0
+    linear_z: float = 0.0
+    angular_x: float = 0.0
+    angular_y: float = 0.0
+    angular_z: float = 0.0
+
+
 class YoloRuntimeRequest(BaseModel):
     mode: str
 
@@ -370,6 +381,37 @@ class McpToolClient:
         if error is not None:
             raise RuntimeError(f"MCP tool '{name}' failed: {error}")
         return body
+
+
+def run_dimos_stop_command(force: bool = False) -> dict[str, Any]:
+    """Stop the active DimOS run using the local CLI."""
+    dimos_binary = shutil.which("dimos")
+    if dimos_binary is None:
+        raise RuntimeError("Could not find 'dimos' on PATH")
+
+    command = [dimos_binary, "stop"]
+    if force:
+        command.append("--force")
+
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=False,
+    )
+    stdout = completed.stdout.strip()
+    stderr = completed.stderr.strip()
+    if completed.returncode != 0:
+        detail = stderr or stdout or f"dimos stop failed with exit code {completed.returncode}"
+        raise RuntimeError(detail)
+
+    return {
+        "ok": True,
+        "returncode": completed.returncode,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
 
 
 class OpenAIInspectionAnalyzer:
@@ -579,6 +621,34 @@ class MapSocketClient:
             payload = {"x": x, "y": y, "yaw": yaw}
         await self._client.emit("click", payload)
 
+    async def emit_move_command(
+        self,
+        *,
+        linear_x: float = 0.0,
+        linear_y: float = 0.0,
+        linear_z: float = 0.0,
+        angular_x: float = 0.0,
+        angular_y: float = 0.0,
+        angular_z: float = 0.0,
+    ) -> None:
+        if not self._client.connected:
+            raise RuntimeError("Map socket is not connected")
+        await self._client.emit(
+            "move_command",
+            {
+                "linear": {
+                    "x": linear_x,
+                    "y": linear_y,
+                    "z": linear_z,
+                },
+                "angular": {
+                    "x": angular_x,
+                    "y": angular_y,
+                    "z": angular_z,
+                },
+            },
+        )
+
     def _register_handlers(self) -> None:
         @self._client.event
         async def connect() -> None:
@@ -657,6 +727,7 @@ class SlamassService:
         storage: SlamassStorage | None = None,
         mcp_client: McpToolClient | None = None,
         analyzer: OpenAIInspectionAnalyzer | None = None,
+        stop_command_runner: Any | None = None,
         poi_arrival_tolerance_m: float = POI_ARRIVAL_TOLERANCE_METERS,
         poi_arrival_settle_seconds: float = POI_ARRIVAL_SETTLE_SECONDS,
         poi_arrival_timeout_seconds: float = POI_ARRIVAL_TIMEOUT_SECONDS,
@@ -666,6 +737,7 @@ class SlamassService:
         self.storage = storage or SlamassStorage(state_dir)
         self.mcp_client = mcp_client or McpToolClient(mcp_url)
         self.analyzer = analyzer or OpenAIInspectionAnalyzer(model_name=model_name)
+        self._stop_command_runner = stop_command_runner or run_dimos_stop_command
         self.map_client = MapSocketClient(
             map_socket_url,
             on_connection=self._handle_connection_change,
@@ -780,6 +852,41 @@ class SlamassService:
 
     async def navigate(self, x: float, y: float, yaw: float | None = None) -> None:
         await self.map_client.emit_click(x, y, yaw)
+
+    async def send_move_command(
+        self,
+        *,
+        linear_x: float = 0.0,
+        linear_y: float = 0.0,
+        linear_z: float = 0.0,
+        angular_x: float = 0.0,
+        angular_y: float = 0.0,
+        angular_z: float = 0.0,
+    ) -> dict[str, Any]:
+        try:
+            await self.map_client.emit_move_command(
+                linear_x=linear_x,
+                linear_y=linear_y,
+                linear_z=linear_z,
+                angular_x=angular_x,
+                angular_y=angular_y,
+                angular_z=angular_z,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"ok": True}
+
+    async def stop_motion(self) -> dict[str, Any]:
+        return await self.send_move_command()
+
+    async def stop_dimos(self, *, force: bool = False) -> dict[str, Any]:
+        with contextlib_suppress(HTTPException):
+            await self.stop_motion()
+        try:
+            result = await asyncio.to_thread(self._stop_command_runner, force)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return result
 
     async def go_to_poi(self, poi_id: str) -> None:
         async with self._state_lock:
@@ -2051,6 +2158,25 @@ def create_app(
     async def post_navigate(request: NavigateRequest) -> dict[str, Any]:
         await slamass.navigate(request.x, request.y, request.yaw)
         return {"ok": True}
+
+    @app.post("/api/teleop/command")
+    async def post_teleop_command(request: TeleopCommandRequest) -> dict[str, Any]:
+        return await slamass.send_move_command(
+            linear_x=request.linear_x,
+            linear_y=request.linear_y,
+            linear_z=request.linear_z,
+            angular_x=request.angular_x,
+            angular_y=request.angular_y,
+            angular_z=request.angular_z,
+        )
+
+    @app.post("/api/teleop/stop")
+    async def post_teleop_stop() -> dict[str, Any]:
+        return await slamass.stop_motion()
+
+    @app.post("/api/system/stop")
+    async def post_system_stop() -> dict[str, Any]:
+        return await slamass.stop_dimos(force=False)
 
     @app.post("/api/inspect/now")
     async def post_inspect_now() -> dict[str, Any]:

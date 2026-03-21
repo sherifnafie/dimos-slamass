@@ -108,7 +108,7 @@ img {
 
 .topbar {
   position: relative;
-  z-index: 1;
+  z-index: 20;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
@@ -175,6 +175,10 @@ img {
 
 .topbar-actions {
   justify-content: flex-end;
+}
+
+.topbar-menu {
+  position: relative;
 }
 
 .toolbar-chip,
@@ -332,6 +336,102 @@ img {
   color: #ffd5d5;
 }
 
+.action-button.success {
+  background: rgba(110, 231, 183, 0.16);
+  border: 1px solid rgba(110, 231, 183, 0.28);
+  color: #d7ffee;
+}
+
+.menu-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: rgba(12, 16, 24, 0.96);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px);
+}
+
+.menu-popover::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  right: 18px;
+  width: 14px;
+  height: 14px;
+  border-top: 1px solid var(--border-strong);
+  border-left: 1px solid var(--border-strong);
+  background: rgba(12, 16, 24, 0.96);
+  transform: rotate(45deg);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+
+.menu-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.menu-item-danger {
+  color: #ffc4c4;
+}
+
+.menu-item-danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+  color: #ffe0e0;
+}
+
+.menu-field {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.menu-field span {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.menu-field select {
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 0 12px;
+}
+
 .action-button:disabled,
 .close-button:disabled,
 .mini-button:disabled,
@@ -343,7 +443,7 @@ img {
 
 .workspace {
   position: relative;
-  z-index: 1;
+  z-index: 0;
   display: grid;
   gap: 12px;
   flex: 1;
@@ -997,25 +1097,6 @@ img {
   height: 100%;
   color: var(--text-muted);
   font-size: 0.82rem;
-}
-
-.rail-composer {
-  display: flex;
-  gap: 8px;
-}
-
-.composer-input {
-  flex: 1;
-  height: 38px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text);
-  padding: 0 12px;
-}
-
-.composer-input::placeholder {
-  color: var(--text-muted);
 }
 
 .poi-modal-backdrop {

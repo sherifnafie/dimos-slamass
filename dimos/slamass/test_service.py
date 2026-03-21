@@ -47,9 +47,31 @@ class FakeMcpClient:
 class FakeMapClient:
     def __init__(self) -> None:
         self.calls: list[tuple[float, float, float | None]] = []
+        self.move_calls: list[dict[str, float]] = []
 
     async def emit_click(self, x: float, y: float, yaw: float | None = None) -> None:
         self.calls.append((x, y, yaw))
+
+    async def emit_move_command(
+        self,
+        *,
+        linear_x: float = 0.0,
+        linear_y: float = 0.0,
+        linear_z: float = 0.0,
+        angular_x: float = 0.0,
+        angular_y: float = 0.0,
+        angular_z: float = 0.0,
+    ) -> None:
+        self.move_calls.append(
+            {
+                "linear_x": linear_x,
+                "linear_y": linear_y,
+                "linear_z": linear_z,
+                "angular_x": angular_x,
+                "angular_y": angular_y,
+                "angular_z": angular_z,
+            }
+        )
 
 
 class FakeAnalyzer:
@@ -414,3 +436,67 @@ async def test_service_go_to_yolo_object_uses_best_view_pose(tmp_path: Path) -> 
 
     assert fake_map_client.calls == [(1.2, 1.4, None)]
     assert fake_mcp.relative_move_calls == [(0.0, 0.0, pytest.approx(40.10704565915762))]
+
+
+@pytest.mark.asyncio
+async def test_service_send_move_command_uses_map_socket(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_map_client = FakeMapClient()
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+    )
+    service.map_client = fake_map_client  # type: ignore[assignment]
+
+    result = await service.send_move_command(linear_x=0.4, linear_y=0.2, angular_z=-0.7)
+
+    assert result == {"ok": True}
+    assert fake_map_client.move_calls == [
+        {
+            "linear_x": 0.4,
+            "linear_y": 0.2,
+            "linear_z": 0.0,
+            "angular_x": 0.0,
+            "angular_y": 0.0,
+            "angular_z": -0.7,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_service_stop_dimos_runs_stop_command_after_zero_velocity(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_map_client = FakeMapClient()
+    stop_calls: list[bool] = []
+
+    def fake_stop_runner(force: bool = False) -> dict[str, object]:
+        stop_calls.append(force)
+        return {"ok": True, "returncode": 0, "stdout": "stopped", "stderr": ""}
+
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+        stop_command_runner=fake_stop_runner,
+    )
+    service.map_client = fake_map_client  # type: ignore[assignment]
+
+    result = await service.stop_dimos(force=False)
+
+    assert result["ok"] is True
+    assert stop_calls == [False]
+    assert fake_map_client.move_calls[-1] == {
+        "linear_x": 0.0,
+        "linear_y": 0.0,
+        "linear_z": 0.0,
+        "angular_x": 0.0,
+        "angular_y": 0.0,
+        "angular_z": 0.0,
+    }

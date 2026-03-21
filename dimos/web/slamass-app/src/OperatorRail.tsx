@@ -185,13 +185,6 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
             </div>
           )}
         </div>
-
-        <div className="rail-composer">
-          <input className="composer-input" disabled placeholder="Chat API not wired yet" />
-          <button className="mini-button" disabled type="button">
-            Send
-          </button>
-        </div>
       </div>
     </PanelShell>
   );
