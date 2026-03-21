@@ -61,9 +61,9 @@ from dimos.utils.logging_config import setup_logger
 logger = setup_logger()
 
 UI_MIN_ZOOM = 1.0
-UI_MAX_ZOOM = 8.0
-UI_FOCUS_POI_ZOOM = 2.6
-UI_FOCUS_ROBOT_ZOOM = 2.2
+UI_MAX_ZOOM = 1.0
+UI_FOCUS_POI_ZOOM = 1.0
+UI_FOCUS_ROBOT_ZOOM = 1.0
 POI_ARRIVAL_TOLERANCE_METERS = 0.6
 POI_ARRIVAL_SETTLE_SECONDS = 1.0
 POI_ARRIVAL_TIMEOUT_SECONDS = 120.0
@@ -75,8 +75,12 @@ SEMANTIC_KIND_YOLO = "yolo_object"
 YOLO_MODE_LIVE = "live"
 YOLO_MODE_PAUSED = "paused"
 VALID_YOLO_MODES = (YOLO_MODE_LIVE, YOLO_MODE_PAUSED)
-YOLO_PROMOTION_WINDOW_SECONDS = 10.0
-YOLO_PROMOTION_MIN_HITS = 4
+# SLAMASS consumes world-projected 3D detections, which are naturally sparser and
+# noisier than the raw per-frame 2D detector output. For a live demo we want
+# objects to appear after a quick confirmation, not after the robot stares at the
+# same thing for several seconds.
+YOLO_PROMOTION_WINDOW_SECONDS = 12.0
+YOLO_PROMOTION_MIN_HITS = 2
 YOLO_DEDUPE_DISTANCE_METERS = 0.75
 YOLO_DEFAULT_LAYER_VISIBLE = True
 VALID_MANUAL_INSPECTION_MODES = (

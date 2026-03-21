@@ -1,12 +1,11 @@
 import React from "react";
 
+import go2TopdownSprite from "./assets/go2-topdown.png";
 import {
   buildViewport,
-  clampZoom,
   panCamera,
   screenToWorld,
   worldToImagePixels,
-  zoomCameraAtScreenPoint,
 } from "./mapViewport";
 import { refFromPoi, refFromYoloObject, semanticKey } from "./semanticItems";
 import {
@@ -73,10 +72,10 @@ function describeHighlightState(ui: UiState): string {
 }
 
 function yoloLabelVisibility(zoom: number): "none" | "priority" | "all" {
-  if (zoom < 1.6) {
+  if (zoom < 1.25) {
     return "none";
   }
-  if (zoom < 2.4) {
+  if (zoom < 2) {
     return "priority";
   }
   return "all";
@@ -106,6 +105,8 @@ type DragState = {
   moved: boolean;
   startCamera: UiCameraState;
 };
+
+const ROBOT_SPRITE_SIZE = 44;
 
 export function MapPane(props: MapPaneProps): React.ReactElement {
   const {
@@ -169,7 +170,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     if (labelVisibility === "all") {
       return new Set(sorted);
     }
-    return new Set(sorted.slice(0, 24));
+    return new Set(sorted.slice(0, 18));
   }, [activeYoloObjects, labelVisibility]);
 
   const stopEvent = React.useCallback((event: React.SyntheticEvent) => {
@@ -269,25 +270,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     }
   }, []);
 
-  const handleWheel = React.useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      if (!map || !viewport) {
-        return;
-      }
-      event.preventDefault();
-      const rect = event.currentTarget.getBoundingClientRect();
-      const localX = event.clientX - rect.left;
-      const localY = event.clientY - rect.top;
-      const zoomDelta = event.deltaY < 0 ? 1.12 : 1 / 1.12;
-      const nextZoom = clampZoom(ui.camera.zoom * zoomDelta);
-      if (nextZoom === ui.camera.zoom) {
-        return;
-      }
-      onCameraChange(zoomCameraAtScreenPoint(map, ui.camera, localX, localY, nextZoom, viewport));
-    },
-    [map, onCameraChange, ui.camera, viewport],
-  );
-
   return (
     <div
       className="map-surface"
@@ -296,7 +278,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onWheel={handleWheel}
       ref={containerRef}
     >
       {!map || !viewport ? (
@@ -308,7 +289,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
         <>
           <div className="map-chrome">
             <div className="map-meta">
-              <span>{ui.camera.zoom.toFixed(2)}x</span>
+              <span>Pan map</span>
               <span>{describeHighlightState(ui)}</span>
             </div>
             <div className="map-toolbar" onPointerDown={stopEvent}>
@@ -378,22 +359,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                   .join(" ")}
               />
             )}
-            {robotPose && (() => {
-              const [robotX, robotY] = worldToImagePixels(map, viewport, robotPose.x, robotPose.y);
-              return (
-                <g transform={`translate(${robotX}, ${robotY})`}>
-                  <circle className="robot-ring" r="13" />
-                  <circle className="robot-core" r="7" />
-                  <line
-                    className="robot-heading"
-                    x1="0"
-                    y1="0"
-                    x2={Math.cos(robotPose.yaw) * 20}
-                    y2={-Math.sin(robotPose.yaw) * 20}
-                  />
-                </g>
-              );
-            })()}
             {layers.show_pois &&
               activePois.map((poi) => {
                 const [x, y] = worldToImagePixels(map, viewport, poi.world_x, poi.world_y);
@@ -427,7 +392,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                       x2={x + Math.cos(poi.world_yaw) * 16}
                       y2={y - Math.sin(poi.world_yaw) * 16}
                     />
-                    <line className="poi-tether" x1={x} y1={y} x2={x} y2={y - 36} />
                     {(isSelected || isHighlighted) && (
                       <circle
                         className={`poi-anchor-halo ${isSelected ? "is-selected" : "is-highlighted"}`}
@@ -448,19 +412,25 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const isHighlighted = highlightedKeys.has(itemKey);
                 return (
                   <g key={`${object.object_id}-marker`}>
+                    <circle
+                      className={`yolo-ring ${isSelected ? "is-selected" : isHighlighted ? "is-highlighted" : ""}`}
+                      cx={x}
+                      cy={y}
+                      r={isSelected ? 11 : 9}
+                    />
                     {(isSelected || isHighlighted) && (
                       <circle
                         className={`yolo-halo ${isSelected ? "is-selected" : "is-highlighted"}`}
                         cx={x}
                         cy={y}
-                        r={isSelected ? 12 : 10}
+                        r={isSelected ? 14 : 12}
                       />
                     )}
                     <circle
                       className={`yolo-dot ${isSelected ? "is-selected" : isHighlighted ? "is-highlighted" : ""}`}
                       cx={x}
                       cy={y}
-                      r={isSelected ? 6 : 4.5}
+                      r={isSelected ? 6.5 : 5}
                     />
                   </g>
                 );
@@ -475,6 +445,23 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
               top: `${viewport.imageTop}px`,
             }}
           >
+            {robotPose && (() => {
+              const [robotX, robotY] = worldToImagePixels(map, viewport, robotPose.x, robotPose.y);
+              const robotRotationDegrees = -((robotPose.yaw * 180) / Math.PI) - 90;
+              return (
+                <div
+                  aria-hidden="true"
+                  className="robot-marker"
+                  style={{
+                    left: `${robotX}px`,
+                    top: `${robotY}px`,
+                    transform: `translate(-50%, -50%) rotate(${robotRotationDegrees}deg)`,
+                  }}
+                >
+                  <img alt="" className="robot-marker-image" src={go2TopdownSprite} />
+                </div>
+              );
+            })()}
             {layers.show_pois &&
               activePois.map((poi) => {
                 const [x, y] = worldToImagePixels(map, viewport, poi.world_x, poi.world_y);
@@ -486,13 +473,14 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 return (
                   <button
                     className={[
-                      "poi-card",
+                      "poi-pin",
                       isSelected ? "is-selected" : "",
                       isHighlighted ? "is-highlighted" : "",
                       isMuted ? "is-muted" : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}
+                    aria-label={`POI ${poi.title}`}
                     key={poi.poi_id}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -500,7 +488,8 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                     }}
                     onDragStart={preventNativeDrag}
                     onPointerDown={stopEvent}
-                    style={{ left: `${x}px`, top: `${y - 42}px` }}
+                    style={{ left: `${x}px`, top: `${y}px` }}
+                    title={poi.title}
                     type="button"
                   >
                     <img
@@ -509,7 +498,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                       onDragStart={preventNativeDrag}
                       src={poi.thumbnail_url}
                     />
-                    <span>{poi.title}</span>
+                    <span className="poi-pin-label">{poi.title}</span>
                   </button>
                 );
               })}
@@ -521,7 +510,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const isSelected = selectedKey === itemKey;
                 const isHighlighted = highlightedKeys.has(itemKey);
                 const isMuted = hasHighlights && !isHighlighted && !isSelected;
-                const showLabel = labeledYoloIds.has(object.object_id);
+                const showLabel = isSelected || isHighlighted || labeledYoloIds.has(object.object_id);
                 return (
                   <button
                     className={[
@@ -533,6 +522,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                     ]
                       .filter(Boolean)
                       .join(" ")}
+                    aria-label={`YOLO ${object.label}`}
                     key={object.object_id}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -540,10 +530,11 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                     }}
                     onDragStart={preventNativeDrag}
                     onPointerDown={stopEvent}
-                    style={{ left: `${x}px`, top: `${y + 12}px` }}
+                    style={{ left: `${x}px`, top: `${y}px` }}
+                    title={`${object.label} ${Math.round(object.best_confidence * 100)}%`}
                     type="button"
                   >
-                    {showLabel ? <span>{object.label}</span> : null}
+                    {showLabel ? <span>{object.label}</span> : <span className="sr-only">{object.label}</span>}
                   </button>
                 );
               })}

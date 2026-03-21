@@ -310,7 +310,7 @@ async def test_service_focus_poi_updates_ui_state(tmp_path: Path) -> None:
     assert ui["highlighted_items"] == [{"kind": "vlm_poi", "entity_id": poi.poi_id}]
     assert ui["camera"]["center_x"] == pytest.approx(max_x)
     assert ui["camera"]["center_y"] == pytest.approx(min_y)
-    assert ui["camera"]["zoom"] == pytest.approx(2.8)
+    assert ui["camera"]["zoom"] == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio
@@ -380,7 +380,7 @@ async def test_service_promotes_yolo_object_after_repeated_hits(tmp_path: Path) 
         ],
     }
 
-    for step in range(4):
+    for step in range(2):
         payload["ts"] = 10.0 + step
         await service._handle_yolo_detections(payload)
 
@@ -389,6 +389,46 @@ async def test_service_promotes_yolo_object_after_repeated_hits(tmp_path: Path) 
     assert object_record.label == "chair"
     assert object_record.best_view_x == pytest.approx(1.0)
     assert object_record.best_view_y == pytest.approx(2.0)
+
+
+@pytest.mark.asyncio
+async def test_service_does_not_promote_yolo_object_when_hits_are_too_far_apart(
+    tmp_path: Path,
+) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+    )
+
+    payload = {
+        "ts": 10.0,
+        "view_pose": {"x": 1.0, "y": 2.0, "z": 0.0, "yaw": 0.4},
+        "detections": [
+            {
+                "class_id": 56,
+                "label": "chair",
+                "confidence": 0.92,
+                "world_x": 2.0,
+                "world_y": 3.0,
+                "world_z": 0.2,
+                "size_x": 0.5,
+                "size_y": 0.5,
+                "size_z": 0.9,
+                "crop_base64": "",
+            }
+        ],
+    }
+
+    await service._handle_yolo_detections(payload)
+    payload["ts"] = 23.0
+    await service._handle_yolo_detections(payload)
+
+    assert storage.list_yolo_objects() == []
 
 
 @pytest.mark.asyncio

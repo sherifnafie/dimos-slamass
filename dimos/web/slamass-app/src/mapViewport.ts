@@ -1,7 +1,7 @@
 import { MapState, UiCameraState } from "./types";
 
 export const MIN_MAP_ZOOM = 1;
-export const MAX_MAP_ZOOM = 8;
+export const MAX_MAP_ZOOM = 1;
 
 export type MapViewport = {
   width: number;
