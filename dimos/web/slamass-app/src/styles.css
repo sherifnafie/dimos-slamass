@@ -184,9 +184,20 @@ textarea {
   position: relative;
   flex: 1;
   min-height: 420px;
+  overflow: hidden;
   background:
     radial-gradient(circle at center, rgba(255, 255, 255, 0.06), transparent 50%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.1));
+}
+
+.map-surface {
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.map-surface:active {
+  cursor: grabbing;
 }
 
 .pov-image {
@@ -222,11 +233,54 @@ textarea {
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(0 18px 26px rgba(0, 0, 0, 0.38));
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .map-overlay {
   inset: 0;
   pointer-events: none;
+}
+
+.map-chrome {
+  position: absolute;
+  inset: 14px 14px auto 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.map-meta,
+.map-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  pointer-events: auto;
+}
+
+.map-meta span,
+.map-tool {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(18, 20, 24, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(12px);
+}
+
+.map-tool {
+  cursor: pointer;
+}
+
+.map-tool:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .path-line {
@@ -258,6 +312,38 @@ textarea {
   stroke-width: 1;
 }
 
+.poi-heading {
+  stroke: rgba(255, 255, 255, 0.32);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.poi-view-cone {
+  fill: rgba(243, 201, 114, 0.1);
+  stroke: rgba(243, 201, 114, 0.22);
+  stroke-width: 1;
+}
+
+.poi-view-cone.is-highlighted {
+  fill: rgba(243, 201, 114, 0.14);
+}
+
+.poi-view-cone.is-selected {
+  fill: rgba(243, 201, 114, 0.2);
+  stroke: rgba(243, 201, 114, 0.4);
+}
+
+.poi-anchor-halo {
+  fill: rgba(243, 201, 114, 0.14);
+  stroke: rgba(243, 201, 114, 0.5);
+  stroke-width: 1.5;
+}
+
+.poi-anchor-halo.is-selected {
+  fill: rgba(243, 201, 114, 0.22);
+  stroke: rgba(243, 201, 114, 0.82);
+}
+
 .poi-card {
   position: absolute;
   width: 148px;
@@ -273,6 +359,12 @@ textarea {
   gap: 8px;
   color: var(--text);
   cursor: pointer;
+  z-index: 2;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    opacity 140ms ease;
 }
 
 .poi-card img {
@@ -281,6 +373,8 @@ textarea {
   object-fit: cover;
   border-radius: 14px;
   display: block;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .poi-card span {
@@ -292,6 +386,17 @@ textarea {
 .poi-card.is-selected {
   border-color: rgba(243, 201, 114, 0.7);
   transform: translate(-50%, -102%) scale(1.02);
+  box-shadow: 0 24px 52px rgba(243, 201, 114, 0.16);
+  z-index: 4;
+}
+
+.poi-card.is-highlighted {
+  border-color: rgba(243, 201, 114, 0.5);
+  box-shadow: 0 18px 42px rgba(243, 201, 114, 0.12);
+}
+
+.poi-card.is-muted {
+  opacity: 0.42;
 }
 
 .inspection-footer {
@@ -391,6 +496,7 @@ textarea {
 .poi-actions {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
   margin-top: auto;
 }
 

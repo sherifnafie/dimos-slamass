@@ -1,6 +1,7 @@
 import React, { startTransition } from "react";
 
-import { AppState, MapState, Poi, RobotPose } from "./types";
+import { MapPane } from "./MapPane";
+import { AppState, Poi, UiCameraState, UiState } from "./types";
 
 const emptyState: AppState = {
   connected: false,
@@ -18,6 +19,16 @@ const emptyState: AppState = {
     status: "idle",
     message: "",
     poi_id: null,
+  },
+  ui: {
+    revision: 0,
+    camera: {
+      center_x: null,
+      center_y: null,
+      zoom: 1,
+    },
+    selected_poi_id: null,
+    highlighted_poi_ids: [],
   },
 };
 
@@ -43,220 +54,79 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-type Viewport = {
-  drawWidth: number;
-  drawHeight: number;
-  offsetX: number;
-  offsetY: number;
-};
-
-function buildViewport(map: MapState, width: number, height: number): Viewport {
-  const drawScale = Math.min(width / map.width, height / map.height);
-  const drawWidth = map.width * drawScale;
-  const drawHeight = map.height * drawScale;
-  return {
-    drawWidth,
-    drawHeight,
-    offsetX: (width - drawWidth) / 2,
-    offsetY: (height - drawHeight) / 2,
-  };
-}
-
-function worldToScreen(map: MapState, viewport: Viewport, x: number, y: number): [number, number] {
-  const normalizedX = (x - map.origin_x) / (map.width * map.resolution);
-  const normalizedY = (y - map.origin_y) / (map.height * map.resolution);
-  return [
-    viewport.offsetX + normalizedX * viewport.drawWidth,
-    viewport.offsetY + viewport.drawHeight - normalizedY * viewport.drawHeight,
-  ];
-}
-
-function screenToWorld(
-  map: MapState,
-  viewport: Viewport,
-  screenX: number,
-  screenY: number,
-): [number, number] {
-  const normalizedX = (screenX - viewport.offsetX) / viewport.drawWidth;
-  const normalizedY = 1 - (screenY - viewport.offsetY) / viewport.drawHeight;
-  return [
-    map.origin_x + normalizedX * map.width * map.resolution,
-    map.origin_y + normalizedY * map.height * map.resolution,
-  ];
-}
-
 function formatYaw(yaw: number): string {
   return `${Math.round((yaw * 180) / Math.PI)}°`;
 }
 
-function useSize<T extends HTMLElement>(): [React.RefObject<T>, { width: number; height: number }] {
-  const ref = React.useRef<T>(null);
-  const [size, setSize] = React.useState({ width: 0, height: 0 });
-
-  React.useEffect(() => {
-    if (!ref.current) {
-      return;
-    }
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) {
-        return;
-      }
-      const box = entry.contentRect;
-      setSize({ width: box.width, height: box.height });
-    });
-    observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
-
-  return [ref, size];
-}
-
-type MapPaneProps = {
-  map: MapState | null;
-  robotPose: RobotPose | null;
-  path: Array<[number, number]>;
-  pois: Poi[];
-  selectedPoiId: string | null;
-  onSelectPoi: (poiId: string | null) => void;
-  onNavigate: (x: number, y: number) => void;
-};
-
-function MapPane(props: MapPaneProps): React.ReactElement {
-  const { map, robotPose, path, pois, selectedPoiId, onSelectPoi, onNavigate } = props;
-  const [containerRef, size] = useSize<HTMLDivElement>();
-
-  const viewport = React.useMemo(() => {
-    if (!map || size.width <= 0 || size.height <= 0) {
-      return null;
-    }
-    return buildViewport(map, size.width, size.height);
-  }, [map, size.height, size.width]);
-
-  const robotPoint = React.useMemo(() => {
-    if (!map || !viewport || !robotPose) {
-      return null;
-    }
-    return worldToScreen(map, viewport, robotPose.x, robotPose.y);
-  }, [map, robotPose, viewport]);
-
-  const handleClick = React.useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      if (!map || !viewport) {
-        return;
-      }
-      const rect = event.currentTarget.getBoundingClientRect();
-      const localX = event.clientX - rect.left;
-      const localY = event.clientY - rect.top;
-
-      if (
-        localX < viewport.offsetX ||
-        localY < viewport.offsetY ||
-        localX > viewport.offsetX + viewport.drawWidth ||
-        localY > viewport.offsetY + viewport.drawHeight
-      ) {
-        return;
-      }
-
-      const [worldX, worldY] = screenToWorld(map, viewport, localX, localY);
-      onNavigate(worldX, worldY);
-      onSelectPoi(null);
-    },
-    [map, onNavigate, onSelectPoi, viewport],
-  );
-
-  return (
-    <div className="map-surface" ref={containerRef} onClick={handleClick}>
-      {!map || !viewport ? (
-        <div className="panel-empty">
-          <h3>SLAMASS map not ready</h3>
-          <p>Start the Go2 stack and wait for the service to ingest raw costmap updates.</p>
-        </div>
-      ) : (
-        <>
-          <img
-            alt="SLAMASS occupancy map"
-            className="map-image"
-            src={map.image_url}
-            style={{
-              width: `${viewport.drawWidth}px`,
-              height: `${viewport.drawHeight}px`,
-              left: `${viewport.offsetX}px`,
-              top: `${viewport.offsetY}px`,
-            }}
-          />
-          <svg className="map-overlay" viewBox={`0 0 ${size.width} ${size.height}`}>
-            {path.length > 1 && (
-              <polyline
-                className="path-line"
-                points={path
-                  .map(([x, y]) => worldToScreen(map, viewport, x, y).join(","))
-                  .join(" ")}
-              />
-            )}
-            {robotPoint && robotPose && (
-              <g transform={`translate(${robotPoint[0]}, ${robotPoint[1]})`}>
-                <circle className="robot-ring" r="13" />
-                <circle className="robot-core" r="7" />
-                <line
-                  className="robot-heading"
-                  x1="0"
-                  y1="0"
-                  x2={Math.cos(robotPose.yaw) * 20}
-                  y2={-Math.sin(robotPose.yaw) * 20}
-                />
-              </g>
-            )}
-            {pois
-              .filter((poi) => poi.status !== "deleted")
-              .map((poi) => {
-                const [x, y] = worldToScreen(map, viewport, poi.world_x, poi.world_y);
-                return (
-                  <line
-                    key={`${poi.poi_id}-tether`}
-                    className="poi-tether"
-                    x1={x}
-                    y1={y}
-                    x2={x}
-                    y2={y - 34}
-                  />
-                );
-              })}
-          </svg>
-          {pois
-            .filter((poi) => poi.status !== "deleted")
-            .map((poi) => {
-              const [x, y] = worldToScreen(map, viewport, poi.world_x, poi.world_y);
-              const isSelected = poi.poi_id === selectedPoiId;
-              return (
-                <button
-                  key={poi.poi_id}
-                  className={`poi-card ${isSelected ? "is-selected" : ""}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelectPoi(poi.poi_id);
-                  }}
-                  style={{ left: `${x}px`, top: `${y - 42}px` }}
-                  type="button"
-                >
-                  <img alt={poi.title} src={poi.thumbnail_url} />
-                  <span>{poi.title}</span>
-                </button>
-              );
-            })}
-        </>
-      )}
-    </div>
-  );
+function applyUiState(previous: UiState, next: UiState): UiState {
+  return next.revision >= previous.revision ? next : previous;
 }
 
 export default function App(): React.ReactElement {
   const [state, setState] = React.useState<AppState>(emptyState);
-  const [selectedPoiId, setSelectedPoiId] = React.useState<string | null>(null);
   const [busyAction, setBusyAction] = React.useState<string | null>(null);
+  const cameraSyncTimerRef = React.useRef<number | null>(null);
+
   const selectedPoi = React.useMemo(
-    () => state.pois.find((poi) => poi.poi_id === selectedPoiId) ?? null,
-    [selectedPoiId, state.pois],
+    () => state.pois.find((poi) => poi.poi_id === state.ui.selected_poi_id) ?? null,
+    [state.pois, state.ui.selected_poi_id],
+  );
+
+  React.useEffect(() => {
+    return () => {
+      if (cameraSyncTimerRef.current !== null) {
+        window.clearTimeout(cameraSyncTimerRef.current);
+      }
+    };
+  }, []);
+
+  const mergeUiState = React.useCallback((nextUi: UiState) => {
+    if (cameraSyncTimerRef.current !== null) {
+      window.clearTimeout(cameraSyncTimerRef.current);
+      cameraSyncTimerRef.current = null;
+    }
+    startTransition(() => {
+      setState((previous) => ({
+        ...previous,
+        ui: applyUiState(previous.ui, nextUi),
+      }));
+    });
+  }, []);
+
+  const issueUiCommand = React.useCallback(
+    async (url: string, init?: RequestInit): Promise<UiState> => {
+      const nextUi = await fetchJson<UiState>(url, init);
+      mergeUiState(nextUi);
+      return nextUi;
+    },
+    [mergeUiState],
+  );
+
+  const queueCameraSync = React.useCallback(
+    (camera: UiCameraState) => {
+      startTransition(() => {
+        setState((previous) => ({
+          ...previous,
+          ui: {
+            ...previous.ui,
+            camera,
+          },
+        }));
+      });
+
+      if (cameraSyncTimerRef.current !== null) {
+        window.clearTimeout(cameraSyncTimerRef.current);
+      }
+
+      cameraSyncTimerRef.current = window.setTimeout(() => {
+        void issueUiCommand("/api/ui/camera", {
+          method: "PUT",
+          body: JSON.stringify(camera),
+        });
+        cameraSyncTimerRef.current = null;
+      }, 140);
+    },
+    [issueUiCommand],
   );
 
   React.useEffect(() => {
@@ -269,9 +139,6 @@ export default function App(): React.ReactElement {
       }
       startTransition(() => {
         setState(data);
-        if (data.inspection.poi_id) {
-          setSelectedPoiId(data.inspection.poi_id);
-        }
       });
     };
 
@@ -289,7 +156,7 @@ export default function App(): React.ReactElement {
       });
     });
     source.addEventListener("map_updated", (event) => {
-      const payload = JSON.parse((event as MessageEvent<string>).data) as MapState;
+      const payload = JSON.parse((event as MessageEvent<string>).data) as AppState["map"];
       startTransition(() => {
         setState((previous) => ({ ...previous, map: payload }));
       });
@@ -307,24 +174,24 @@ export default function App(): React.ReactElement {
           ...previous,
           pois: previous.pois.filter((poi) => poi.poi_id !== payload.poi_id),
         }));
-        setSelectedPoiId((current) => (current === payload.poi_id ? null : current));
       });
     });
     source.addEventListener("inspection_updated", (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as AppState["inspection"];
       startTransition(() => {
         setState((previous) => ({ ...previous, inspection: payload }));
-        if (payload.poi_id) {
-          setSelectedPoiId(payload.poi_id);
-        }
       });
+    });
+    source.addEventListener("ui_state_updated", (event) => {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as UiState;
+      mergeUiState(payload);
     });
 
     return () => {
       cancelled = true;
       source.close();
     };
-  }, []);
+  }, [mergeUiState]);
 
   const handleInspectNow = React.useCallback(async () => {
     setBusyAction("inspect");
@@ -345,33 +212,103 @@ export default function App(): React.ReactElement {
   }, []);
 
   const handleNavigate = React.useCallback(async (x: number, y: number) => {
+    await issueUiCommand("/api/ui/select-poi", {
+      method: "POST",
+      body: JSON.stringify({ poi_id: null }),
+    });
     await fetchJson("/api/navigate", {
       method: "POST",
       body: JSON.stringify({ x, y }),
     });
-  }, []);
+  }, [issueUiCommand]);
 
-  const handleGoToPoi = React.useCallback(async (poiId: string) => {
-    setBusyAction(`go-${poiId}`);
-    try {
-      await fetchJson(`/api/pois/${poiId}/go`, { method: "POST" });
-    } finally {
-      setBusyAction(null);
-    }
-  }, []);
+  const handleGoToPoi = React.useCallback(
+    async (poiId: string) => {
+      setBusyAction(`go-${poiId}`);
+      try {
+        await fetchJson(`/api/pois/${poiId}/go`, { method: "POST" });
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [],
+  );
 
-  const handleDeletePoi = React.useCallback(async (poiId: string) => {
-    const confirmed = window.confirm("Delete this POI from the SLAMASS map?");
-    if (!confirmed) {
-      return;
-    }
-    setBusyAction(`delete-${poiId}`);
-    try {
-      await fetchJson(`/api/pois/${poiId}/delete`, { method: "POST" });
-    } finally {
-      setBusyAction(null);
-    }
-  }, []);
+  const handleDeletePoi = React.useCallback(
+    async (poiId: string) => {
+      const confirmed = window.confirm("Delete this POI from the SLAMASS map?");
+      if (!confirmed) {
+        return;
+      }
+      setBusyAction(`delete-${poiId}`);
+      try {
+        await fetchJson(`/api/pois/${poiId}/delete`, { method: "POST" });
+      } finally {
+        setBusyAction(null);
+      }
+    },
+    [],
+  );
+
+  const handleSelectPoi = React.useCallback(
+    async (poiId: string | null) => {
+      startTransition(() => {
+        setState((previous) => ({
+          ...previous,
+          ui: {
+            ...previous.ui,
+            selected_poi_id: poiId,
+          },
+        }));
+      });
+      await issueUiCommand("/api/ui/select-poi", {
+        method: "POST",
+        body: JSON.stringify({ poi_id: poiId }),
+      });
+    },
+    [issueUiCommand],
+  );
+
+  const handleFocusPoi = React.useCallback(
+    async (poiId: string) => {
+      await issueUiCommand(`/api/ui/focus-poi/${poiId}`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+    },
+    [issueUiCommand],
+  );
+
+  const handleHighlightPoi = React.useCallback(
+    async (poiId: string) => {
+      await issueUiCommand("/api/ui/highlight-pois", {
+        method: "POST",
+        body: JSON.stringify({ poi_ids: [poiId], selected_poi_id: poiId }),
+      });
+    },
+    [issueUiCommand],
+  );
+
+  const handleFocusMap = React.useCallback(async () => {
+    await issueUiCommand("/api/ui/focus-map", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  }, [issueUiCommand]);
+
+  const handleFocusRobot = React.useCallback(async () => {
+    await issueUiCommand("/api/ui/focus-robot", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  }, [issueUiCommand]);
+
+  const handleClearFocus = React.useCallback(async () => {
+    await issueUiCommand("/api/ui/clear-focus", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  }, [issueUiCommand]);
 
   return (
     <div className="app-shell">
@@ -443,20 +380,32 @@ export default function App(): React.ReactElement {
               <p className="panel-kicker">Persistent substrate</p>
               <h2>SLAMASS Map</h2>
             </div>
-            <div className="panel-footnote">
-              Click map to navigate. Click a floating card to inspect a POI.
-            </div>
           </div>
           <MapPane
             map={state.map}
+            onCameraChange={queueCameraSync}
+            onClearFocus={() => {
+              void handleClearFocus();
+            }}
+            onFocusMap={() => {
+              void handleFocusMap();
+            }}
+            onFocusPoi={(poiId) => {
+              void handleFocusPoi(poiId);
+            }}
+            onFocusRobot={() => {
+              void handleFocusRobot();
+            }}
             onNavigate={(x, y) => {
               void handleNavigate(x, y);
             }}
-            onSelectPoi={setSelectedPoiId}
+            onSelectPoi={(poiId) => {
+              void handleSelectPoi(poiId);
+            }}
             path={state.path}
             pois={state.pois}
             robotPose={state.robot_pose}
-            selectedPoiId={selectedPoiId}
+            ui={state.ui}
           />
           <div className="panel-footer inspection-footer">
             <span className={`inspection-state state-${state.inspection.status}`}>
@@ -468,7 +417,12 @@ export default function App(): React.ReactElement {
       </main>
 
       {selectedPoi && (
-        <div className="poi-modal-backdrop" onClick={() => setSelectedPoiId(null)}>
+        <div
+          className="poi-modal-backdrop"
+          onClick={() => {
+            void handleSelectPoi(null);
+          }}
+        >
           <div className="poi-modal" onClick={(event) => event.stopPropagation()}>
             <div className="poi-modal-media">
               <img alt={selectedPoi.title} src={selectedPoi.hero_image_url} />
@@ -479,14 +433,21 @@ export default function App(): React.ReactElement {
                   <p className="eyebrow">{selectedPoi.category}</p>
                   <h3>{selectedPoi.title}</h3>
                 </div>
-                <button className="close-button" onClick={() => setSelectedPoiId(null)} type="button">
+                <button
+                  className="close-button"
+                  onClick={() => {
+                    void handleSelectPoi(null);
+                  }}
+                  type="button"
+                >
                   Close
                 </button>
               </div>
               <p className="poi-summary">{selectedPoi.summary}</p>
               <div className="poi-meta">
                 <span>
-                  Pose: {selectedPoi.world_x.toFixed(2)}, {selectedPoi.world_y.toFixed(2)}
+                  View pose: {selectedPoi.world_x.toFixed(2)}, {selectedPoi.world_y.toFixed(2)} |{" "}
+                  {formatYaw(selectedPoi.world_yaw)}
                 </span>
                 <span>Score: {selectedPoi.interest_score.toFixed(2)}</span>
               </div>
@@ -498,6 +459,24 @@ export default function App(): React.ReactElement {
                 </div>
               )}
               <div className="poi-actions">
+                <button
+                  className="action-button secondary"
+                  onClick={() => {
+                    void handleHighlightPoi(selectedPoi.poi_id);
+                  }}
+                  type="button"
+                >
+                  Highlight
+                </button>
+                <button
+                  className="action-button secondary"
+                  onClick={() => {
+                    void handleFocusPoi(selectedPoi.poi_id);
+                  }}
+                  type="button"
+                >
+                  Focus View
+                </button>
                 <button
                   className="action-button"
                   disabled={busyAction === `go-${selectedPoi.poi_id}`}

@@ -25,6 +25,7 @@ The repo now already contains a working first pass of this concept:
 - manual `Inspect Now` using OpenAI vision
 - floating POI cards with detail modal and delete
 - `Go To` wired to the stored POI viewpoint pose, meaning `x`, `y`, and the recorded viewing `yaw`
+- a service-owned UI command layer for map focus state, selection, highlights, and camera control, so future agent-driven zoom/highlight behavior has a clean path
 
 Still roadmap rather than current reality:
 

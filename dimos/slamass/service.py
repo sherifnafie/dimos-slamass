@@ -18,7 +18,7 @@ import argparse
 import asyncio
 import base64
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import math
 import os
@@ -48,6 +48,15 @@ from dimos.utils.llm_utils import extract_json
 from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
+
+UI_MIN_ZOOM = 1.0
+UI_MAX_ZOOM = 8.0
+UI_FOCUS_POI_ZOOM = 2.6
+UI_FOCUS_ROBOT_ZOOM = 2.2
+POI_ARRIVAL_TOLERANCE_METERS = 0.6
+POI_ARRIVAL_SETTLE_SECONDS = 1.0
+POI_ARRIVAL_TIMEOUT_SECONDS = 120.0
+POI_ROTATION_THRESHOLD_DEGREES = 8.0
 
 
 def load_slamass_env() -> None:
@@ -109,10 +118,44 @@ class InspectionAnalysis:
         }
 
 
+@dataclass(slots=True)
+class UiCameraState:
+    center_x: float | None = None
+    center_y: float | None = None
+    zoom: float = 1.0
+
+
+@dataclass(slots=True)
+class SlamassUiState:
+    camera: UiCameraState = field(default_factory=UiCameraState)
+    selected_poi_id: str | None = None
+    highlighted_poi_ids: list[str] = field(default_factory=list)
+    revision: int = 0
+
+
 class NavigateRequest(BaseModel):
     x: float
     y: float
     yaw: float | None = None
+
+
+class UiCameraRequest(BaseModel):
+    center_x: float
+    center_y: float
+    zoom: float
+
+
+class UiSelectionRequest(BaseModel):
+    poi_id: str | None = None
+
+
+class UiHighlightRequest(BaseModel):
+    poi_ids: list[str]
+    selected_poi_id: str | None = None
+
+
+class UiFocusRequest(BaseModel):
+    zoom: float | None = None
 
 
 class McpToolClient:
@@ -322,9 +365,14 @@ class MapSocketClient:
     async def emit_click(self, x: float, y: float, yaw: float | None = None) -> None:
         if not self._client.connected:
             raise RuntimeError("Map socket is not connected")
-        payload: dict[str, float] = {"x": x, "y": y}
-        if yaw is not None:
-            payload["yaw"] = yaw
+        payload: list[float] | dict[str, float]
+        if yaw is None:
+            # Preserve legacy click payload shape so plain click-to-go works
+            # even if the running websocket_vis module has not been restarted
+            # since yaw-aware click handling was added.
+            payload = [x, y]
+        else:
+            payload = {"x": x, "y": y, "yaw": yaw}
         await self._client.emit("click", payload)
 
     def _register_handlers(self) -> None:
@@ -432,6 +480,7 @@ class SlamassService:
             "message": "",
             "poi_id": None,
         }
+        self.ui_state = SlamassUiState()
 
     async def start(self) -> None:
         self._load_from_storage()
@@ -489,6 +538,7 @@ class SlamassService:
                 "map": self._serialize_map(),
                 "pois": [self._serialize_poi(poi) for poi in self._active_pois()],
                 "inspection": dict(self.inspection_state),
+                "ui": self._serialize_ui_locked(),
             }
 
     async def navigate(self, x: float, y: float, yaw: float | None = None) -> None:
@@ -503,6 +553,80 @@ class SlamassService:
             target_y = poi.world_y
             target_yaw = poi.world_yaw
         await self.navigate(target_x, target_y, target_yaw)
+
+    async def ui_snapshot(self) -> dict[str, Any]:
+        async with self._state_lock:
+            return self._serialize_ui_locked()
+
+    async def set_ui_camera(self, center_x: float, center_y: float, zoom: float) -> dict[str, Any]:
+        async with self._state_lock:
+            self._apply_ui_camera_locked(center_x=center_x, center_y=center_y, zoom=zoom)
+            payload = self._commit_ui_state_locked()
+        await self.publish_event("ui_state_updated", payload)
+        return payload
+
+    async def select_poi(self, poi_id: str | None) -> dict[str, Any]:
+        async with self._state_lock:
+            validated_poi_id = self._validate_optional_poi_id_locked(poi_id)
+            self.ui_state.selected_poi_id = validated_poi_id
+            payload = self._commit_ui_state_locked()
+        await self.publish_event("ui_state_updated", payload)
+        return payload
+
+    async def highlight_pois(
+        self, poi_ids: list[str], *, selected_poi_id: str | None = None
+    ) -> dict[str, Any]:
+        async with self._state_lock:
+            self.ui_state.highlighted_poi_ids = self._normalize_poi_ids_locked(poi_ids)
+            self.ui_state.selected_poi_id = self._validate_optional_poi_id_locked(selected_poi_id)
+            payload = self._commit_ui_state_locked()
+        await self.publish_event("ui_state_updated", payload)
+        return payload
+
+    async def clear_ui_focus(self) -> dict[str, Any]:
+        async with self._state_lock:
+            self.ui_state.selected_poi_id = None
+            self.ui_state.highlighted_poi_ids = []
+            payload = self._commit_ui_state_locked()
+        await self.publish_event("ui_state_updated", payload)
+        return payload
+
+    async def focus_poi(self, poi_id: str, zoom: float | None = None) -> dict[str, Any]:
+        async with self._state_lock:
+            poi = self._require_active_poi_locked(poi_id)
+            self.ui_state.selected_poi_id = poi.poi_id
+            self.ui_state.highlighted_poi_ids = [poi.poi_id]
+            self._apply_ui_camera_locked(
+                center_x=poi.world_x,
+                center_y=poi.world_y,
+                zoom=zoom if zoom is not None else UI_FOCUS_POI_ZOOM,
+            )
+            payload = self._commit_ui_state_locked()
+        await self.publish_event("ui_state_updated", payload)
+        return payload
+
+    async def focus_robot(self, zoom: float | None = None) -> dict[str, Any]:
+        async with self._state_lock:
+            if self.robot_pose is None:
+                raise HTTPException(status_code=409, detail="No robot pose available")
+            self._apply_ui_camera_locked(
+                center_x=self.robot_pose.x,
+                center_y=self.robot_pose.y,
+                zoom=zoom if zoom is not None else UI_FOCUS_ROBOT_ZOOM,
+            )
+            payload = self._commit_ui_state_locked()
+        await self.publish_event("ui_state_updated", payload)
+        return payload
+
+    async def focus_map(self) -> dict[str, Any]:
+        async with self._state_lock:
+            if self.map_state is None:
+                raise HTTPException(status_code=404, detail="No active map available")
+            center_x, center_y = self._map_center_locked()
+            self._apply_ui_camera_locked(center_x=center_x, center_y=center_y, zoom=UI_MIN_ZOOM)
+            payload = self._commit_ui_state_locked()
+        await self.publish_event("ui_state_updated", payload)
+        return payload
 
     async def save_map(self) -> dict[str, Any]:
         record = await self.flush_active_map(force=True)
@@ -567,6 +691,7 @@ class SlamassService:
                     self.pois[poi.poi_id] = poi
 
                 await self.publish_event("poi_upserted", self._serialize_poi(poi))
+                await self.focus_poi(poi.poi_id, zoom=UI_FOCUS_POI_ZOOM)
                 await self._set_inspection_state("accepted", analysis.gate_reason, poi.poi_id)
             else:
                 await self._set_inspection_state("rejected", analysis.gate_reason, None)
@@ -593,10 +718,13 @@ class SlamassService:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     async def delete_poi(self, poi_id: str) -> None:
+        ui_payload: dict[str, Any] | None = None
         async with self._state_lock:
             poi = self.pois.get(poi_id)
             if poi is None:
                 raise HTTPException(status_code=404, detail="POI not found")
+            was_selected = self.ui_state.selected_poi_id == poi_id
+            was_highlighted = poi_id in self.ui_state.highlighted_poi_ids
             self.storage.soft_delete_poi(poi_id)
             self.pois[poi_id] = PoiRecord(
                 poi_id=poi.poi_id,
@@ -615,7 +743,19 @@ class SlamassService:
                 created_at=poi.created_at,
                 updated_at=utc_now_iso(),
             )
+            if was_selected:
+                self.ui_state.selected_poi_id = None
+            if was_highlighted:
+                self.ui_state.highlighted_poi_ids = [
+                    highlighted_id
+                    for highlighted_id in self.ui_state.highlighted_poi_ids
+                    if highlighted_id != poi_id
+                ]
+            if was_selected or was_highlighted:
+                ui_payload = self._commit_ui_state_locked()
         await self.publish_event("poi_deleted", {"poi_id": poi_id})
+        if ui_payload is not None:
+            await self.publish_event("ui_state_updated", ui_payload)
 
     def resolve_asset(self, relative_path: str) -> Path:
         resolved = (self.state_dir / relative_path).resolve()
@@ -662,6 +802,9 @@ class SlamassService:
                 updated_at=record.updated_at,
             )
         self.pois = {poi.poi_id: poi for poi in self.storage.list_pois(include_deleted=True)}
+        if self.map_state is not None:
+            center_x, center_y = self._map_center_locked()
+            self.ui_state.camera = UiCameraState(center_x=center_x, center_y=center_y, zoom=1.0)
 
     async def _set_inspection_state(self, status: str, message: str, poi_id: str | None) -> None:
         async with self._state_lock:
@@ -690,6 +833,7 @@ class SlamassService:
         await self.publish_event("state_updated", await self._state_delta())
 
     async def _handle_raw_costmap(self, raw_costmap: RawCostmap) -> None:
+        ui_payload: dict[str, Any] | None = None
         async with self._state_lock:
             if self.map_state is None:
                 self.map_state = ActiveMapState.empty_from_extent(
@@ -700,18 +844,27 @@ class SlamassService:
                     max_x=raw_costmap.origin_x + raw_costmap.width * raw_costmap.resolution,
                     max_y=raw_costmap.origin_y + raw_costmap.height * raw_costmap.resolution,
                 )
+                center_x, center_y = self._map_center_locked()
+                self.ui_state.camera = UiCameraState(center_x=center_x, center_y=center_y, zoom=1.0)
+                ui_payload = self._commit_ui_state_locked()
 
             changed = self.map_state.update_from_costmap(raw_costmap)
             if not changed:
-                return
+                if ui_payload is None:
+                    return
 
-            self.map_state.updated_at = utc_now_iso()
-            preview = self.map_state.preview_png_bytes()
-            self.storage.write_active_map_preview(preview)
-            self._dirty_map = True
-            payload = self._serialize_map()
+            payload: dict[str, Any] | None = None
+            if changed:
+                self.map_state.updated_at = utc_now_iso()
+                preview = self.map_state.preview_png_bytes()
+                self.storage.write_active_map_preview(preview)
+                self._dirty_map = True
+                payload = self._serialize_map()
 
-        await self.publish_event("map_updated", payload)
+        if payload is not None:
+            await self.publish_event("map_updated", payload)
+        if ui_payload is not None:
+            await self.publish_event("ui_state_updated", ui_payload)
 
     async def _pov_loop(self) -> None:
         while not self._stopped:
@@ -770,6 +923,54 @@ class SlamassService:
                     "image_url": f"/api/pov/latest.jpg?v={self.pov_seq}",
                 },
             }
+
+    def _require_active_poi_locked(self, poi_id: str) -> PoiRecord:
+        poi = self.pois.get(poi_id)
+        if poi is None or poi.status == "deleted":
+            raise HTTPException(status_code=404, detail="POI not found")
+        return poi
+
+    def _validate_optional_poi_id_locked(self, poi_id: str | None) -> str | None:
+        if poi_id is None:
+            return None
+        return self._require_active_poi_locked(poi_id).poi_id
+
+    def _normalize_poi_ids_locked(self, poi_ids: list[str]) -> list[str]:
+        unique: list[str] = []
+        seen: set[str] = set()
+        for poi_id in poi_ids:
+            validated = self._require_active_poi_locked(poi_id).poi_id
+            if validated in seen:
+                continue
+            unique.append(validated)
+            seen.add(validated)
+        return unique
+
+    def _map_center_locked(self) -> tuple[float, float]:
+        assert self.map_state is not None
+        return (
+            self.map_state.origin_x + (self.map_state.width * self.map_state.resolution) / 2.0,
+            self.map_state.origin_y + (self.map_state.height * self.map_state.resolution) / 2.0,
+        )
+
+    def _apply_ui_camera_locked(self, *, center_x: float, center_y: float, zoom: float) -> None:
+        clamped_zoom = max(UI_MIN_ZOOM, min(UI_MAX_ZOOM, float(zoom)))
+        if self.map_state is not None:
+            min_x = self.map_state.origin_x
+            max_x = self.map_state.origin_x + self.map_state.width * self.map_state.resolution
+            min_y = self.map_state.origin_y
+            max_y = self.map_state.origin_y + self.map_state.height * self.map_state.resolution
+            center_x = min(max(center_x, min_x), max_x)
+            center_y = min(max(center_y, min_y), max_y)
+        self.ui_state.camera = UiCameraState(
+            center_x=float(center_x),
+            center_y=float(center_y),
+            zoom=clamped_zoom,
+        )
+
+    def _commit_ui_state_locked(self) -> dict[str, Any]:
+        self.ui_state.revision += 1
+        return self._serialize_ui_locked()
 
     def _updated_poi_from_existing(
         self,
@@ -836,6 +1037,18 @@ class SlamassService:
             "image_url": f"/api/map/active/preview.png?v={self.map_state.image_version}",
         }
 
+    def _serialize_ui_locked(self) -> dict[str, Any]:
+        return {
+            "revision": self.ui_state.revision,
+            "camera": {
+                "center_x": self.ui_state.camera.center_x,
+                "center_y": self.ui_state.camera.center_y,
+                "zoom": self.ui_state.camera.zoom,
+            },
+            "selected_poi_id": self.ui_state.selected_poi_id,
+            "highlighted_poi_ids": list(self.ui_state.highlighted_poi_ids),
+        }
+
     def _serialize_poi(self, poi: PoiRecord) -> dict[str, Any]:
         return {
             "poi_id": poi.poi_id,
@@ -894,6 +1107,10 @@ def create_app(
     async def get_state() -> dict[str, Any]:
         return await slamass.snapshot()
 
+    @app.get("/api/ui")
+    async def get_ui_state() -> dict[str, Any]:
+        return await slamass.ui_snapshot()
+
     @app.get("/api/events")
     async def get_events() -> EventSourceResponse:
         queue = await slamass.subscribe()
@@ -942,6 +1159,37 @@ def create_app(
     @app.post("/api/map/save")
     async def post_save_map() -> dict[str, Any]:
         return await slamass.save_map()
+
+    @app.put("/api/ui/camera")
+    async def put_ui_camera(request: UiCameraRequest) -> dict[str, Any]:
+        return await slamass.set_ui_camera(request.center_x, request.center_y, request.zoom)
+
+    @app.post("/api/ui/select-poi")
+    async def post_ui_select_poi(request: UiSelectionRequest) -> dict[str, Any]:
+        return await slamass.select_poi(request.poi_id)
+
+    @app.post("/api/ui/highlight-pois")
+    async def post_ui_highlight_pois(request: UiHighlightRequest) -> dict[str, Any]:
+        return await slamass.highlight_pois(
+            request.poi_ids,
+            selected_poi_id=request.selected_poi_id,
+        )
+
+    @app.post("/api/ui/clear-focus")
+    async def post_ui_clear_focus() -> dict[str, Any]:
+        return await slamass.clear_ui_focus()
+
+    @app.post("/api/ui/focus-poi/{poi_id}")
+    async def post_ui_focus_poi(poi_id: str, request: UiFocusRequest) -> dict[str, Any]:
+        return await slamass.focus_poi(poi_id, zoom=request.zoom)
+
+    @app.post("/api/ui/focus-robot")
+    async def post_ui_focus_robot(request: UiFocusRequest) -> dict[str, Any]:
+        return await slamass.focus_robot(zoom=request.zoom)
+
+    @app.post("/api/ui/focus-map")
+    async def post_ui_focus_map() -> dict[str, Any]:
+        return await slamass.focus_map()
 
     @app.post("/api/navigate")
     async def post_navigate(request: NavigateRequest) -> dict[str, Any]:
