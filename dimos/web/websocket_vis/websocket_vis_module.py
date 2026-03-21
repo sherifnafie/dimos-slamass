@@ -22,13 +22,16 @@ The frontend is served from a separate HTML file.
 """
 
 import asyncio
+import base64
 from pathlib import Path as FilePath
 import threading
 import time
 from typing import Any
 import webbrowser
+import zlib
 
 from dimos_lcm.std_msgs import Bool  # type: ignore[import-untyped]
+import numpy as np
 from reactivex.disposable import Disposable
 import socketio  # type: ignore[import-untyped]
 from starlette.applications import Starlette
@@ -51,6 +54,9 @@ from dimos.core.stream import In, Out
 from dimos.mapping.models import LatLon
 from dimos.mapping.occupancy.gradient import gradient
 from dimos.mapping.occupancy.inflation import simple_inflate
+from dimos.mapping.types import LatLon
+from dimos.msgs.geometry_msgs import PoseStamped, Quaternion, Twist, TwistStamped, Vector3
+from dimos.msgs.nav_msgs import OccupancyGrid, Path
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.msgs.geometry_msgs.TwistStamped import TwistStamped
@@ -282,15 +288,37 @@ class WebsocketVisModule(Module[WebsocketConfig]):
 
         @self.sio.event  # type: ignore[untyped-decorator]
         async def click(sid, position) -> None:  # type: ignore[no-untyped-def]
+            goal_x: float
+            goal_y: float
+            goal_yaw: float | None = None
+
+            if isinstance(position, dict):
+                goal_x = float(position["x"])
+                goal_y = float(position["y"])
+                if "yaw" in position and position["yaw"] is not None:
+                    goal_yaw = float(position["yaw"])
+            else:
+                goal_x = float(position[0])
+                goal_y = float(position[1])
+
+            orientation = (
+                Quaternion.from_euler(Vector3(0.0, 0.0, goal_yaw))
+                if goal_yaw is not None
+                else Quaternion(0, 0, 0, 1)
+            )
             goal = PoseStamped(
-                position=(position[0], position[1], 0),
-                orientation=(0, 0, 0, 1),  # Default orientation
+                position=(goal_x, goal_y, 0),
+                orientation=orientation,
                 frame_id="world",
             )
             self.goal_request.publish(goal)
-            logger.info(
-                "Click goal published", x=round(goal.position.x, 3), y=round(goal.position.y, 3)
-            )
+            log_payload: dict[str, float] = {
+                "x": round(goal.position.x, 3),
+                "y": round(goal.position.y, 3),
+            }
+            if goal_yaw is not None:
+                log_payload["yaw"] = round(goal_yaw, 3)
+            logger.info("Click goal published", **log_payload)
 
         @self.sio.event  # type: ignore[untyped-decorator]
         async def gps_goal(sid: str, goal: dict[str, float]) -> None:
@@ -363,7 +391,8 @@ class WebsocketVisModule(Module[WebsocketConfig]):
         self._uvicorn_server.run()
 
     def _on_robot_pose(self, msg: PoseStamped) -> None:
-        pose_data = {"type": "vector", "c": [msg.position.x, msg.position.y, msg.position.z]}
+        yaw = msg.orientation.to_euler().z
+        pose_data = {"type": "vector", "c": [msg.position.x, msg.position.y, msg.position.z, yaw]}
         self.vis_state["robot_pose"] = pose_data
         self._emit("robot_pose", pose_data)
 
@@ -383,6 +412,10 @@ class WebsocketVisModule(Module[WebsocketConfig]):
         self.vis_state["costmap"] = costmap_data
         self._emit("costmap", costmap_data)
 
+        raw_costmap_data = self._process_raw_costmap(msg)
+        self.vis_state["raw_costmap"] = raw_costmap_data
+        self._emit("raw_costmap", raw_costmap_data)
+
     def _process_costmap(self, costmap: OccupancyGrid) -> dict[str, Any]:
         """Convert OccupancyGrid to visualization format."""
         costmap = gradient(simple_inflate(costmap, 0.1), max_distance=1.0)
@@ -397,6 +430,28 @@ class WebsocketVisModule(Module[WebsocketConfig]):
             },
             "resolution": costmap.resolution,
             "origin_theta": 0,  # Assuming no rotation for now
+        }
+
+    def _process_raw_costmap(self, costmap: OccupancyGrid) -> dict[str, Any]:
+        """Encode the unmodified OccupancyGrid for service-side persistence."""
+        grid = np.ascontiguousarray(costmap.grid.astype(np.int8))
+        compressed = zlib.compress(grid.tobytes(), level=6)
+        encoded = base64.b64encode(compressed).decode("ascii")
+
+        return {
+            "type": "raw_costmap",
+            "shape": [costmap.height, costmap.width],
+            "dtype": "i8",
+            "compressed": True,
+            "compression": "zlib",
+            "data": encoded,
+            "origin": {
+                "type": "vector",
+                "c": [costmap.origin.position.x, costmap.origin.position.y, 0],
+            },
+            "resolution": costmap.resolution,
+            "origin_theta": 0,
+            "ts": costmap.ts,
         }
 
     def _emit(self, event: str, data: Any) -> None:

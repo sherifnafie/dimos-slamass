@@ -96,6 +96,7 @@ foxglove-bridge = "dimos.utils.cli.foxglove_bridge.run_foxglove_bridge:main"
 agentspy = "dimos.utils.cli.agentspy.agentspy:main"
 humancli = "dimos.utils.cli.human.humanclianim:main"
 dimos = "dimos.robot.cli.dimos:main"
+dimos-slamass = "dimos.slamass:main"
 rerun-bridge = "dimos.visualization.rerun.bridge:app"
 doclinks = "dimos.utils.docs.doclinks:main"
 dtop = "dimos.utils.cli.dtop:main"
@@ -173,7 +174,10 @@ agents = [
 ]
 
 web = [
+    "aiohttp>=3.10,<4",
     "fastapi>=0.115.6",
+    "openai",
+    "python-socketio>=5.11.0,<6",
     "sse-starlette>=2.2.1",
     "uvicorn>=0.34.0",
     "ffmpeg-python",

@@ -28,6 +28,53 @@ from dimos.utils.logging_config import setup_logger
 logger = setup_logger()
 
 
+def _candidate_provider_lists() -> list[list[str]]:
+    available = list(ort.get_available_providers())
+    candidates: list[list[str]] = []
+
+    preferred = [
+        ["TensorrtExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"],
+        ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        ["CPUExecutionProvider"],
+    ]
+
+    for provider_list in preferred:
+        filtered = [provider for provider in provider_list if provider in available]
+        if filtered and filtered not in candidates:
+            candidates.append(filtered)
+
+    if not candidates:
+        candidates.append([])
+
+    return candidates
+
+
+def _load_inference_session(policy_path: str) -> ort.InferenceSession:
+    last_error: Exception | None = None
+
+    for providers in _candidate_provider_lists():
+        try:
+            session = ort.InferenceSession(policy_path, providers=providers)
+            logger.info(
+                "Loaded MuJoCo policy session",
+                policy_path=policy_path,
+                requested_providers=providers,
+                active_providers=session.get_providers(),
+            )
+            return session
+        except Exception as exc:
+            last_error = exc
+            logger.warning(
+                "Failed to initialize MuJoCo policy with provider set",
+                policy_path=policy_path,
+                providers=providers,
+                error=str(exc),
+            )
+
+    assert last_error is not None
+    raise RuntimeError(f"Failed to initialize MuJoCo ONNX policy: {last_error}") from last_error
+
+
 class OnnxController(ABC):
     def __init__(
         self,
@@ -40,8 +87,7 @@ class OnnxController(ABC):
         drift_compensation: list[float] | None = None,
     ) -> None:
         self._output_names = ["continuous_actions"]
-        self._policy = ort.InferenceSession(policy_path, providers=ort.get_available_providers())
-        logger.info(f"Loaded policy: {policy_path} with providers: {self._policy.get_providers()}")
+        self._policy = _load_inference_session(policy_path)
 
         self._action_scale = action_scale
         self._default_angles = default_angles

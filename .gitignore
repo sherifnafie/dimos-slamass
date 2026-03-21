@@ -38,6 +38,8 @@ __pycache__
 node_modules
 package.json
 package-lock.json
+!dimos/web/slamass-app/package.json
+!dimos/web/slamass-app/package-lock.json
 
 # Ignore build artifacts
 dist/
