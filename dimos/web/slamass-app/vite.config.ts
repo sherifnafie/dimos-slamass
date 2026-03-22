@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 
 export default defineConfig({
+  appType: "spa",
   plugins: [react()],
   root: ".",
   build: {
@@ -17,5 +18,16 @@ export default defineConfig({
   server: {
     port: 3001,
     open: false,
+    /**
+     * Fallback if you prefer same-origin `/api` (e.g. tools that cannot set CORS).
+     * The React app uses `apiBase.ts` in dev to call `http://127.0.0.1:7780` directly so
+     * EventSource (SSE) and POV/map images work reliably on http://localhost:3001/
+     */
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:7780",
+        changeOrigin: true,
+      },
+    },
   },
 });

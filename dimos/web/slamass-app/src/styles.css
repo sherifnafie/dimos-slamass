@@ -587,6 +587,22 @@ img {
   object-fit: cover;
 }
 
+.pov-pending-banner {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  max-width: calc(100% - 24px);
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(9, 12, 18, 0.85);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  text-align: center;
+  pointer-events: none;
+}
+
 .media-badge {
   position: absolute;
   top: 12px;

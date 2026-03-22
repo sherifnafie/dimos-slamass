@@ -8,9 +8,23 @@ test.describe("/polaris", () => {
 
     await expect(page.locator(".polaris-root")).toBeVisible();
     await expect(page.getByTestId("polaris-lander")).toBeVisible();
+    await expect(page.getByTestId("polaris-lander-intro")).toHaveText(
+      /The operating system for the physical world\./,
+    );
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: /The operating system for the physical world\./,
+      }),
+    ).toBeVisible();
     await expect(page.getByTestId("polaris-nav-title")).toBeVisible();
     await expect(page.getByTestId("polaris-robot-slot")).toHaveCount(0);
     await expect(page.getByRole("link", { name: /open operators/i })).toBeVisible();
+    await expect(page.getByTestId("polaris-lander-bento")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Specification highlights", level: 2 })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Unitree A2", exact: true }),
+    ).toHaveAttribute("href", "https://www.unitree.com/A2");
   });
 });
 
@@ -59,17 +73,35 @@ test.describe("/polaris/operators", () => {
     const robotSlots = page.getByTestId("polaris-robot-slot");
     await expect(robotSlots).toHaveCount(4);
     await expect(robotSlots.first()).toBeVisible();
-    const firstRobotImg = robotSlots.first().locator("img");
+    const firstRobotImg = robotSlots.first().locator(".polaris-operator-card-img");
     await expect(firstRobotImg).toBeVisible();
     await expect(firstRobotImg).toHaveAttribute(
       "src",
-      /5338983\.png/,
+      /65264e97e81744409042d34bf3ba6da6_400x400\.png/,
     );
-    const secondCardImg = robotSlots.nth(1).locator("img");
-    await expect(secondCardImg).toHaveAttribute("src", /\/cdn\/shop\/files\/23\.png/);
-    await expect(robotSlots.nth(2).locator("img")).toHaveCount(0);
-    await expect(robotSlots.nth(3).locator("img")).toHaveCount(0);
-    await expect(robotSlots.nth(3).getByText("Deploy operator")).toHaveCount(2);
+    const secondCardImg = robotSlots.nth(1).locator(".polaris-operator-card-img");
+    await expect(secondCardImg).toHaveAttribute(
+      "src",
+      /65264e97e81744409042d34bf3ba6da6_400x400\.png/,
+    );
+    const thirdCardImg = robotSlots.nth(2).locator(".polaris-operator-card-img");
+    await expect(thirdCardImg).toBeVisible();
+    await expect(thirdCardImg).toHaveAttribute(
+      "src",
+      /11d0a76afbb74e8fb7f692652b4c33e0_800x800\.png/,
+    );
+    await expect(robotSlots.nth(2).getByText("Unitree AS2")).toBeVisible();
+    const fourthCardImg = robotSlots.nth(3).locator(".polaris-operator-card-img");
+    await expect(fourthCardImg).toBeVisible();
+    await expect(fourthCardImg).toHaveAttribute(
+      "src",
+      /874b8a23698a49fda7bd98f01a6fa648_800x800\.png/,
+    );
+    const a2TitleLink = robotSlots
+      .nth(3)
+      .getByRole("link", { name: "Unitree A2", exact: true });
+    await expect(a2TitleLink).toBeVisible();
+    await expect(a2TitleLink).toHaveAttribute("href", "https://www.unitree.com/A2");
 
     await menu.click();
     await expect(
@@ -119,5 +151,23 @@ test.describe("/polaris/operators", () => {
     const operators = page.getByRole("dialog").getByTestId("polaris-sidebar-operators");
     await expect(operators).toBeVisible();
     await expect(operators.getByText("Operators")).toBeVisible();
+  });
+
+  test("configurator link navigates to general view", async ({ page }) => {
+    await page.goto("/polaris/operators");
+    const configurator = page
+      .getByTestId("polaris-robot-slot")
+      .first()
+      .getByRole("link", { name: /configurator/i });
+    await expect(configurator).toHaveAttribute("href", "/polaris/configurator");
+    await configurator.click();
+    await expect(page).toHaveURL(/\/polaris\/configurator/);
+    await expect(page.getByTestId("polaris-configurator-heading")).toHaveText("Configurator");
+    await expect(page.getByTestId("polaris-configurator-back")).toHaveAttribute(
+      "href",
+      "/polaris/operators",
+    );
+    await expect(page.getByRole("region", { name: "Robot capture history" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Spatial map" })).toBeVisible();
   });
 });

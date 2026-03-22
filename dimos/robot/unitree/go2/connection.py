@@ -17,6 +17,7 @@ from threading import Thread
 import time
 from typing import TYPE_CHECKING, Any, Protocol
 
+import numpy as np
 from reactivex.disposable import Disposable
 from reactivex.observable import Observable
 import rerun.blueprint as rrb
@@ -324,13 +325,17 @@ class GO2Connection(Module, spec.Camera, spec.Pointcloud):
         return self.connection.publish_request(topic, data)
 
     @skill
-    def observe(self) -> Image | None:
+    def observe(self) -> Image:
         """Returns the latest video frame from the robot camera. Use this skill for any visual world queries.
 
         This skill provides the current camera view for perception tasks.
-        Returns None if no frame has been captured yet.
+        Before the video pipeline delivers the first frame, returns a small neutral
+        placeholder image so MCP/SLAMASS clients always receive a valid raster.
         """
-        return self._latest_video_frame
+        if self._latest_video_frame is not None:
+            return self._latest_video_frame
+        placeholder = np.full((72, 96, 3), 32, dtype=np.uint8)
+        return Image.from_numpy(placeholder, format=ImageFormat.RGB, frame_id="camera_optical")
 
 
 go2_connection = GO2Connection.blueprint

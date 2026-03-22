@@ -24,6 +24,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import time
@@ -40,17 +41,16 @@ from PIL import Image
 from pydantic import BaseModel
 import socketio  # type: ignore[import-untyped]
 from sse_starlette.sse import EventSourceResponse
+from starlette.middleware.cors import CORSMiddleware
 import uvicorn
 
 from dimos.models.vl.openai import OpenAIVlModel
-from dimos.msgs.sensor_msgs.Image import ImageFormat
-from dimos.msgs.sensor_msgs.Image import Image as DimosImage
+from dimos.msgs.sensor_msgs.Image import Image as DimosImage, ImageFormat
 from dimos.robot.unitree.unitree_skill_container import UNITREE_WEBRTC_CONTROLS
 from dimos.slamass.chat_agent import ChatMessage, SlamassChatAgent
 from dimos.slamass.map_memory import ActiveMapState, RawCostmap
 from dimos.slamass.storage import (
     ActiveMapRecord,
-    PoiObservationRecord,
     PoiRecord,
     SlamassStorage,
     YoloObjectRecord,
@@ -74,6 +74,8 @@ DEFAULT_POV_POLL_INTERVAL_SECONDS = 0.25
 MIN_POV_POLL_INTERVAL_SECONDS = 0.05
 DEFAULT_POV_MAX_WIDTH = 1024
 DEFAULT_POV_JPEG_QUALITY = 76
+# Bound each MCP observe call so startup / poll ticks cannot hang until aiohttp total timeout.
+POV_OBSERVE_TIMEOUT_SECONDS = 12.0
 INSPECTION_MODE_AI_GATE = "ai_gate"
 INSPECTION_MODE_ALWAYS_CREATE = "always_create"
 SEMANTIC_KIND_POI = "vlm_poi"
@@ -341,35 +343,119 @@ class ChatSubmitRequest(BaseModel):
     message: str
 
 
+def _jpeg_bytes_from_data_url(url: str) -> bytes | None:
+    if not isinstance(url, str):
+        return None
+    trimmed = url.strip()
+    if not trimmed.startswith("data:image/"):
+        return None
+    if "base64," not in trimmed:
+        return None
+    _, _, b64_part = trimmed.partition("base64,")
+    if not b64_part:
+        return None
+    try:
+        return base64.b64decode(b64_part, validate=False)
+    except Exception:
+        return None
+
+
+def jpeg_bytes_from_mcp_tool_response(body: dict[str, Any]) -> bytes | None:
+    """Extract raw image bytes from a JSON-RPC tools/call response body."""
+    result = body.get("result")
+    if isinstance(result, dict):
+        content = result.get("content", [])
+    elif isinstance(result, list):
+        content = result
+    else:
+        return None
+    if not isinstance(content, list):
+        return None
+
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "image_url":
+            image_url_field = item.get("image_url")
+            url: str | None
+            if isinstance(image_url_field, dict):
+                u = image_url_field.get("url", "")
+                url = u if isinstance(u, str) else None
+            elif isinstance(image_url_field, str):
+                url = image_url_field
+            else:
+                url = None
+            if url:
+                raw = _jpeg_bytes_from_data_url(url)
+                if raw is not None:
+                    return raw
+        if item.get("type") == "image":
+            data = item.get("data")
+            if isinstance(data, str):
+                try:
+                    return base64.b64decode(data, validate=False)
+                except Exception:
+                    continue
+        if item.get("type") == "text":
+            text = item.get("text")
+            if isinstance(text, str):
+                match = re.search(r"data:image/[^;\s]+;base64,([A-Za-z0-9+/=\s]+)", text)
+                if match:
+                    try:
+                        return base64.b64decode(match.group(1), validate=False)
+                    except Exception:
+                        continue
+    return None
+
+
 class McpToolClient:
     def __init__(self, mcp_url: str) -> None:
         self.mcp_url = mcp_url
         self._session: aiohttp.ClientSession | None = None
+        self._init_lock = asyncio.Lock()
+        self._initialized = False
 
     async def start(self) -> None:
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=20)
             self._session = aiohttp.ClientSession(timeout=timeout)
+        await self._ensure_initialized()
+
+    async def _ensure_initialized(self) -> None:
+        async with self._init_lock:
+            if self._initialized:
+                return
+            assert self._session is not None
+            try:
+                async with self._session.post(
+                    self.mcp_url,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": "slamass-initialize",
+                        "method": "initialize",
+                        "params": {
+                            "protocolVersion": "2025-11-25",
+                            "capabilities": {},
+                            "clientInfo": {"name": "dimos-slamass", "version": "1.0.0"},
+                        },
+                    },
+                ) as response:
+                    response.raise_for_status()
+                    init_body = await response.json()
+                if init_body.get("error") is not None:
+                    logger.warning("MCP initialize returned error", error=init_body.get("error"))
+            except Exception as exc:
+                logger.warning("MCP initialize failed (continuing without it)", error=str(exc))
+            self._initialized = True
 
     async def stop(self) -> None:
         if self._session is not None and not self._session.closed:
             await self._session.close()
+        self._initialized = False
 
     async def observe_jpeg(self) -> bytes | None:
         body = await self.call_tool("observe")
-        content = body.get("result", {}).get("content", [])
-        if not isinstance(content, list):
-            return None
-
-        for item in content:
-            if item.get("type") != "image_url":
-                continue
-            image_url = item.get("image_url", {}).get("url", "")
-            if not isinstance(image_url, str) or not image_url.startswith("data:image/"):
-                continue
-            _, encoded = image_url.split(",", 1)
-            return base64.b64decode(encoded)
-        return None
+        return jpeg_bytes_from_mcp_tool_response(body)
 
     async def relative_move(
         self, *, forward: float = 0.0, left: float = 0.0, degrees: float = 0.0
@@ -864,10 +950,43 @@ class SlamassService:
             best_effort=True,
         )
         await self.map_client.start()
+        await self._prime_initial_pov_if_needed()
         self._tasks = [
             asyncio.create_task(self._pov_loop()),
             asyncio.create_task(self._checkpoint_loop()),
         ]
+
+    async def _prime_initial_pov_if_needed(self) -> None:
+        """Ensure at least one JPEG exists before HTTP serves (avoids race with background POV loop)."""
+        async with self._state_lock:
+            if self.latest_pov_jpeg is not None:
+                return
+        image_bytes: bytes | None = None
+        try:
+            image_bytes = await asyncio.wait_for(
+                self._observe_jpeg(),
+                timeout=POV_OBSERVE_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            logger.info("POV startup observe timed out; using placeholder until MCP responds")
+        except Exception as exc:
+            logger.info("POV startup observe failed; using placeholder until MCP responds", error=str(exc))
+        if image_bytes is None:
+            image_bytes = make_placeholder_jpeg()
+        try:
+            prepared = prepare_pov_jpeg(
+                image_bytes,
+                max_width=self._pov_max_width,
+                quality=self._pov_jpeg_quality,
+            )
+        except Exception as exc:
+            logger.warning("POV startup prepare failed; using raw placeholder JPEG", error=str(exc))
+            prepared = make_placeholder_jpeg()
+        async with self._state_lock:
+            if self.latest_pov_jpeg is None:
+                self.latest_pov_jpeg = prepared
+                self.pov_seq += 1
+                self.pov_updated_at = utc_now_iso()
 
     async def stop(self) -> None:
         self._stopped = True
@@ -1872,21 +1991,38 @@ class SlamassService:
     async def _pov_loop(self) -> None:
         next_poll_at = time.monotonic()
         while not self._stopped:
+            image_bytes: bytes | None = None
             try:
-                image_bytes = await self._observe_jpeg()
-                if image_bytes is not None:
+                image_bytes = await asyncio.wait_for(
+                    self._observe_jpeg(),
+                    timeout=POV_OBSERVE_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                logger.debug("POV observe timed out for this poll")
+            except Exception as exc:
+                logger.debug("POV observe failed", error=str(exc))
+
+            if image_bytes is None:
+                async with self._state_lock:
+                    has_frame = self.latest_pov_jpeg is not None
+                if not has_frame:
+                    image_bytes = make_placeholder_jpeg()
+
+            if image_bytes is not None:
+                try:
                     image_bytes = prepare_pov_jpeg(
                         image_bytes,
                         max_width=self._pov_max_width,
                         quality=self._pov_jpeg_quality,
                     )
+                except Exception as prep_exc:
+                    logger.warning("POV frame dropped (prepare_pov_jpeg failed)", error=str(prep_exc))
+                else:
                     async with self._state_lock:
                         self.latest_pov_jpeg = image_bytes
                         self.pov_seq += 1
                         self.pov_updated_at = utc_now_iso()
                     await self.publish_event("state_updated", await self._state_delta())
-            except Exception as exc:
-                logger.debug("POV polling failed", error=str(exc))
             next_poll_at += self._pov_poll_interval_seconds
             sleep_for = next_poll_at - time.monotonic()
             if sleep_for > 0:
@@ -2678,6 +2814,13 @@ def create_app(
 
     app = FastAPI(lifespan=lifespan)
     app.state.slamass = slamass
+    # Dev UI (`npm run dev` on localhost:3001) calls the API on :7780 directly — browsers require CORS.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.get("/api/state")
     async def get_state() -> dict[str, Any]:
@@ -2721,10 +2864,11 @@ def create_app(
 
     @app.get("/api/pov/latest.jpg")
     async def get_latest_pov() -> Response:
-        if slamass.latest_pov_jpeg is None:
-            raise HTTPException(status_code=503, detail="No POV frame available yet")
+        jpeg = slamass.latest_pov_jpeg
+        if jpeg is None:
+            jpeg = make_placeholder_jpeg()
         return Response(
-            content=slamass.latest_pov_jpeg,
+            content=jpeg,
             media_type="image/jpeg",
             headers={"Cache-Control": "no-store"},
         )

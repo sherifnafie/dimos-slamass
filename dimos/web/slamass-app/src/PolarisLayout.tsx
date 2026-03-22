@@ -5,14 +5,22 @@ import "./polaris.css";
 
 export type PolarisLayoutProps = {
   children: React.ReactNode;
+  /** Default tinted shell (`slate`); lander uses `white` for a flat background. */
+  shellBg?: "slate" | "white";
 };
 
 /** Shared shell: glass menu + primary header (hamburger + title). */
-export function PolarisLayout({ children }: PolarisLayoutProps): React.ReactElement {
+export function PolarisLayout({
+  children,
+  shellBg = "slate",
+}: PolarisLayoutProps): React.ReactElement {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const shellBgClass = shellBg === "white" ? "bg-white" : "bg-slate-50";
 
   return (
-    <div className="polaris-root min-h-screen bg-slate-50 font-[Helvetica,Arial,sans-serif] text-slate-900 antialiased">
+    <div
+      className={`polaris-root polaris-root--shell ${shellBgClass} font-[Helvetica,Arial,sans-serif] text-slate-900 antialiased`}
+    >
       <PolarisSidebars onOpenChange={setSidebarOpen} open={sidebarOpen} />
       <header className="polaris-header sticky top-0 z-10 bg-white">
         <nav
@@ -33,9 +41,9 @@ export function PolarisLayout({ children }: PolarisLayoutProps): React.ReactElem
               <span className="polaris-menu-bar" />
             </span>
           </button>
-          <span className="polaris-title" data-testid="polaris-nav-title">
+          <a className="polaris-title" data-testid="polaris-nav-title" href="/polaris">
             Polaris
-          </span>
+          </a>
         </nav>
       </header>
       {children}

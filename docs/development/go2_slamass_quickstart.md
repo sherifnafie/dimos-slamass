@@ -32,7 +32,7 @@ uv sync --all-extras --no-extra dds
 cd dimos/web/slamass-app
 npm install
 npm run build
-cd /home/deadimex/dimos
+cd ../../..
 ```
 
 ## Start In Sim
@@ -55,7 +55,9 @@ Shell 2:
 
 ```bash
 source .venv/bin/activate
-export OPENAI_API_KEY=...
+# Optional: chat agent + Inspect Now / VLM need a key when you use those features.
+# dimos-slamass starts without OPENAI_API_KEY; chat shows a disabled message until set.
+export OPENAI_API_KEY=...   # optional
 dimos-slamass
 ```
 
@@ -64,6 +66,25 @@ Open:
 ```text
 http://localhost:7780
 ```
+
+### Dev UI on port 3001 (Vite)
+
+For a fast React reload loop, run the sidecar on **7780** and the Vite dev server on **3001**:
+
+```bash
+# Terminal A: robot stack (same as Shell 1 above)
+dimos --simulation --viewer none run unitree-go2-slamass-mcp --daemon
+
+# Terminal B
+uv run dimos-slamass
+
+# Terminal C
+cd dimos/web/slamass-app && npm install && npm run dev
+```
+
+Open **http://localhost:3001/** — in dev mode the app calls the API at **http://127.0.0.1:7780** directly (CORS is enabled on the sidecar). Override with `VITE_SLAMASS_API` if the sidecar uses another origin.
+
+Production-style single port: build the UI (`npm run build`) and open only **http://localhost:7780** (the sidecar serves `dist/`).
 
 ## Start On The Real Go2
 
@@ -85,7 +106,7 @@ Shell 2:
 
 ```bash
 source .venv/bin/activate
-export OPENAI_API_KEY=...
+export OPENAI_API_KEY=...   # optional; see Sim section
 dimos-slamass
 ```
 
@@ -178,10 +199,15 @@ If the service starts but says it cannot connect to the websocket map source:
 - the Go2 runtime is not up yet, or
 - `:7779` is not serving the websocket visualization stack
 
-If the POV never appears:
+If the POV never appears or stays on a placeholder:
 
 ```bash
+dimos status
 dimos mcp list-tools
 ```
 
-`observe` should be present. If it is missing, the wrong blueprint is running.
+- If `dimos status` says **no running instance**, the robot stack exited; check `dimos log -n 80` and restart `unitree-go2-slamass-mcp`.
+- `observe` should be listed. If it is missing, the wrong blueprint is running (use **`unitree-go2-slamass-mcp`**).
+- The sidecar primes a POV frame at startup and polls MCP on a timeout; **`http://localhost:3001`** dev mode must reach **`dimos-slamass`** on **7780** (see *Dev UI on port 3001* above).
+
+A dark grey tile means MCP/`observe` is up but the camera pipeline has not produced a frame yet; live video replaces it once frames flow.

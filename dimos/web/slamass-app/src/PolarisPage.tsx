@@ -2,65 +2,84 @@ import React from "react";
 
 import { PolarisLayout } from "./PolarisLayout";
 import {
+  POLARIS_A2_PREVIEW_URL,
+  POLARIS_AS2_PREVIEW_URL,
+  POLARIS_GO2_EDU_PREVIEW_URL,
   POLARIS_GO2_PREVIEW_URL,
-  POLARIS_SIDEBAR_OPERATORS_IMAGE_URL,
+  POLARIS_OPERATOR_MOUNT_GO2_EDU_URL,
+  POLARIS_OPERATOR_SELECT_THUMB_URL,
 } from "./polarisAssets";
 
 type OperatorCard = {
   id: string;
   title: string;
+  /** If set, the title is rendered as an external link (e.g. product page). */
+  titleHref?: string;
   /** Bold label + light value, same pattern as Location / Task. */
   category?: { label: string; value: string };
   location: string;
   task: string;
   imageUrl: string | null;
   imageAlt: string;
-  /** Pulsing status dot after the title: green (active) or blue (e.g. standby). */
-  active?: "green" | "blue";
+  /** Pulsing status dot after the title: green (active), blue (standby), or grey (inactive). */
+  active?: "green" | "blue" | "grey";
   /** Shown in the image well when there is no photo (defaults to “Preview”). */
   emptyVisualLabel?: string;
+  /** Mount thumbnail under Configurator; `null` = empty slot (no image). */
+  mountThumbUrl: string | null;
+  /** Value next to “Mount” in meta when `mountThumbUrl` is set (default `Z1`). */
+  mountValue?: string;
+  /** If set, mount thumbnail opens this URL in a new tab. */
+  mountThumbHref?: string;
 };
 
 const OPERATOR_CARDS: OperatorCard[] = [
   {
     id: "go2",
     title: "Unitree Go2",
-    category: { label: "Type", value: "Quadruped" },
+    category: { label: "Type", value: "Unitree Go2 X" },
     location: "Floor lab",
     task: "Patrol",
     active: "green",
     imageUrl: POLARIS_GO2_PREVIEW_URL,
     imageAlt: "Unitree Go2 robot",
+    mountThumbUrl: POLARIS_OPERATOR_SELECT_THUMB_URL,
   },
   {
     id: "go2-platform",
     title: "Unitree Go2",
-    category: { label: "Type", value: "Hardware" },
+    category: { label: "Type", value: "Unitree Go2 EDU" },
     location: "Bench",
     task: "Calibration",
     active: "green",
-    imageUrl: POLARIS_SIDEBAR_OPERATORS_IMAGE_URL,
+    imageUrl: POLARIS_GO2_EDU_PREVIEW_URL,
     imageAlt: "Unitree Go2",
+    mountThumbUrl: POLARIS_OPERATOR_MOUNT_GO2_EDU_URL,
+    mountValue: "D1-T",
+    mountThumbHref: "https://www.unitree.com/D1-T",
   },
   {
-    id: "go2-third",
-    title: "Unitree Go2",
+    id: "as2",
+    title: "Unitree AS2",
     category: { label: "Type", value: "Quadruped" },
     location: "—",
     task: "—",
     active: "blue",
-    imageUrl: null,
-    imageAlt: "",
-    emptyVisualLabel: "Unitree Go2",
+    imageUrl: POLARIS_AS2_PREVIEW_URL,
+    imageAlt: "Unitree AS2 robot",
+    mountThumbUrl: null,
   },
   {
-    id: "deploy",
-    title: "Deploy operator",
+    id: "a2",
+    title: "Unitree A2",
+    titleHref: "https://www.unitree.com/A2",
+    category: { label: "Type", value: "Industrial quadruped" },
     location: "—",
     task: "—",
-    imageUrl: null,
-    imageAlt: "",
-    emptyVisualLabel: "Deploy operator",
+    active: "blue",
+    imageUrl: POLARIS_A2_PREVIEW_URL,
+    imageAlt: "Unitree A2 robot",
+    mountThumbUrl: null,
   },
 ];
 
@@ -78,6 +97,9 @@ export default function PolarisPage(): React.ReactElement {
               data-testid="polaris-add-operator-button"
               type="button"
             >
+              <span aria-hidden className="polaris-operators-add-button-plus">
+                +
+              </span>
               Add Operator
             </button>
           </div>
@@ -93,32 +115,53 @@ export default function PolarisPage(): React.ReactElement {
                   className="polaris-operator-card"
                   data-testid="polaris-robot-slot"
                 >
-                  <div
-                    className={
-                      op.imageUrl
-                        ? "polaris-operator-card-visual"
-                        : "polaris-operator-card-visual polaris-operator-card-visual--empty"
-                    }
-                  >
-                    {op.imageUrl ? (
-                      <img
-                        alt={op.imageAlt}
-                        className="polaris-operator-card-img"
-                        decoding="async"
-                        src={op.imageUrl}
-                      />
-                    ) : (
-                      <span className="polaris-operator-card-placeholder">
-                        {op.emptyVisualLabel ?? "Preview"}
-                      </span>
-                    )}
+                  <div className="polaris-operator-card-media-column">
+                    <div
+                      className={
+                        op.imageUrl
+                          ? "polaris-operator-card-visual"
+                          : "polaris-operator-card-visual polaris-operator-card-visual--empty"
+                      }
+                    >
+                      {op.imageUrl ? (
+                        <img
+                          alt={op.imageAlt}
+                          className="polaris-operator-card-img"
+                          decoding="async"
+                          src={op.imageUrl}
+                        />
+                      ) : (
+                        <span className="polaris-operator-card-placeholder">
+                          {op.emptyVisualLabel ?? "Preview"}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="polaris-operator-card-body">
                     <h2 className="polaris-operator-card-title">
-                      <span className="polaris-operator-card-title-text">{op.title}</span>
+                      <span className="polaris-operator-card-title-text">
+                        {op.titleHref ? (
+                          <a
+                            className="polaris-operator-card-title-link"
+                            href={op.titleHref}
+                            rel="noopener noreferrer"
+                            target="_blank"
+                          >
+                            {op.title}
+                          </a>
+                        ) : (
+                          op.title
+                        )}
+                      </span>
                       {op.active ? (
                         <span
-                          aria-label={op.active === "blue" ? "Standby" : "Active"}
+                          aria-label={
+                            op.active === "blue"
+                              ? "Standby"
+                              : op.active === "grey"
+                                ? "Inactive"
+                                : "Active"
+                          }
                           className="polaris-operator-card-active"
                           role="status"
                         >
@@ -127,7 +170,9 @@ export default function PolarisPage(): React.ReactElement {
                             className={
                               op.active === "blue"
                                 ? "polaris-operator-card-active-dot polaris-operator-card-active-dot--blue"
-                                : "polaris-operator-card-active-dot polaris-operator-card-active-dot--green"
+                                : op.active === "grey"
+                                  ? "polaris-operator-card-active-dot polaris-operator-card-active-dot--grey"
+                                  : "polaris-operator-card-active-dot polaris-operator-card-active-dot--green"
                             }
                           />
                         </span>
@@ -151,16 +196,56 @@ export default function PolarisPage(): React.ReactElement {
                       <span className="polaris-operator-card-meta-label">Task</span>{" "}
                       <span className="polaris-operator-card-meta-value">{op.task}</span>
                     </p>
+                    <p className="polaris-operator-card-sub polaris-operator-card-meta">
+                      <span className="polaris-operator-card-meta-label">Mount</span>{" "}
+                      <span className="polaris-operator-card-meta-value">
+                        {op.mountThumbUrl ? (op.mountValue ?? "Z1") : "—"}
+                      </span>
+                    </p>
                   </div>
-                  <button
-                    className="polaris-operator-card-cta"
-                    type="button"
-                  >
-                    <span className="polaris-operator-card-cta-label">Select</span>
-                    <span aria-hidden className="polaris-operator-card-cta-icon">
-                      ↗
-                    </span>
-                  </button>
+                  <div className="polaris-operator-card-cta-column">
+                    <a className="polaris-operator-card-cta" href="/polaris/configurator">
+                      <span className="polaris-operator-card-cta-label">Configurator</span>
+                      <span aria-hidden className="polaris-operator-card-cta-icon">
+                        ↗
+                      </span>
+                    </a>
+                    {op.mountThumbUrl ? (
+                      <div className="polaris-operator-card-manipulator-row">
+                        {op.mountThumbHref ? (
+                          <a
+                            aria-label={
+                              op.mountValue
+                                ? `Unitree ${op.mountValue} product page`
+                                : "Mount product page"
+                            }
+                            className="polaris-operator-card-mount-thumb-link"
+                            href={op.mountThumbHref}
+                            rel="noopener noreferrer"
+                            target="_blank"
+                          >
+                            <span className="polaris-operator-card-select-thumb">
+                              <img
+                                alt=""
+                                className="polaris-operator-card-select-thumb-img"
+                                decoding="async"
+                                src={op.mountThumbUrl}
+                              />
+                            </span>
+                          </a>
+                        ) : (
+                          <div aria-hidden className="polaris-operator-card-select-thumb">
+                            <img
+                              alt=""
+                              className="polaris-operator-card-select-thumb-img"
+                              decoding="async"
+                              src={op.mountThumbUrl}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </article>
               </li>
             ))}

@@ -1,5 +1,6 @@
 import React, { startTransition } from "react";
 
+import { apiUrl, normalizeAppStateForDev } from "./apiBase";
 import { AgentToolsModal } from "./AgentToolsModal";
 import { LiveFeedPanel } from "./LiveFeedPanel";
 import { MapPane } from "./MapPane";
@@ -44,7 +45,7 @@ const emptyState: AppState = {
     available: false,
     seq: 0,
     updated_at: null,
-    image_url: "/api/pov/latest.jpg?v=0",
+    image_url: apiUrl("/api/pov/latest.jpg?v=0"),
   },
   map: null,
   pois: [],
@@ -94,7 +95,7 @@ type ActivityEntry = {
 };
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
+  const response = await fetch(apiUrl(url), {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
@@ -396,7 +397,7 @@ export default function App(): React.ReactElement {
         }
 
         startTransition(() => {
-          setState(data);
+          setState(normalizeAppStateForDev(data));
         });
       } catch (error) {
         reportActionError("Initial state fetch failed", error);
@@ -405,7 +406,7 @@ export default function App(): React.ReactElement {
 
     void loadState();
 
-    const source = new EventSource("/api/events");
+    const source = new EventSource(apiUrl("/api/events"));
 
     source.addEventListener("state_updated", (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as Partial<AppState>;
@@ -421,14 +422,16 @@ export default function App(): React.ReactElement {
       }
 
       startTransition(() => {
-        setState((previous) => ({
-          ...previous,
-          ...payload,
-          pov: payload.pov ? { ...previous.pov, ...payload.pov } : previous.pov,
-          yolo_runtime: payload.yolo_runtime ?? previous.yolo_runtime,
-          layers: payload.layers ?? previous.layers,
-          inspection_settings: payload.inspection_settings ?? previous.inspection_settings,
-        }));
+        setState((previous) =>
+          normalizeAppStateForDev({
+            ...previous,
+            ...payload,
+            pov: payload.pov ? { ...previous.pov, ...payload.pov } : previous.pov,
+            yolo_runtime: payload.yolo_runtime ?? previous.yolo_runtime,
+            layers: payload.layers ?? previous.layers,
+            inspection_settings: payload.inspection_settings ?? previous.inspection_settings,
+          }),
+        );
       });
     });
 
@@ -439,7 +442,7 @@ export default function App(): React.ReactElement {
         appendActivity("system", "Map ready", "Occupancy map is rendering.", "success");
       }
       startTransition(() => {
-        setState((previous) => ({ ...previous, map: payload }));
+        setState((previous) => normalizeAppStateForDev({ ...previous, map: payload }));
       });
     });
 
@@ -448,7 +451,12 @@ export default function App(): React.ReactElement {
       const existed = stateRef.current.pois.some((poi) => poi.poi_id === payload.poi_id);
       appendActivity("system", existed ? "POI updated" : "POI added", payload.title, "success");
       startTransition(() => {
-        setState((previous) => ({ ...previous, pois: mergePoi(previous.pois, payload) }));
+        setState((previous) =>
+          normalizeAppStateForDev({
+            ...previous,
+            pois: mergePoi(previous.pois, payload),
+          }),
+        );
       });
     });
 
@@ -481,10 +489,12 @@ export default function App(): React.ReactElement {
         "success",
       );
       startTransition(() => {
-        setState((previous) => ({
-          ...previous,
-          yolo_objects: mergeYoloObject(previous.yolo_objects, payload),
-        }));
+        setState((previous) =>
+          normalizeAppStateForDev({
+            ...previous,
+            yolo_objects: mergeYoloObject(previous.yolo_objects, payload),
+          }),
+        );
       });
     });
 

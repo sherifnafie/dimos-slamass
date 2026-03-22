@@ -27,17 +27,13 @@ export function LiveFeedPanel(props: LiveFeedPanelProps): React.ReactElement {
       title="POV"
     >
       <div className="pov-stage">
-        {pov.available ? (
-          <>
-            <img alt="Robot POV" className="pov-image" src={pov.image_url} />
-            <div className="media-badge">{connected ? "LIVE" : "STANDBY"}</div>
-          </>
-        ) : (
-          <div className="panel-empty">
-            <h3>POV not ready</h3>
-            <p>Waiting for `observe()` frames.</p>
+        <img alt="Robot POV" className="pov-image" decoding="async" src={pov.image_url} />
+        <div className="media-badge">{connected ? "LIVE" : "STANDBY"}</div>
+        {!pov.available ? (
+          <div className="pov-pending-banner" role="status">
+            Waiting for camera feed…
           </div>
-        )}
+        ) : null}
       </div>
     </PanelShell>
   );
