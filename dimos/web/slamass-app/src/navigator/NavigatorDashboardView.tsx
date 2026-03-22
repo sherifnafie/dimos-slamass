@@ -1,3 +1,4 @@
+import { CameraIcon } from "@heroicons/react/24/outline";
 import React, {
   startTransition,
   useCallback,
@@ -7,12 +8,11 @@ import React, {
 } from "react";
 
 import { AgentToolsModal } from "../AgentToolsModal";
-import { LiveFeedPanel } from "../LiveFeedPanel";
+import { LiveFeedPanel, type LiveFeedPanelHandle } from "../LiveFeedPanel";
 import { MapPane } from "../MapPane";
 import { defaultRobotOperatorHoverCard } from "../robotOperatorLabel";
 import { OperatorRail, SelectedSemanticPreview } from "../OperatorRail";
 import { PanelShell } from "../PanelShell";
-import { InspectGlyphs } from "../InspectGlyphs";
 import { SaveMapGlyphs } from "../SaveMapGlyphs";
 import { SettingsCogGlyphs } from "../SettingsCogGlyphs";
 import { StopStackGlyphs } from "../StopStackGlyphs";
@@ -31,6 +31,7 @@ import {
 } from "../teleop";
 import type { ChatToolDefinition, ManualInspectionMode } from "../types";
 import { fetchJson } from "./fetchJson";
+import { NavigatorMapControlsHover } from "./NavigatorMapControlsHover";
 import { NavigatorOperatorFleet } from "./NavigatorOperatorFleet";
 import { NavigatorOptionCard } from "./NavigatorOptionCard";
 import type { ActivityEntry } from "./useNavigatorSlamassState";
@@ -129,6 +130,9 @@ export function NavigatorDashboardView(
       : activityEntries[activityEntries.length - 1];
 
   const controlsMenuRef = useRef<HTMLDivElement>(null);
+  const cameraFeedRef = useRef<LiveFeedPanelHandle>(null);
+  const [cameraHeaderCaptureEnabled, setCameraHeaderCaptureEnabled] =
+    useState(false);
   const teleopIntervalRef = useRef<number | null>(null);
   const teleopKeysRef = useRef<Set<string>>(new Set());
   const teleopRequestInFlightRef = useRef(false);
@@ -329,38 +333,6 @@ export function NavigatorDashboardView(
   const navigatorMapHeaderActions = (
     <div className="topbar-actions polaris-navigator-map-header-actions">
       <button
-        aria-label={
-          state.inspection.status === "running"
-            ? "Inspecting"
-            : state.openai_configured
-              ? "Inspect"
-              : "Inspect (needs OPENAI_API_KEY)"
-        }
-        className="action-button secondary settings-cog-button"
-        disabled={
-          busyAction !== null ||
-          state.inspection.status === "running" ||
-          !state.openai_configured
-        }
-        onClick={() => {
-          void handleInspectNow();
-        }}
-        title={
-          state.openai_configured
-            ? state.inspection.status === "running"
-              ? "Inspecting…"
-              : "Inspect (VLM)"
-            : "Inspect needs OPENAI_API_KEY (VLM)"
-        }
-        type="button"
-      >
-        <InspectGlyphs />
-        <span className="sr-only">
-          {state.inspection.status === "running" ? "Inspecting" : "Inspect"}
-        </span>
-      </button>
-
-      <button
         aria-label={teleopEnabled ? "Teleop on — click to disarm" : "Teleop off — click to arm"}
         className={`action-button settings-cog-button ${teleopEnabled ? "danger" : "success"}`}
         disabled={busyAction === "system-stop"}
@@ -413,6 +385,38 @@ export function NavigatorDashboardView(
       >
         <SaveMapGlyphs />
       </button>
+
+      <NavigatorMapControlsHover
+        busyAction={busyAction}
+        connected={state.connected}
+        inspectionRunning={state.inspection.status === "running"}
+        map={state.map}
+        openaiConfigured={state.openai_configured}
+        robotPose={state.robot_pose}
+        teleopEnabled={teleopEnabled}
+        onClearFocus={() => {
+          void handleClearFocus();
+        }}
+        onFitMap={() => {
+          void handleFocusMap();
+        }}
+        onFocusRobot={() => {
+          void handleFocusRobot();
+        }}
+        onInspect={() => {
+          void handleInspectNow();
+        }}
+        onSaveMap={() => {
+          void handleSaveMap();
+        }}
+        onStopMotion={() => {
+          void handleStopMotion();
+        }}
+        onStopStack={() => {
+          void handleStopDimos();
+        }}
+        onToggleTeleop={handleToggleTeleop}
+      />
 
       <div className="topbar-menu" ref={controlsMenuRef}>
         <button
@@ -558,9 +562,6 @@ export function NavigatorDashboardView(
             {teleopEnabled ? (
               <span className="toolbar-chip tone-danger">Teleop armed</span>
             ) : null}
-            {state.inspection.status === "running" ? (
-              <span className="toolbar-chip tone-running">Inspecting</span>
-            ) : null}
             {state.chat.running ? (
               <span className="toolbar-chip tone-accent">Agent thinking</span>
             ) : null}
@@ -690,12 +691,36 @@ export function NavigatorDashboardView(
         >
           <NavigatorOptionCard
             className="polaris-nav-detections-camera-card polaris-nav-option-card--polaris-heading"
+            headerAside={
+              <button
+                aria-label={
+                  cameraHeaderCaptureEnabled
+                    ? state.connected
+                      ? "Take a picture (live feed)"
+                      : "Take a picture"
+                    : "Camera feed not ready"
+                }
+                className="polaris-nav-camera-header-capture"
+                disabled={!cameraHeaderCaptureEnabled}
+                type="button"
+                onClick={() => {
+                  cameraFeedRef.current?.captureSnapshot();
+                }}
+              >
+                <CameraIcon
+                  aria-hidden
+                  className="polaris-nav-camera-header-capture-icon"
+                />
+              </button>
+            }
             title="Camera"
           >
             <LiveFeedPanel
+              ref={cameraFeedRef}
               connected={state.connected}
               embedded
               frameLabel=""
+              onCaptureAvailabilityChange={setCameraHeaderCaptureEnabled}
               poseLabel={null}
               pov={state.pov}
             />

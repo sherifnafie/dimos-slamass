@@ -287,7 +287,7 @@ export function useNavigatorSlamassState(): {
   useEffect(() => {
     let cancelled = false;
 
-    const loadState = async (): Promise<void> => {
+    const loadStateOnce = async (): Promise<boolean> => {
       try {
         const data = await fetchJson<AppState>("/api/state");
         if (!cancelled) {
@@ -317,14 +317,31 @@ export function useNavigatorSlamassState(): {
               });
           }
         }
+        return true;
       } catch {
         if (!cancelled) {
           setSlamassApiStatus("error");
         }
+        return false;
       }
     };
 
-    void loadState();
+    const runInitialLoad = async (): Promise<void> => {
+      let attempt = 0;
+      while (!cancelled) {
+        const ok = await loadStateOnce();
+        if (ok || cancelled) {
+          return;
+        }
+        attempt += 1;
+        const delayMs = Math.min(2_500 + attempt * 400, 12_000);
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, delayMs);
+        });
+      }
+    };
+
+    void runInitialLoad();
 
     const source = new EventSource(apiUrl("/api/events"));
 

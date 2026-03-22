@@ -190,7 +190,7 @@ async def test_service_snapshot_dimos_rerun_web_viewer_url(tmp_path: Path) -> No
 
 
 @pytest.mark.asyncio
-async def test_service_inspect_now_without_openai_key_returns_503(
+async def test_service_inspect_now_without_openai_key_saves_poi_without_vlm(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -207,9 +207,12 @@ async def test_service_inspect_now_without_openai_key_returns_503(
     assert service._openai_configured is False
     service.robot_pose = RobotPose(x=1.0, y=2.0, z=0.0, yaw=0.2)
 
-    with pytest.raises(HTTPException) as exc_info:
-        await service.inspect_now()
-    assert exc_info.value.status_code == 503
+    result = await service.inspect_now()
+    assert result["status"] == "accepted"
+    assert result["poi_id"]
+    assert result["analysis"]["vlm"] is False
+    assert len(storage.list_pois()) == 1
+    assert storage.list_pois()[0].title == "Inspection"
 
 
 @pytest.mark.asyncio

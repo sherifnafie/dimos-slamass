@@ -86,6 +86,8 @@ dependencies = [
     "toolz>=1.1.0",
     "protobuf>=6.33.5,<7",
     "psutil>=7.0.0",
+    # dimos-slamass: multipart body for POST /api/pov/snapshot/ingest (FastAPI File())
+    "python-multipart==0.0.20",
 ]
 
 
@@ -116,7 +118,6 @@ misc = [
     "catkin_pkg",
     "lark",
     "tiktoken>=0.8.0",
-    "python-multipart==0.0.20",
     "tensorzero==2025.7.5",
 
     # Developer Specific

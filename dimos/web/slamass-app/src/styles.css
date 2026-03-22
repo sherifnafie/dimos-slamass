@@ -859,6 +859,34 @@ img {
   -webkit-user-drag: none;
 }
 
+/* Fade map raster + overlays in after the image loads (or on error). */
+.map-rendered-stack {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.55s ease-out;
+}
+
+.map-rendered-stack.map-rendered-stack--visible {
+  opacity: 1;
+}
+
+.map-rendered-stack .map-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-rendered-stack {
+    opacity: 1;
+    transition: none;
+  }
+}
+
 .map-overlay {
   inset: 0;
   pointer-events: none;

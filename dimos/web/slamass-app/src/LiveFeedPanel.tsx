@@ -1,9 +1,22 @@
 import { CameraIcon } from "@heroicons/react/24/outline";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { apiUrl } from "./apiBase";
 import { PanelShell } from "./PanelShell";
 import { PovState } from "./types";
+
+export type LiveFeedPanelHandle = {
+  /** Save current frame (download + optional slamass ingest). */
+  captureSnapshot: () => void;
+};
 
 type LiveFeedPanelProps = {
   connected: boolean;
@@ -15,6 +28,13 @@ type LiveFeedPanelProps = {
    * Use inside `NavigatorOptionCard` with chips in the card header.
    */
   embedded?: boolean;
+  /**
+   * Camera button on the POV image. Defaults to true when not embedded, false when embedded
+   * (navigator puts capture in the card header).
+   */
+  showOverlayCaptureButton?: boolean;
+  /** Fires when embedded header capture should enable/disable (image loaded + POV available). */
+  onCaptureAvailabilityChange?: (canCapture: boolean) => void;
 };
 
 function triggerDownload(blob: Blob, filename: string): void {
@@ -52,13 +72,31 @@ function deliverSnapshot(blob: Blob): void {
   });
 }
 
-export function LiveFeedPanel(props: LiveFeedPanelProps): React.ReactElement {
-  const { connected, pov, poseLabel, frameLabel, embedded = false } = props;
+export const LiveFeedPanel = forwardRef<LiveFeedPanelHandle, LiveFeedPanelProps>(
+  function LiveFeedPanel(props, ref): React.ReactElement {
+  const {
+    connected,
+    pov,
+    poseLabel,
+    frameLabel,
+    embedded = false,
+    showOverlayCaptureButton: showOverlayCaptureButtonProp,
+    onCaptureAvailabilityChange,
+  } = props;
+  const showOverlayCaptureButton = showOverlayCaptureButtonProp ?? !embedded;
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [imgReady, setImgReady] = useState(false);
 
   useEffect(() => {
     setImgReady(false);
+  }, [pov.image_url]);
+
+  /** Browser cache + React Strict Mode: `onLoad` may not run again for the same URL. */
+  useLayoutEffect(() => {
+    const el = imgRef.current;
+    if (el?.complete && el.naturalWidth > 0) {
+      setImgReady(true);
+    }
   }, [pov.image_url]);
 
   const handleCapture = useCallback(() => {
@@ -102,6 +140,20 @@ export function LiveFeedPanel(props: LiveFeedPanelProps): React.ReactElement {
 
   const canCapture = pov.available && imgReady;
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      captureSnapshot: () => {
+        handleCapture();
+      },
+    }),
+    [handleCapture],
+  );
+
+  useEffect(() => {
+    onCaptureAvailabilityChange?.(canCapture);
+  }, [canCapture, onCaptureAvailabilityChange]);
+
   const stage = (
     <div className="pov-stage polaris-nav-pov-stage">
       <img
@@ -118,21 +170,23 @@ export function LiveFeedPanel(props: LiveFeedPanelProps): React.ReactElement {
           Waiting for camera feed…
         </p>
       ) : null}
-      <button
-        aria-label={
-          canCapture
-            ? connected
-              ? "Take a picture (live feed)"
-              : "Take a picture"
-            : "Camera feed not ready"
-        }
-        className="pov-capture-button"
-        disabled={!canCapture}
-        type="button"
-        onClick={handleCapture}
-      >
-        <CameraIcon aria-hidden className="pov-capture-button-icon" />
-      </button>
+      {showOverlayCaptureButton ? (
+        <button
+          aria-label={
+            canCapture
+              ? connected
+                ? "Take a picture (live feed)"
+                : "Take a picture"
+              : "Camera feed not ready"
+          }
+          className="pov-capture-button"
+          disabled={!canCapture}
+          type="button"
+          onClick={handleCapture}
+        >
+          <CameraIcon aria-hidden className="pov-capture-button-icon" />
+        </button>
+      ) : null}
     </div>
   );
 
@@ -156,4 +210,7 @@ export function LiveFeedPanel(props: LiveFeedPanelProps): React.ReactElement {
       {stage}
     </PanelShell>
   );
-}
+  },
+);
+
+LiveFeedPanel.displayName = "LiveFeedPanel";

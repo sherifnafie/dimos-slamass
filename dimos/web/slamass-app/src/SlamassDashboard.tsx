@@ -1156,7 +1156,7 @@ export default function App(): React.ReactElement {
           {!state.openai_configured ? (
             <span
               className="toolbar-chip tone-accent"
-              title="Set OPENAI_API_KEY (e.g. repo .env) for Inspect and agent chat"
+              title="OPENAI_API_KEY unset: Inspect saves the camera view; agent chat replies with a setup note. Add a key for full AI chat and VLM inspect."
             >
               OpenAI off
             </span>
@@ -1197,18 +1197,14 @@ export default function App(): React.ReactElement {
 
           <button
             className="action-button"
-            disabled={
-              busyAction !== null ||
-              state.inspection.status === "running" ||
-              !state.openai_configured
-            }
+            disabled={busyAction !== null || state.inspection.status === "running"}
             onClick={() => {
               void handleInspectNow();
             }}
             title={
               state.openai_configured
                 ? undefined
-                : "Inspect needs OPENAI_API_KEY (VLM)"
+                : "Saves current view as a POI without VLM. Set OPENAI_API_KEY for AI inspect."
             }
             type="button"
           >

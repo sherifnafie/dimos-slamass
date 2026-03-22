@@ -156,7 +156,7 @@ export interface AppState {
   dimos_viewer_url: string | null;
   /** Rerun 3D web viewer (`:9090` → gRPC `:9876`), same as DimOS dashboard right pane. Requires `dimos --viewer rerun-web run …`. */
   dimos_rerun_web_viewer_url: string | null;
-  /** When false, Inspect / VLM / operator chat need `OPENAI_API_KEY`; map, POV, and teleop still work. */
+  /** When false, VLM features use fallbacks: Inspect still saves a POI from the camera; agent chat uses a stub backend. */
   openai_configured: boolean;
   connected: boolean;
   robot_pose: RobotPose | null;

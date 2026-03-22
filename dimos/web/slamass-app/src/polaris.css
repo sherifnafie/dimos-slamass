@@ -2251,7 +2251,14 @@
 }
 
 .polaris-navigator-detections-column .polaris-nav-detections-camera-card .polaris-nav-option-card-header {
+  align-items: center;
   padding-bottom: 0.5rem;
+}
+
+.polaris-navigator-detections-column
+  .polaris-nav-detections-camera-card
+  .polaris-nav-option-card-head-aside {
+  max-width: none;
 }
 
 .polaris-navigator-detections-column .polaris-nav-detections-camera-card .polaris-nav-option-card-body {
@@ -2435,6 +2442,45 @@
   flex-shrink: 0;
 }
 
+/* Camera card: capture in header row (not over the video). */
+.polaris-nav-camera-header-capture {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.polaris-nav-camera-header-capture:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+
+.polaris-nav-camera-header-capture:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.polaris-nav-camera-header-capture:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.polaris-nav-camera-header-capture-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
 .polaris-nav-option-card-chips {
   display: flex;
   flex-wrap: wrap;
@@ -2513,6 +2559,122 @@
 .polaris-nav-operators-view-all:focus-visible {
   border-radius: 4px;
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px #94a3b8;
+}
+
+.polaris-nav-operators-header-aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem 0.65rem;
+}
+
+.polaris-nav-operators-fleet-card .polaris-nav-option-card-head-aside {
+  max-width: none;
+}
+
+.polaris-nav-operators-fleet-card .polaris-nav-option-card-header {
+  align-items: center;
+}
+
+/* Expand / collapse (match thin header icon treatment — cf. camera capture header). */
+.polaris-nav-operators-extend-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.polaris-nav-operators-extend-btn:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+
+.polaris-nav-operators-extend-btn:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.polaris-nav-operators-extend-btn-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.polaris-nav-operators-extend-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.polaris-nav-operators-extend-backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: rgba(15, 23, 42, 0.45);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.polaris-nav-operators-extend-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(100%, 28rem);
+  max-height: min(85vh, 640px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow:
+    0 24px 48px rgba(15, 23, 42, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+.polaris-nav-operators-extend-panel-head {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.75rem 1.125rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.polaris-nav-operators-extend-panel-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.polaris-nav-operators-extend-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0.75rem 0.85rem 1rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Navigator sidebar: reuse `/polaris/operators` operator cards (scaled + stretched link to operators). */
@@ -3159,6 +3321,230 @@
   z-index: 5;
 }
 
+/* Controls dock in map header: match icon row, dropdown below trigger (not in document flow). */
+.polaris-navigator-root .polaris-navigator-map-header-actions .polaris-map-controls-dock {
+  flex-shrink: 0;
+  align-self: center;
+  z-index: 6;
+}
+
+.polaris-navigator-root .polaris-navigator-map-header-actions .polaris-map-controls-dock__trigger {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem 0.35rem 0.4rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.polaris-navigator-root .polaris-navigator-map-header-actions .polaris-map-controls-dock:hover .polaris-map-controls-dock__trigger,
+.polaris-navigator-root
+  .polaris-navigator-map-header-actions
+  .polaris-map-controls-dock:focus-within
+  .polaris-map-controls-dock__trigger {
+  background: rgba(15, 23, 42, 0.06);
+  border: none;
+  box-shadow: none;
+  border-color: transparent;
+}
+
+.polaris-navigator-root .polaris-navigator-map-header-actions .polaris-map-controls-dock__panel {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  margin-top: 0;
+  z-index: 30;
+}
+
+/* Map surface — top-right “Controls” hover dock (robot icon + expanding menu). */
+.polaris-map-controls-dock {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 0.8125rem;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+
+.polaris-map-controls-dock__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: auto;
+  padding: 0.42rem 0.65rem 0.42rem 0.55rem;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 4px 14px rgba(15, 23, 42, 0.06);
+  cursor: default;
+  user-select: none;
+  transition:
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.polaris-map-controls-dock:hover .polaris-map-controls-dock__trigger,
+.polaris-map-controls-dock:focus-within .polaris-map-controls-dock__trigger {
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow:
+    0 2px 6px rgba(15, 23, 42, 0.08),
+    0 10px 28px rgba(15, 23, 42, 0.1);
+}
+
+.polaris-map-controls-dock__robot-icon {
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  color: #475569;
+}
+
+.polaris-map-controls-dock__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.polaris-map-controls-dock__chevron {
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-left: 0.1rem;
+  color: #94a3b8;
+  transition: transform 0.22s ease;
+}
+
+.polaris-map-controls-dock:hover .polaris-map-controls-dock__chevron,
+.polaris-map-controls-dock:focus-within .polaris-map-controls-dock__chevron {
+  transform: rotate(180deg);
+  color: #64748b;
+}
+
+.polaris-map-controls-dock__panel {
+  margin-top: 0.35rem;
+  width: min(15.5rem, calc(100vw - 3rem));
+  max-height: 0;
+  padding: 0 0.35rem;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  opacity: 0;
+  pointer-events: none;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 36px rgba(15, 23, 42, 0.12);
+  transition:
+    max-height 0.32s ease,
+    opacity 0.22s ease,
+    padding 0.22s ease,
+    border-color 0.22s ease;
+}
+
+.polaris-map-controls-dock:hover .polaris-map-controls-dock__panel,
+.polaris-map-controls-dock:focus-within .polaris-map-controls-dock__panel {
+  max-height: 32rem;
+  padding: 0.55rem 0.35rem 0.5rem;
+  border-color: rgba(15, 23, 42, 0.1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.polaris-map-controls-dock__kicker {
+  margin: 0.35rem 0.45rem 0.25rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.polaris-map-controls-dock__rule {
+  height: 1px;
+  margin: 0.35rem 0.4rem;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.polaris-map-controls-dock__item {
+  display: flex;
+  width: calc(100% - 0.2rem);
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.05rem 0.1rem;
+  padding: 0.48rem 0.5rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #1e293b;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.polaris-map-controls-dock__item:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.05);
+  color: #0f172a;
+}
+
+.polaris-map-controls-dock__item:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
+}
+
+.polaris-map-controls-dock__item:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.polaris-map-controls-dock__item--accent {
+  color: #b45309;
+}
+
+.polaris-map-controls-dock__item--accent:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.12);
+  color: #92400e;
+}
+
+.polaris-map-controls-dock__item--danger {
+  color: #b91c1c;
+}
+
+.polaris-map-controls-dock__item--danger:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.08);
+  color: #991b1b;
+}
+
+.polaris-map-controls-dock__item-icon {
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: #64748b;
+}
+
+.polaris-map-controls-dock__item:hover:not(:disabled) .polaris-map-controls-dock__item-icon {
+  color: #475569;
+}
+
+.polaris-map-controls-dock__item--danger .polaris-map-controls-dock__item-icon {
+  color: #dc2626;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .polaris-map-controls-dock__panel,
+  .polaris-map-controls-dock__chevron,
+  .polaris-map-controls-dock__trigger {
+    transition: none;
+  }
+}
+
 .polaris-navigator-map .map-panel .panel-body-stage {
   padding-block: 1rem 1.25rem;
   padding-inline: var(--map-panel-inline);
@@ -3173,6 +3559,12 @@
 .polaris-navigator-map .map-panel .panel-header {
   padding-block: 1.05rem 0.95rem;
   padding-inline: var(--map-panel-inline);
+  /* Above `.panel-body` (both default to z-index:1; body wins paint order and hid the Controls menu). */
+  z-index: 25;
+}
+
+.polaris-navigator-map .map-panel .panel-body {
+  z-index: 0;
 }
 
 .polaris-navigator-map .map-panel .panel-header h2 {

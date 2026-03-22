@@ -22,14 +22,17 @@ export default defineConfig({
     strictPort: true,
     open: false,
     /**
-     * Fallback if you prefer same-origin `/api` (e.g. tools that cannot set CORS).
-     * The React app uses `apiBase.ts` in dev to call `http://127.0.0.1:7780` directly so
-     * EventSource (SSE) and POV/map images work reliably on http://localhost:3001/
+     * Dev default: UI uses same-origin `/api` (see `apiBase.ts`); Vite forwards to slamass on :7780
+     * so fetch, SSE (`/api/events`), and map/POV images share the page origin.
      */
     proxy: {
       "/api": {
         target: "http://127.0.0.1:7780",
         changeOrigin: true,
+        ws: true,
+        /** Long-lived SSE (`/api/events`) and large map PNGs */
+        timeout: 600_000,
+        proxyTimeout: 600_000,
       },
     },
   },

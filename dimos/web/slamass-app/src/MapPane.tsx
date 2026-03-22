@@ -229,6 +229,52 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     return buildViewport(map, size.width, size.height, ui.camera);
   }, [map, size.height, size.width, ui.camera]);
 
+  const mapFadeSourceKey = React.useMemo(
+    () => (map ? `${map.map_id}|${map.image_version}|${map.image_url}` : null),
+    [map],
+  );
+  const [mapLayerVisible, setMapLayerVisible] = React.useState(false);
+  const mapImageRef = React.useRef<HTMLImageElement | null>(null);
+
+  React.useEffect(() => {
+    setMapLayerVisible(false);
+  }, [mapFadeSourceKey]);
+
+  /** Cached images often skip `onLoad` after a Strict Mode remount — unstick the fade-in layer. */
+  React.useLayoutEffect(() => {
+    if (!mapFadeSourceKey) {
+      return;
+    }
+    const el = mapImageRef.current;
+    if (el?.complete && el.naturalWidth > 0) {
+      setMapLayerVisible(true);
+    }
+  }, [mapFadeSourceKey]);
+
+  /** Last resort if load events never fire (proxy hiccup, suspended tab, etc.). */
+  React.useEffect(() => {
+    if (!mapFadeSourceKey) {
+      return;
+    }
+    const id = window.setTimeout(() => {
+      setMapLayerVisible(true);
+    }, 3500);
+    return () => window.clearTimeout(id);
+  }, [mapFadeSourceKey]);
+
+  const mapStackFrameStyle = React.useMemo(() => {
+    if (!viewport) {
+      return undefined;
+    }
+    return {
+      position: "absolute" as const,
+      width: `${viewport.imageWidth}px`,
+      height: `${viewport.imageHeight}px`,
+      left: `${Math.round(viewport.imageLeft)}px`,
+      top: `${Math.round(viewport.imageTop)}px`,
+    };
+  }, [viewport]);
+
   const selectedKey = semanticKey(ui.selected_item);
 
   const activePois = React.useMemo(
@@ -523,30 +569,41 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
         </div>
       ) : (
         <>
+          <div
+            className={[
+              "map-rendered-stack",
+              mapLayerVisible ? "map-rendered-stack--visible" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            style={mapStackFrameStyle}
+          >
             <img
-                alt="Navigator occupancy map"
-                className="map-image"
-                draggable={false}
-                onDragStart={preventNativeDrag}
-                src={map.image_url}
-                style={{
-                  width: `${viewport.imageWidth}px`,
-                  height: `${viewport.imageHeight}px`,
-                  left: `${Math.round(viewport.imageLeft)}px`,
-                  top: `${Math.round(viewport.imageTop)}px`,
-                }}
-              />
-              <svg
-                className="map-overlay map-overlay-anchored"
-                preserveAspectRatio="none"
-                style={{
-                  width: `${viewport.imageWidth}px`,
-                  height: `${viewport.imageHeight}px`,
-                  left: `${Math.round(viewport.imageLeft)}px`,
-                  top: `${Math.round(viewport.imageTop)}px`,
-                }}
-                viewBox={`0 0 ${viewport.imageWidth} ${viewport.imageHeight}`}
-              >
+              ref={mapImageRef}
+              alt="Navigator occupancy map"
+              className="map-image"
+              draggable={false}
+              onDragStart={preventNativeDrag}
+              onError={() => {
+                setMapLayerVisible(true);
+              }}
+              onLoad={() => {
+                setMapLayerVisible(true);
+              }}
+              src={map.image_url}
+            />
+            <svg
+              className="map-overlay map-overlay-anchored"
+              preserveAspectRatio="none"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: "100%",
+                height: "100%",
+              }}
+              viewBox={`0 0 ${viewport.imageWidth} ${viewport.imageHeight}`}
+            >
             {path.length > 1 && (
               <polyline
                 className="path-line"
@@ -636,16 +693,17 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                   </g>
                 );
               })}
-          </svg>
-          <div
-            className="map-annotation-layer"
-            style={{
-              width: `${viewport.imageWidth}px`,
-              height: `${viewport.imageHeight}px`,
-              left: `${Math.round(viewport.imageLeft)}px`,
-              top: `${Math.round(viewport.imageTop)}px`,
-            }}
-          >
+            </svg>
+            <div
+              className="map-annotation-layer"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: "100%",
+                height: "100%",
+              }}
+            >
             {robotPose && (() => {
               const [robotX, robotY] = worldToImagePixels(map, viewport, robotPose.x, robotPose.y);
               const card = robotOperatorHoverCard;
@@ -844,6 +902,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                   </button>
                 );
               })}
+            </div>
           </div>
             <div className="map-legend" onPointerDown={stopEvent}>
               <span>

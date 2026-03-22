@@ -226,6 +226,7 @@ export default function App(): React.ReactElement {
   const lastInspectionRef = React.useRef<string>("");
   const mapReadyRef = React.useRef(false);
   const didLogInitialSnapshotRef = React.useRef(false);
+  const initialFetchErrorLoggedRef = React.useRef(false);
   /** One fit + focus-map sync per page load; reset when map clears (see map_updated). */
   const sessionMapFitDoneRef = React.useRef(false);
 
@@ -404,11 +405,11 @@ export default function App(): React.ReactElement {
   React.useEffect(() => {
     let cancelled = false;
 
-    const loadState = async (): Promise<void> => {
+    const loadStateOnce = async (): Promise<boolean> => {
       try {
         const data = await fetchJson<AppState>("/api/state");
         if (cancelled) {
-          return;
+          return true;
         }
 
         lastConnectedRef.current = data.connected;
@@ -449,12 +450,32 @@ export default function App(): React.ReactElement {
               /* Map may disappear before the call completes. */
             });
         }
+        return true;
       } catch (error) {
-        reportActionError("Initial state fetch failed", error);
+        if (!initialFetchErrorLoggedRef.current) {
+          initialFetchErrorLoggedRef.current = true;
+          reportActionError("Navigator API unreachable; retrying…", error);
+        }
+        return false;
       }
     };
 
-    void loadState();
+    const runInitialLoad = async (): Promise<void> => {
+      let attempt = 0;
+      while (!cancelled) {
+        const ok = await loadStateOnce();
+        if (ok || cancelled) {
+          return;
+        }
+        attempt += 1;
+        const delayMs = Math.min(2_500 + attempt * 400, 12_000);
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, delayMs);
+        });
+      }
+    };
+
+    void runInitialLoad();
 
     const source = new EventSource(apiUrl("/api/events"));
 
@@ -1184,7 +1205,7 @@ export default function App(): React.ReactElement {
           {!state.openai_configured ? (
             <span
               className="toolbar-chip tone-accent"
-              title="Set OPENAI_API_KEY (e.g. repo .env) for Inspect and agent chat"
+              title="OPENAI_API_KEY unset: Inspect saves the camera view; agent chat replies with a setup note. Add a key for full AI chat and VLM inspect."
             >
               OpenAI off
             </span>
@@ -1225,18 +1246,14 @@ export default function App(): React.ReactElement {
 
           <button
             className="action-button"
-            disabled={
-              busyAction !== null ||
-              state.inspection.status === "running" ||
-              !state.openai_configured
-            }
+            disabled={busyAction !== null || state.inspection.status === "running"}
             onClick={() => {
               void handleInspectNow();
             }}
             title={
               state.openai_configured
                 ? undefined
-                : "Inspect needs OPENAI_API_KEY (VLM)"
+                : "Saves current view as a POI without VLM. Set OPENAI_API_KEY for AI inspect."
             }
             type="button"
           >

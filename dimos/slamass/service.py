@@ -1627,17 +1627,80 @@ class SlamassService:
             thumbnail_bytes = make_thumbnail(image_bytes)
             hero_path = self.storage.create_image_asset(image_bytes, ".jpg")
             thumb_path = self.storage.create_image_asset(thumbnail_bytes, ".jpg")
-            dimos_image = jpeg_bytes_to_dimos_image(image_bytes)
             if self.analyzer is None:
+                # No VLM: still save the frame as a POI so Inspect works offline (like user POV snapshot).
+                payload_json = json.dumps(
+                    {
+                        "source": "inspect_now",
+                        "vlm": False,
+                        "title": "Inspection",
+                        "summary": (
+                            "Captured without OpenAI VLM. Set OPENAI_API_KEY for AI title, summary, "
+                            "and quality gate."
+                        ),
+                    },
+                    ensure_ascii=True,
+                )
                 await self._set_inspection_state(
-                    "failed",
-                    "Inspect requires OPENAI_API_KEY (VLM). Map, POV, and teleop work without it.",
+                    "running",
+                    "Marking Point of Interest ...",
                     None,
                 )
-                raise HTTPException(
-                    status_code=503,
-                    detail="OpenAI API key not configured; Inspect is unavailable.",
+                async with self._state_lock:
+                    map_id = self.map_state.map_id if self.map_state is not None else "active"
+                    poi = self.storage.new_poi(
+                        map_id=map_id,
+                        anchor_x=pose.x,
+                        anchor_y=pose.y,
+                        anchor_yaw=pose.yaw,
+                        title="Inspection",
+                        summary=(
+                            "Saved without VLM. Add OPENAI_API_KEY to enable AI analysis on Inspect."
+                        ),
+                        category="Inspection",
+                        interest_score=0.5,
+                        thumbnail_path=thumb_path,
+                        hero_image_path=hero_path,
+                        objects=[],
+                    )
+                    self.storage.upsert_poi(poi)
+                    self.pois[poi.poi_id] = poi
+
+                await self.publish_event("poi_upserted", self._serialize_poi(poi))
+                await self.focus_poi(poi.poi_id, zoom=UI_FOCUS_POI_ZOOM)
+                gate_message = (
+                    "Saved without OpenAI (VLM). Add OPENAI_API_KEY for AI inspect."
                 )
+                await self._set_inspection_state("accepted", gate_message, poi.poi_id)
+
+                observation = self.storage.new_observation(
+                    poi_id=poi.poi_id,
+                    world_x=pose.x,
+                    world_y=pose.y,
+                    world_yaw=pose.yaw,
+                    image_path=hero_path,
+                    thumbnail_path=thumb_path,
+                    model_payload_json=payload_json,
+                    gate_result="no_vlm",
+                )
+                self.storage.insert_observation(observation)
+                return {
+                    "status": self.inspection_state["status"],
+                    "poi_id": poi.poi_id,
+                    "analysis": {
+                        "source": "inspect_now",
+                        "vlm": False,
+                        "should_create_poi": True,
+                        "title": "Inspection",
+                        "summary": (
+                            "Captured without OpenAI VLM. Set OPENAI_API_KEY for AI title, summary, "
+                            "and quality gate."
+                        ),
+                    },
+                    "manual_mode": manual_mode,
+                }
+
+            dimos_image = jpeg_bytes_to_dimos_image(image_bytes)
             analysis = self.analyzer.analyze(dimos_image)
             payload_json = json.dumps(analysis.as_payload())
             effective_create_poi = analysis.should_create_poi
