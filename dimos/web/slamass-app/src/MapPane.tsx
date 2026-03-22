@@ -82,51 +82,6 @@ function isInsideMapFrame(
   );
 }
 
-function yoloLabelVisibility(zoom: number): "none" | "priority" | "all" {
-  if (zoom < 1.25) {
-    return "none";
-  }
-  if (zoom < 2) {
-    return "priority";
-  }
-  return "all";
-}
-
-/** Compass above map zoom controls; needle matches map overlay yaw (see POI heading lines). */
-function MapHeadingCompass(props: { robotPose: RobotPose | null }): React.ReactElement {
-  const { robotPose } = props;
-  const hasPose = robotPose !== null;
-  const needleDeg = hasPose ? 90 - (robotPose.yaw * 180) / Math.PI : 0;
-  const headingDeg = hasPose
-    ? Math.round(((((robotPose.yaw * 180) / Math.PI) % 360) + 360) % 360)
-    : null;
-
-  return (
-    <div
-      className="map-compass"
-      role="img"
-      aria-label={
-        hasPose && headingDeg !== null
-          ? `Map compass, north at top. Robot heading about ${headingDeg} degrees.`
-          : "Map compass, north at top. Robot pose not available."
-      }
-    >
-      <div className="map-compass-face">
-        <span className="map-compass-cardinal map-compass-cardinal--n">N</span>
-        <span className="map-compass-cardinal map-compass-cardinal--e">E</span>
-        <span className="map-compass-cardinal map-compass-cardinal--s">S</span>
-        <span className="map-compass-cardinal map-compass-cardinal--w">W</span>
-        {hasPose ? (
-          <div
-            className="map-compass-needle"
-            style={{ transform: `rotate(${needleDeg}deg)` }}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 type MapPaneProps = {
   map: MapState | null;
   robotPose: RobotPose | null;
@@ -280,38 +235,42 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     return buildViewport(map, size.width, size.height, ui.camera, viewportBuildOptions);
   }, [map, size.height, size.width, ui.camera, viewportBuildOptions]);
 
-  const mapFadeSourceKey = React.useMemo(
-    () => (map ? `${map.map_id}|${map.image_version}|${map.image_url}` : null),
-    [map],
-  );
+  /** Identity of the map *grid* (not preview bumps). Live costmap updates change `image_version` often;
+   * including that in the fade key caused the raster to opacity-flash on every SLAM frame. */
+  const mapStructureKey = React.useMemo(() => {
+    if (!map) {
+      return null;
+    }
+    return `${map.map_id}|${map.width}|${map.height}|${map.resolution}|${map.origin_x}|${map.origin_y}`;
+  }, [map?.map_id, map?.height, map?.origin_x, map?.origin_y, map?.resolution, map?.width]);
   const [mapLayerVisible, setMapLayerVisible] = React.useState(false);
   const mapImageRef = React.useRef<HTMLImageElement | null>(null);
 
   React.useEffect(() => {
     setMapLayerVisible(false);
-  }, [mapFadeSourceKey]);
+  }, [mapStructureKey]);
 
   /** Cached images often skip `onLoad` after a Strict Mode remount — unstick the fade-in layer. */
   React.useLayoutEffect(() => {
-    if (!mapFadeSourceKey) {
+    if (!mapStructureKey) {
       return;
     }
     const el = mapImageRef.current;
     if (el?.complete && el.naturalWidth > 0) {
       setMapLayerVisible(true);
     }
-  }, [mapFadeSourceKey]);
+  }, [mapStructureKey]);
 
   /** Last resort if load events never fire (proxy hiccup, suspended tab, etc.). */
   React.useEffect(() => {
-    if (!mapFadeSourceKey) {
+    if (!mapStructureKey) {
       return;
     }
     const id = window.setTimeout(() => {
       setMapLayerVisible(true);
     }, 3500);
     return () => window.clearTimeout(id);
-  }, [mapFadeSourceKey]);
+  }, [mapStructureKey]);
 
   const mapStackFrameStyle = React.useMemo(() => {
     if (!viewport) {
@@ -337,27 +296,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     () => yoloObjects.filter((object) => object.status !== "deleted"),
     [yoloObjects],
   );
-
-  const labelVisibility = yoloLabelVisibility(ui.camera.zoom);
-  const labeledYoloIds = React.useMemo(() => {
-    if (labelVisibility === "none") {
-      return new Set<string>();
-    }
-    const sorted = activeYoloObjects
-      .slice()
-      .sort((left, right) => {
-        if (right.updated_at !== left.updated_at) {
-          return right.updated_at.localeCompare(left.updated_at);
-        }
-        return right.best_confidence - left.best_confidence;
-      })
-      .map((object) => object.object_id);
-
-    if (labelVisibility === "all") {
-      return new Set(sorted);
-    }
-    return new Set(sorted.slice(0, 18));
-  }, [activeYoloObjects, labelVisibility]);
 
   const stopEvent = React.useCallback((event: React.SyntheticEvent) => {
     event.stopPropagation();
@@ -531,7 +469,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
 
   const floatingZoomFitControls = showFloatingZoomFit ? (
     <div className="map-floating-controls">
-      <MapHeadingCompass robotPose={robotPose} />
       <div aria-label="Zoom map" className="map-zoom-pill" role="group">
         <button
           aria-label="Zoom in"
@@ -928,14 +865,9 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const itemRef = refFromYoloObject(object.object_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
-                const showLabel = isSelected || labeledYoloIds.has(object.object_id);
                 return (
                   <button
-                    className={[
-                      "yolo-chip",
-                      showLabel ? "has-label" : "dot-only",
-                      isSelected ? "is-selected" : "",
-                    ]
+                    className={["yolo-chip", "dot-only", isSelected ? "is-selected" : ""]
                       .filter(Boolean)
                       .join(" ")}
                     aria-label={`YOLO ${object.label}`}
@@ -950,7 +882,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                     title={`${object.label} ${Math.round(object.best_confidence * 100)}%`}
                     type="button"
                   >
-                    {showLabel ? <span>{object.label}</span> : <span className="sr-only">{object.label}</span>}
+                    <span className="sr-only">{object.label}</span>
                   </button>
                 );
               })}

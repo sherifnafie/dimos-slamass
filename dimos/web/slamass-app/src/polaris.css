@@ -34,59 +34,70 @@
   }
 }
 
+/* Navigator dashboard: smooth opacity-only fade; staggered delays read as left → right. */
+@keyframes polaris-navigator-fade-ltr {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 /* Stagger direct children (e.g. lander hero) — operators / bento / create use modifiers */
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-):not(.polaris-fade-stagger--navigator) > * {
+):not(.polaris-fade-stagger--navigator):not(.polaris-fade-stagger--navigator-workspace) > * {
   opacity: 0;
   animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-):not(.polaris-fade-stagger--navigator) > *:nth-child(1) {
+):not(.polaris-fade-stagger--navigator):not(.polaris-fade-stagger--navigator-workspace) > *:nth-child(1) {
   animation-delay: 0.05s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-):not(.polaris-fade-stagger--navigator) > *:nth-child(2) {
+):not(.polaris-fade-stagger--navigator):not(.polaris-fade-stagger--navigator-workspace) > *:nth-child(2) {
   animation-delay: 0.11s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-):not(.polaris-fade-stagger--navigator) > *:nth-child(3) {
+):not(.polaris-fade-stagger--navigator):not(.polaris-fade-stagger--navigator-workspace) > *:nth-child(3) {
   animation-delay: 0.17s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-):not(.polaris-fade-stagger--navigator) > *:nth-child(4) {
+):not(.polaris-fade-stagger--navigator):not(.polaris-fade-stagger--navigator-workspace) > *:nth-child(4) {
   animation-delay: 0.23s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-):not(.polaris-fade-stagger--navigator) > *:nth-child(5) {
+):not(.polaris-fade-stagger--navigator):not(.polaris-fade-stagger--navigator-workspace) > *:nth-child(5) {
   animation-delay: 0.29s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-):not(.polaris-fade-stagger--navigator) > *:nth-child(6) {
+):not(.polaris-fade-stagger--navigator):not(.polaris-fade-stagger--navigator-workspace) > *:nth-child(6) {
   animation-delay: 0.35s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-):not(.polaris-fade-stagger--navigator) > *:nth-child(7) {
+):not(.polaris-fade-stagger--navigator):not(.polaris-fade-stagger--navigator-workspace) > *:nth-child(7) {
   animation-delay: 0.41s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-):not(.polaris-fade-stagger--navigator) > *:nth-child(8) {
+):not(.polaris-fade-stagger--navigator):not(.polaris-fade-stagger--navigator-workspace) > *:nth-child(8) {
   animation-delay: 0.47s;
 }
 
@@ -201,40 +212,38 @@
   animation-delay: 0.17s;
 }
 
-/* `/polaris` bento — section head then cards */
-.polaris-fade-stagger--bento > .polaris-lander-bento-head {
+/* Navigator dashboard: status strip, then columns — slow smooth fades, staggered left → right. */
+.polaris-fade-stagger--navigator-workspace > .polaris-navigator-fade-toolbar {
   opacity: 0;
-  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  animation-delay: 0.05s;
+  animation: polaris-navigator-fade-ltr 1s ease-in-out forwards;
+  animation-delay: 0.08s;
 }
 
-.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card {
+.polaris-fade-stagger--navigator-workspace > main.polaris-navigator-main-split > * {
   opacity: 0;
-  animation: polaris-fade-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: polaris-navigator-fade-ltr 1.05s ease-in-out forwards;
 }
 
-.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(1) {
-  animation-delay: 0.11s;
+.polaris-fade-stagger--navigator-workspace > main.polaris-navigator-main-split > *:nth-child(1) {
+  animation-delay: 0.22s;
 }
 
-.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(2) {
-  animation-delay: 0.15s;
+.polaris-fade-stagger--navigator-workspace > main.polaris-navigator-main-split > *:nth-child(2) {
+  animation-delay: 0.58s;
 }
 
-.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(3) {
-  animation-delay: 0.19s;
+.polaris-fade-stagger--navigator-workspace > main.polaris-navigator-main-split > *:nth-child(3) {
+  animation-delay: 0.94s;
 }
 
-.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(4) {
-  animation-delay: 0.23s;
-}
-
-.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(5) {
-  animation-delay: 0.27s;
-}
-
-.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(6) {
-  animation-delay: 0.31s;
+/*
+ * Embedded orchestrator chat: fade only after toolbar + all main-split columns have
+ * finished their stagger (last column ends ≈ 0.94s delay + 1.05s duration).
+ */
+.polaris-navigator-root .polaris-navigator-orchestrator-chat-deferred {
+  opacity: 0;
+  animation: polaris-navigator-fade-ltr 1.1s ease-in-out forwards;
+  animation-delay: 2.05s;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -250,8 +259,9 @@
   .polaris-fade-stagger--navigator > .polaris-navigator-back,
   .polaris-fade-stagger--navigator > .polaris-operators-page-head.polaris-navigator-page-head,
   .polaris-fade-stagger--navigator > .polaris-operator-card-sub.polaris-navigator-lede,
-  .polaris-fade-stagger--bento > .polaris-lander-bento-head,
-  .polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card {
+  .polaris-fade-stagger--navigator-workspace > .polaris-navigator-fade-toolbar,
+  .polaris-fade-stagger--navigator-workspace > main.polaris-navigator-main-split > *,
+  .polaris-navigator-root .polaris-navigator-orchestrator-chat-deferred {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
@@ -260,6 +270,10 @@
   .polaris-lander-preview-rotate,
   .polaris-lander-preview-skew {
     transform: none !important;
+  }
+
+  .polaris-root .polaris-lander-explore-button .polaris-lander-explore-star {
+    animation: none !important;
   }
 }
 
@@ -471,62 +485,20 @@
   color: #334155;
 }
 
-.polaris-skild-rule {
-  margin: 0;
-  border: 0;
-  border-bottom: 1px solid #e8e8e8;
+/* Align hero with header brand row: nav px + 56px menu + gap-3 sm:gap-4 (see `.polaris-header` nav). */
+.polaris-lander-hero-shell {
+  padding-right: 1rem;
+  padding-left: calc(1rem + 3.5rem + 0.75rem);
 }
 
-/* Hero arc — empty glass circles above headline (reference: soft semicircle crown). */
-.polaris-lander-arc {
-  position: relative;
-  width: 100%;
-  max-width: 36rem;
-  height: 7.75rem;
-  margin: 0 auto 0.35rem;
-  pointer-events: none;
-  transform-origin: center bottom;
-}
-
-@media (max-width: 639px) {
-  .polaris-lander-arc {
-    height: 6.75rem;
-    margin-bottom: 0.15rem;
-    transform: scale(0.88);
+@media (min-width: 640px) {
+  .polaris-lander-hero-shell {
+    padding-right: 1.5rem;
+    padding-left: calc(1.5rem + 3.5rem + 1rem);
   }
 }
 
-.polaris-lander-arc-dot {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: 2.625rem;
-  height: 2.625rem;
-  border-radius: 50%;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.88));
-  border: 1px solid rgba(15, 23, 42, 0.07);
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 10px 28px rgba(15, 23, 42, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
-}
-
-.polaris-lander-arc-dot--apex {
-  bottom: 0;
-  display: inline-flex;
-  width: 3.125rem;
-  height: 3.125rem;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(165deg, #fff, #f1f5f9);
-  border-color: rgba(15, 23, 42, 0.08);
-  box-shadow:
-    0 2px 4px rgba(15, 23, 42, 0.05),
-    0 14px 36px rgba(15, 23, 42, 0.09),
-    inset 0 1px 0 rgba(255, 255, 255, 1);
-}
-
-@keyframes polaris-lander-apex-glyph-rotate {
+@keyframes polaris-lander-explore-star-spin {
   from {
     transform: rotate(0deg);
   }
@@ -536,24 +508,35 @@
   }
 }
 
-.polaris-lander-arc-apex-glyph {
-  display: flex;
+.polaris-root .polaris-lander-explore-button .polaris-lander-explore-star {
+  display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  font-size: 1.35rem;
+  width: 1.1em;
+  font-size: 1.15em;
   font-weight: 300;
   line-height: 1;
-  color: #64748b;
-  opacity: 0.88;
-  transform-origin: center center;
-  will-change: transform;
-  animation: polaris-lander-apex-glyph-rotate 10s linear infinite;
+  animation: polaris-lander-explore-star-spin 10s linear infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .polaris-lander-arc-apex-glyph {
-    animation: none;
+/* Hero: copy left, preview right — tagline no longer centered */
+.polaris-lander-hero-copy .polaris-lander-tagline {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 28rem;
+}
+
+@media (min-width: 1024px) {
+  .polaris-lander-hero-copy .polaris-lander-tagline {
+    max-width: 32rem;
   }
+}
+
+.polaris-skild-rule {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid #e8e8e8;
 }
 
 /* `/polaris` lander hero — match header `.polaris-title` weight / tracking / tone */
@@ -590,216 +573,6 @@
   }
 }
 
-/* Live session card — intro → spotlight → preview rail */
-.polaris-lander-spotlight {
-  position: relative;
-  width: 100%;
-  max-width: 28rem;
-  margin: 2.75rem auto 0;
-  padding: 0 0.25rem 2.75rem;
-}
-
-@media (min-width: 640px) {
-  .polaris-lander-spotlight {
-    max-width: 34rem;
-    margin-top: 3.25rem;
-    padding-bottom: 3rem;
-  }
-}
-
-.polaris-lander-spotlight-floor {
-  position: absolute;
-  bottom: 0.35rem;
-  left: 50%;
-  width: min(36rem, calc(100% + 1.5rem));
-  height: 10.5rem;
-  border-radius: 1rem;
-  background-color: #e8ecf1;
-  background-image:
-    linear-gradient(to right, rgba(148, 163, 184, 0.22) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.22) 1px, transparent 1px);
-  background-size: 12px 12px;
-  transform: translateX(-50%);
-  opacity: 0.92;
-  pointer-events: none;
-}
-
-.polaris-lander-spotlight-map-pin {
-  position: absolute;
-  bottom: 0.5rem;
-  left: 50%;
-  z-index: 2;
-  box-sizing: border-box;
-  width: 14px;
-  height: 14px;
-  border: 2px solid #7dd3fc;
-  margin-left: -7px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 0 0 3px rgba(125, 211, 252, 0.28),
-    0 2px 6px rgba(15, 23, 42, 0.08);
-  pointer-events: none;
-}
-
-.polaris-lander-spotlight-card {
-  position: relative;
-  z-index: 3;
-  display: flex;
-  overflow: hidden;
-  max-width: 100%;
-  flex-direction: column;
-  align-items: stretch;
-  border: 1px solid #e2e8f0;
-  border-radius: 1rem;
-  background: #fff;
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 18px 44px rgba(15, 23, 42, 0.1);
-  color: inherit;
-  text-align: left;
-  text-decoration: none;
-  transition:
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
-}
-
-@media (min-width: 480px) {
-  .polaris-lander-spotlight-card {
-    flex-direction: row;
-    align-items: stretch;
-    min-height: 11rem;
-  }
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .polaris-lander-spotlight-card:hover {
-    box-shadow:
-      0 1px 2px rgba(15, 23, 42, 0.05),
-      0 22px 52px rgba(15, 23, 42, 0.12);
-    transform: translateY(-2px);
-  }
-}
-
-.polaris-lander-spotlight-card:focus {
-  outline: none;
-}
-
-.polaris-lander-spotlight-card:focus-visible {
-  box-shadow:
-    0 0 0 2px #fff,
-    0 0 0 4px #94a3b8,
-    0 18px 44px rgba(15, 23, 42, 0.1);
-}
-
-.polaris-lander-spotlight-media {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
-}
-
-@media (min-width: 480px) {
-  .polaris-lander-spotlight-media {
-    width: 42%;
-    min-width: 9.5rem;
-    align-self: stretch;
-  }
-}
-
-.polaris-lander-spotlight-img {
-  display: block;
-  width: 100%;
-  max-width: 11rem;
-  height: auto;
-  margin: 0 auto;
-  object-fit: contain;
-}
-
-@media (min-width: 480px) {
-  .polaris-lander-spotlight-img {
-    max-width: none;
-    max-height: 100%;
-    padding: 0.75rem 0.5rem;
-  }
-}
-
-.polaris-lander-spotlight-copy {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  justify-content: center;
-  padding: 1.15rem 1.25rem 1.2rem;
-  background: #fff;
-}
-
-@media (min-width: 480px) {
-  .polaris-lander-spotlight-copy {
-    width: 58%;
-    padding: 1.25rem 1.35rem 1.3rem;
-  }
-}
-
-.polaris-lander-spotlight-title-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.85rem;
-}
-
-.polaris-lander-spotlight-title {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
-  color: #1e293b;
-}
-
-@media (min-width: 640px) {
-  .polaris-lander-spotlight-title {
-    font-size: 1.35rem;
-  }
-}
-
-.polaris-lander-spotlight-status {
-  display: inline-block;
-  flex-shrink: 0;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
-}
-
-.polaris-lander-spotlight-meta {
-  margin: 0;
-}
-
-.polaris-lander-spotlight-meta-row {
-  display: grid;
-  grid-template-columns: 4.75rem minmax(0, 1fr);
-  gap: 0.35rem 0.75rem;
-  margin: 0;
-  padding: 0.28rem 0;
-  font-size: 0.8125rem;
-  line-height: 1.45;
-}
-
-.polaris-lander-spotlight-meta-row dt {
-  margin: 0;
-  font-weight: 600;
-  color: #64748b;
-}
-
-.polaris-lander-spotlight-meta-row dd {
-  margin: 0;
-  font-weight: 400;
-  color: #334155;
-}
-
 /*
  * Lander preview rail — Tailark hero-section-9 pattern (21st.dev / tailark):
  * bottom + right gradient masks, perspective 1200px, rotateX(20deg), skew-x 0.36rad; margin-top separates from CTA.
@@ -809,11 +582,31 @@
   mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
 }
 
+/* Two-column hero: softer edge fade so the screenshot reads clearly on the right */
+.polaris-lander-preview-rail--hero-split {
+  max-width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .polaris-lander-preview-rail--hero-split {
+    -webkit-mask-image: linear-gradient(to bottom, black 72%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 72%, transparent 100%);
+  }
+}
+
 .polaris-lander-preview-perspective {
   -webkit-mask-image: linear-gradient(to right, black 50%, transparent 100%);
   mask-image: linear-gradient(to right, black 50%, transparent 100%);
   perspective: 1200px;
   perspective-origin: 32% 42%;
+}
+
+@media (min-width: 1024px) {
+  .polaris-lander-preview-perspective--hero-split {
+    -webkit-mask-image: linear-gradient(to right, black 78%, transparent 100%);
+    mask-image: linear-gradient(to right, black 78%, transparent 100%);
+    perspective-origin: 58% 42%;
+  }
 }
 
 .polaris-lander-preview-rotate {
@@ -828,7 +621,7 @@
 
 @media (min-width: 640px) {
   .polaris-lander-preview-skew {
-    min-height: 26rem;
+    min-height: 32rem;
   }
 }
 
@@ -838,357 +631,17 @@
     max-height: 88vh;
     min-height: 0;
   }
+
+  /* Side-by-side hero: large preview in the wider column */
+  .polaris-lander-hero-grid .polaris-lander-preview-skew {
+    height: auto;
+    max-height: min(88vh, 56rem);
+    min-height: 26rem;
+  }
 }
 
 .polaris-lander-preview-img {
   display: block;
-}
-
-/* `/polaris` — Unitree A2–style bento grid (layout reference: https://www.unitree.com/A2), light band */
-.polaris-lander-bento {
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #0f172a;
-}
-
-.polaris-lander-bento-inner {
-  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
-.polaris-lander-bento-head {
-  margin-bottom: 1.5rem;
-  text-align: center;
-}
-
-.polaris-lander-bento-heading {
-  margin: 0 0 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #475569;
-}
-
-.polaris-lander-bento-sub {
-  margin: 0;
-  max-width: 36rem;
-  margin-inline: auto;
-  font-size: 0.8125rem;
-  font-weight: 400;
-  line-height: 1.5;
-  color: #64748b;
-}
-
-.polaris-lander-bento-sub-link {
-  color: #0f172a;
-  font-weight: 500;
-  text-decoration: underline;
-  text-decoration-color: rgba(15, 23, 42, 0.35);
-  text-underline-offset: 0.15em;
-}
-
-.polaris-lander-bento-sub-link:hover {
-  color: #020617;
-  text-decoration-color: rgba(2, 6, 23, 0.55);
-}
-
-.polaris-lander-bento-grid {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: 1fr;
-}
-
-@media (min-width: 900px) {
-  .polaris-lander-bento-grid {
-    gap: 1rem;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: minmax(260px, auto) minmax(240px, auto);
-    align-items: stretch;
-  }
-
-  .polaris-lander-bento-card--torque {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .polaris-lander-bento-card--walk {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .polaris-lander-bento-card--load {
-    grid-column: 3;
-    grid-row: 1;
-  }
-
-  .polaris-lander-bento-card--material {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .polaris-lander-bento-card--speed {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
-  .polaris-lander-bento-card--compute {
-    grid-column: 3;
-    grid-row: 2;
-  }
-}
-
-.polaris-lander-bento-card {
-  position: relative;
-  display: flex;
-  overflow: hidden;
-  flex-direction: column;
-  min-height: 0;
-  padding: 1.25rem 1.25rem 0;
-  border: 1px solid var(--polaris-tile-border-accent);
-  border-radius: 1.25rem;
-  background: linear-gradient(155deg, #ffffff 0%, #f1f5f9 38%, #e2e8f0 100%);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 1px 2px rgba(15, 23, 42, 0.05),
-    0 8px 24px rgba(15, 23, 42, 0.04);
-  color: #0f172a;
-}
-
-@media (min-width: 900px) {
-  .polaris-lander-bento-card--walk {
-    min-height: 280px;
-  }
-}
-
-.polaris-lander-bento-card-copy {
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-  padding-bottom: 0.75rem;
-}
-
-.polaris-lander-bento-label {
-  margin: 0 0 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #64748b;
-}
-
-.polaris-lander-bento-stat {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-  color: #020617;
-}
-
-.polaris-lander-bento-stat--secondary {
-  margin-top: 0.35rem;
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.polaris-lander-bento-stat--secondary strong {
-  font-weight: 700;
-  color: #020617;
-}
-
-.polaris-lander-bento-body {
-  margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 500;
-  line-height: 1.45;
-  color: #334155;
-}
-
-.polaris-lander-bento-body strong {
-  font-weight: 700;
-  color: #020617;
-}
-
-.polaris-lander-bento-body--tight {
-  margin-top: 0.35rem;
-  font-size: 0.8125rem;
-  font-weight: 400;
-  line-height: 1.45;
-  color: #475569;
-}
-
-.polaris-lander-bento-pill-row {
-  margin: 0.5rem 0 0;
-}
-
-.polaris-lander-bento-pill-row:first-of-type {
-  margin-top: 0.35rem;
-}
-
-.polaris-lander-bento-pill {
-  display: inline-block;
-  padding: 0.2rem 0.55rem;
-  border-radius: 9999px;
-  background: #0f172a;
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #f8fafc;
-}
-
-.polaris-lander-bento-pill--optional {
-  background: #475569;
-}
-
-.polaris-lander-bento-visual {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 7rem;
-  margin: 0 -1.25rem;
-  border-radius: 0 0 1.25rem 1.25rem;
-}
-
-.polaris-lander-bento-img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  max-height: 11rem;
-  object-fit: contain;
-  object-position: bottom center;
-}
-
-.polaris-lander-bento-visual--torque {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  background: radial-gradient(ellipse 80% 70% at 50% 100%, rgba(148, 163, 184, 0.35), transparent 65%),
-    linear-gradient(180deg, transparent, rgba(241, 245, 249, 0.9));
-}
-
-.polaris-lander-bento-visual--walk {
-  background: linear-gradient(115deg, #cbd5e1 0%, #94a3b8 38%, #64748b 100%);
-  mask-image: linear-gradient(180deg, transparent 0%, #000 28%);
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 28%);
-}
-
-.polaris-lander-bento-visual--walk::after {
-  position: absolute;
-  inset: 18% 8% 12%;
-  border-radius: 4px;
-  background: linear-gradient(32deg, #78716c 0%, #a8a29e 45%, #d6d3d1 100%);
-  opacity: 0.85;
-  content: "";
-  transform: skewY(-18deg);
-}
-
-.polaris-lander-bento-visual--load {
-  background: radial-gradient(circle at 50% 0%, rgba(15, 23, 42, 0.12), transparent 55%),
-    linear-gradient(180deg, #f1f5f9, #e2e8f0);
-}
-
-.polaris-lander-bento-visual--load::after {
-  position: absolute;
-  bottom: 12%;
-  left: 50%;
-  width: 3.25rem;
-  height: 2.5rem;
-  border-radius: 0.35rem;
-  background: linear-gradient(145deg, #171717, #404040);
-  content: "";
-  transform: translateX(-50%);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
-}
-
-.polaris-lander-bento-visual--material {
-  background: radial-gradient(ellipse 100% 80% at 50% 100%, rgba(56, 189, 248, 0.2), transparent 60%),
-    linear-gradient(180deg, #f8fafc, #e2e8f0);
-}
-
-.polaris-lander-bento-visual--material::before {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  width: 70%;
-  height: 55%;
-  border-radius: 50% 50% 0 0;
-  background: linear-gradient(180deg, #475569, #1e293b);
-  content: "";
-  opacity: 0.35;
-  transform: translateX(-50%);
-}
-
-.polaris-lander-bento-visual--speed {
-  overflow: hidden;
-  background: linear-gradient(90deg, #e2e8f0, #cbd5e1);
-}
-
-.polaris-lander-bento-visual--speed::before,
-.polaris-lander-bento-visual--speed::after {
-  position: absolute;
-  top: 42%;
-  height: 2px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.2);
-  content: "";
-}
-
-.polaris-lander-bento-visual--speed::before {
-  left: -20%;
-  width: 45%;
-  animation: polaris-bento-speed-line 2.2s ease-in-out infinite;
-}
-
-.polaris-lander-bento-visual--speed::after {
-  left: -10%;
-  width: 35%;
-  animation: polaris-bento-speed-line 2.2s ease-in-out 0.35s infinite;
-}
-
-@keyframes polaris-bento-speed-line {
-  0% {
-    transform: translateX(0);
-    opacity: 0;
-  }
-
-  15% {
-    opacity: 1;
-  }
-
-  100% {
-    transform: translateX(220%);
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .polaris-lander-bento-visual--speed::before,
-  .polaris-lander-bento-visual--speed::after {
-    animation: none;
-    opacity: 0.35;
-    transform: translateX(40%);
-  }
-}
-
-.polaris-lander-bento-visual--compute {
-  background: radial-gradient(circle at 70% 30%, rgba(59, 130, 246, 0.35), transparent 55%),
-    linear-gradient(145deg, #1e293b, #0f172a);
-}
-
-.polaris-lander-bento-visual--compute::after {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 3.5rem;
-  height: 3.5rem;
-  border: 2px solid rgba(148, 163, 184, 0.45);
-  border-radius: 0.5rem;
-  background: linear-gradient(135deg, rgba(71, 85, 105, 0.9), rgba(30, 41, 59, 0.95));
-  content: "";
-  transform: translate(-50%, -50%) rotate(-8deg);
-  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.25), 0 12px 28px rgba(0, 0, 0, 0.35);
 }
 
 /* `/polaris/operators` — list rows (reference: skild.ai/career), Inter typography */
@@ -2022,6 +1475,13 @@
   --shadow: none;
 }
 
+.polaris-navigator-root > .polaris-fade-stagger--navigator-workspace {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
 /* Flat chrome — no box / drop shadows on navigator */
 .polaris-navigator-root .panel-shell {
   box-shadow: none;
@@ -2135,7 +1595,7 @@
   }
 }
 
-/* Left column: fleet + Agent cards only (no outer PanelShell / map-panel frame) */
+/* Left column: fleet + Orchestrator cards only (no outer PanelShell / map-panel frame) */
 .polaris-navigator-operations-column {
   display: flex;
   min-width: 0;
@@ -2161,7 +1621,7 @@
   }
 }
 
-/* Third column: compact option cards (same chrome as Operators / Agent in left column) */
+/* Third column: compact option cards (same chrome as Operators / Orchestrator in left column) */
 .polaris-navigator-detections-column.polaris-navigator-map {
   --map-panel-inline: 1.4rem;
 }
@@ -2209,10 +1669,6 @@
   max-width: none;
 }
 
-.polaris-nav-detections-list-card .polaris-nav-option-card-header {
-  align-items: center;
-}
-
 @media (min-width: 960px) {
   .polaris-navigator-detections-column {
     height: 100%;
@@ -2224,11 +1680,6 @@
 .polaris-navigator-detections-column .polaris-nav-detections-camera-card {
   flex: 0 0 auto;
   align-self: stretch;
-}
-
-.polaris-navigator-detections-column .polaris-nav-detections-camera-card .polaris-nav-option-card-header {
-  align-items: center;
-  padding-bottom: 0.5rem;
 }
 
 .polaris-navigator-detections-column
@@ -2270,7 +1721,7 @@
   padding-inline: var(--map-panel-inline);
 }
 
-/* Left stack: same idea as camera + detections — fixed first block, Agent fills remaining row height */
+/* Left stack: same idea as camera + detections — fixed first block, Orchestrator fills remaining row height */
 .polaris-navigator-map .polaris-navigator-operations-inner.polaris-navigator-operations-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2574,7 +2025,7 @@
   padding: 1.25rem 0.75rem;
 }
 
-/* Agent option card is the outer frame — no second box around chat */
+/* Orchestrator option card is the outer frame — no second box around chat */
 .polaris-navigator-operations-inner .operator-rail-embedded--segment-agent .rail-content {
   border: none;
   border-radius: 0;
@@ -2589,6 +2040,7 @@
 
 .polaris-navigator-operations-inner .operator-rail-embedded--segment-agent .chat-thread {
   background: transparent;
+  justify-content: flex-start;
 }
 
 .polaris-nav-option-card {
@@ -2632,7 +2084,7 @@
   color: #0f172a;
 }
 
-/* Navigator sections (Agent, …) — same format as `.polaris-operators-page-title`, one step smaller (cf. sidebar Operators link). */
+/* Navigator sections (Orchestrator, …) — same format as `.polaris-operators-page-title`, one step smaller (cf. sidebar Operators link). */
 .polaris-root .polaris-nav-option-card--polaris-heading .polaris-nav-option-card-title {
   font-size: 15px;
   font-weight: 300;
@@ -2645,6 +2097,14 @@
   .polaris-root .polaris-nav-option-card--polaris-heading .polaris-nav-option-card-title {
     font-size: 17px;
   }
+}
+
+/* Section title row: same vertical rhythm + underline as center map `.panel-header` */
+.polaris-navigator-map .polaris-nav-option-card--polaris-heading .polaris-nav-option-card-header {
+  align-items: center;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  padding-block: 1.05rem 0.95rem;
+  padding-inline: var(--map-panel-inline);
 }
 
 .polaris-nav-option-card-desc {
@@ -2747,10 +2207,14 @@
   min-height: 0;
   max-height: min(48vh, 580px);
   overflow: hidden;
-  border: 0.5px solid rgba(15, 23, 42, 0.12);
-  border-radius: 8px;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  border: none;
+  border-radius: 0;
+  background: #fff;
+}
+
+/* Navigator embedded camera: empty frame — flat white, no grey test-card fill. */
+.polaris-nav-pov-stage--placeholder {
+  background: #fff;
 }
 
 .polaris-nav-operators-header-aside {
@@ -2763,11 +2227,6 @@
 
 .polaris-nav-operators-fleet-card .polaris-nav-option-card-head-aside {
   max-width: none;
-}
-
-.polaris-nav-operators-fleet-card .polaris-nav-option-card-header {
-  align-items: center;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 /* Expand / collapse (match thin header icon treatment — cf. camera capture header). */
@@ -2870,7 +2329,7 @@
   -webkit-overflow-scrolling: touch;
 }
 
-/* Navigator sidebar: reuse `/polaris/operators` operator cards (scaled + stretched link to operators). */
+/* Navigator sidebar: reuse `/polaris/operators` operator cards (scaled for the column). */
 .polaris-nav-operators-fleet-card > .polaris-nav-option-card-body {
   padding: 0 0 0.75rem;
   box-sizing: border-box;
@@ -2943,23 +2402,6 @@
   .polaris-nav-operators-embed-card.polaris-operator-card:hover {
     background: rgba(15, 23, 42, 0.02);
   }
-}
-
-.polaris-nav-operators-embed-hit {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  text-decoration: none;
-  color: inherit;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.polaris-nav-operators-embed-hit:focus {
-  outline: none;
-}
-
-.polaris-nav-operators-embed-hit:focus-visible {
-  box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px #94a3b8;
 }
 
 .polaris-nav-operators-embed-card .polaris-operator-card-title-link {
@@ -3828,6 +3270,8 @@
   padding-inline: var(--map-panel-inline);
   /* Above `.panel-body` (both default to z-index:1; body wins paint order and hid the Controls menu). */
   z-index: 25;
+  /* Match `.polaris-nav-operators-fleet-card .polaris-nav-option-card-header` (underline under title). */
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 .polaris-navigator-map .map-panel .panel-body {
@@ -3849,7 +3293,7 @@
   }
 }
 
-/* Center map panel only: same title scale as `.polaris-nav-option-card--polaris-heading` (Operators, Agent, …) */
+/* Center map panel only: same title scale as `.polaris-nav-option-card--polaris-heading` (Operators, Orchestrator, …) */
 .polaris-navigator-map-column > .map-panel.polaris-navigator-map-panel--compact-title .panel-header h2 {
   font-size: 15px !important;
   font-weight: 300 !important;

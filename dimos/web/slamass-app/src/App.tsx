@@ -1085,7 +1085,7 @@ export default function App(): React.ReactElement {
 
   const handleSubmitChatMessage = React.useCallback(
     async (message: string) => {
-      appendActivity("operator", "Agent prompt", message, "accent");
+      appendActivity("operator", "Orchestrator prompt", message, "accent");
       try {
         const payload = await fetchJson<ChatState>("/api/chat", {
           method: "POST",
@@ -1109,7 +1109,7 @@ export default function App(): React.ReactElement {
       startTransition(() => {
         setState((previous) => ({ ...previous, chat: payload }));
       });
-      appendActivity("system", "Agent reset", "Chat history cleared.", "neutral");
+      appendActivity("system", "Orchestrator reset", "Chat history cleared.", "neutral");
     } catch (error) {
       reportActionError("Chat reset failed", error);
     }
@@ -1220,7 +1220,9 @@ export default function App(): React.ReactElement {
           {state.inspection.status === "running" ? (
             <span className="toolbar-chip tone-running">Inspecting</span>
           ) : null}
-          {state.chat.running ? <span className="toolbar-chip tone-accent">Agent thinking</span> : null}
+          {state.chat.running ? (
+            <span className="toolbar-chip tone-accent">Orchestrator thinking</span>
+          ) : null}
           {!state.openai_configured ? (
             <span
               className="toolbar-chip tone-accent"
@@ -1351,7 +1353,7 @@ export default function App(): React.ReactElement {
                   }}
                   type="button"
                 >
-                  Agent tool calls
+                  Orchestrator tool calls
                 </button>
                 <button
                   className="menu-item"

@@ -1,6 +1,6 @@
 import type { ChatMessage } from "./types";
 
-/** Sample thread for empty Agent chat — same shape as `/api/chat` messages. */
+/** Sample thread for empty Orchestrator chat — same shape as `/api/chat` messages. */
 export const EXAMPLE_AGENT_CHAT_MESSAGES: ChatMessage[] = [
   {
     message_id: "example-user-describe-scene",

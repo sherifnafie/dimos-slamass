@@ -370,7 +370,7 @@ export function NavigatorDashboardView(
               }}
               type="button"
             >
-              Agent tool calls
+              Orchestrator tool calls
             </button>
             <button
               className="menu-item"
@@ -496,265 +496,268 @@ export function NavigatorDashboardView(
 
   return (
     <div className="app-shell--light polaris-navigator-root">
-      <div className="px-4 pb-1 pt-0 sm:px-8 sm:pb-1.5 sm:pt-1">
-        <div className="polaris-navigator-toolbar polaris-navigator-toolbar--actions mx-auto flex w-full max-w-[min(100vw-2rem,1600px)] flex-wrap items-center gap-3">
-          <div className="topbar-status">
-            {slamassApiStatus === "loading" ? (
-              <span className="toolbar-chip">API…</span>
-            ) : null}
-            {slamassApiStatus === "error" ? (
-              <span className="toolbar-chip tone-danger">API unreachable</span>
-            ) : null}
-            {teleopEnabled ? (
-              <span className="toolbar-chip tone-danger">Teleop armed</span>
-            ) : null}
-            {state.chat.running ? (
-              <span className="toolbar-chip tone-accent">Agent thinking</span>
-            ) : null}
-            {!state.yolo_runtime.inference_enabled ? (
-              <span className="toolbar-chip tone-danger">YOLO off</span>
-            ) : null}
-            {state.yolo_runtime.mode !== "live" ? (
-              <span className="toolbar-chip tone-accent">YOLO paused</span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <main
-        className="polaris-navigator-main-split polaris-navigator-workspace"
-        data-testid="polaris-navigator-main"
-      >
-        <aside
-          aria-label="Navigator options"
-          className="polaris-navigator-sidebar"
-        >
-          <div className="polaris-navigator-operations-column polaris-navigator-map">
-            <div className="polaris-navigator-operations-inner polaris-navigator-operations-body">
-              <NavigatorOperatorFleet />
-
-              <NavigatorOptionCard
-                bodyVariant="scroll"
-                className="polaris-nav-option-card--grow polaris-nav-option-card--polaris-heading"
-                title="Agent"
-              >
-                <OperatorRail
-                  activityEntries={activityEntries}
-                  busyAction={busyAction}
-                  chat={state.chat}
-                  embedSegment="agent"
-                  embedded
-                  items={semanticItems}
-                  onClearFocus={() => {
-                    void handleClearFocus();
-                  }}
-                  onFocusItem={(item) => {
-                    void handleFocusItem(item);
-                  }}
-                  onGoToItem={(item) => {
-                    void handleGoToItem(item);
-                  }}
-                  onHighlightItem={(item) => {
-                    void handleHighlightItem(item);
-                  }}
-                  onResetChat={() => {
-                    void handleResetChat();
-                  }}
-                  onSelectItem={(item) => {
-                    void handleSelectItem(item);
-                  }}
-                  onSubmitChatMessage={(message) => {
-                    void handleSubmitChatMessage(message);
-                  }}
-                  selectedItem={state.ui.selected_item}
-                  selectedPreview={selectedPreview}
-                />
-              </NavigatorOptionCard>
+      <div className="polaris-fade-stagger polaris-fade-stagger--navigator-workspace">
+        <div className="polaris-navigator-fade-toolbar px-4 pb-1 pt-0 sm:px-8 sm:pb-1.5 sm:pt-1">
+          <div className="polaris-navigator-toolbar polaris-navigator-toolbar--actions mx-auto flex w-full max-w-[min(100vw-2rem,1600px)] flex-wrap items-center gap-3">
+            <div className="topbar-status">
+              {slamassApiStatus === "loading" ? (
+                <span className="toolbar-chip">API…</span>
+              ) : null}
+              {slamassApiStatus === "error" ? (
+                <span className="toolbar-chip tone-danger">API unreachable</span>
+              ) : null}
+              {teleopEnabled ? (
+                <span className="toolbar-chip tone-danger">Teleop armed</span>
+              ) : null}
+              {state.chat.running ? (
+                <span className="toolbar-chip tone-accent">Orchestrator thinking</span>
+              ) : null}
+              {!state.yolo_runtime.inference_enabled ? (
+                <span className="toolbar-chip tone-danger">YOLO off</span>
+              ) : null}
+              {state.yolo_runtime.mode !== "live" ? (
+                <span className="toolbar-chip tone-accent">YOLO paused</span>
+              ) : null}
             </div>
           </div>
-        </aside>
-
-        <div className="polaris-navigator-map-column polaris-navigator-map">
-          <PanelShell
-            aside={navigatorMapHeaderActions}
-            bodyClassName="panel-body-stage"
-            className="map-panel polaris-navigator-map-panel--compact-title"
-            title="Navigator"
-          >
-            <MapPane
-              layers={state.layers}
-              map={state.map}
-              pinViewModeControlsBottom
-              refitOnLayoutReady
-              viewportScreenAnchorY={NAVIGATOR_MAP_VIEWPORT_ANCHOR_Y}
-              robotOperatorHoverCard={defaultRobotOperatorHoverCard("navigator")}
-              showMapToolbar={false}
-              onCameraChange={queueCameraSync}
-              onClearFocus={() => {
-                void handleClearFocus();
-              }}
-              onFocusItem={(item) => {
-                void handleFocusItem(item);
-              }}
-              onFocusMap={() => {
-                void handleFocusMap();
-              }}
-              onFocusRobot={() => {
-                void handleFocusRobot();
-              }}
-              onNavigate={(x, y) => {
-                void handleNavigate(x, y);
-              }}
-              onSelectItem={(item) => {
-                void handleSelectItem(item);
-              }}
-              path={state.path}
-              pois={state.pois}
-              robotPose={state.robot_pose}
-              ui={state.ui}
-              yoloObjects={state.yolo_objects}
-            />
-          </PanelShell>
-
-          <div
-            aria-label="Latest activity"
-            className="polaris-navigator-map-activity-below"
-            data-testid="polaris-navigator-activity-line"
-          >
-            <p
-              aria-live="polite"
-              className={`polaris-navigator-activity-line${latestActivity ? ` ${navigatorActivityToneClass(latestActivity.tone)}` : " polaris-navigator-activity-line--neutral"}`}
-            >
-              {latestActivity
-                ? formatNavigatorActivityLine(latestActivity)
-                : "No recent activity"}
-            </p>
-          </div>
         </div>
 
-        <aside
-          aria-label="Camera and detections"
-          className="polaris-navigator-detections-column polaris-navigator-map"
+        <main
+          className="polaris-navigator-main-split polaris-navigator-workspace"
+          data-testid="polaris-navigator-main"
         >
-          <NavigatorOptionCard
-            className="polaris-nav-detections-camera-card polaris-nav-option-card--polaris-heading"
-            headerAside={
-              <button
-                aria-label={
-                  cameraHeaderCaptureEnabled
-                    ? state.connected
-                      ? "Take a picture (live feed)"
-                      : "Take a picture"
-                    : "Camera feed not ready"
-                }
-                className="polaris-nav-camera-header-capture"
-                disabled={!cameraHeaderCaptureEnabled}
-                type="button"
-                onClick={() => {
-                  cameraFeedRef.current?.captureSnapshot();
-                }}
-              >
-                <CameraIcon
-                  aria-hidden
-                  className="polaris-nav-camera-header-capture-icon"
-                />
-              </button>
-            }
-            title="Camera"
+          <aside
+            aria-label="Navigator options"
+            className="polaris-navigator-sidebar"
           >
-            <LiveFeedPanel
-              ref={cameraFeedRef}
-              connected={state.connected}
-              embedded
-              frameLabel=""
-              onCaptureAvailabilityChange={setCameraHeaderCaptureEnabled}
-              poseLabel={null}
-              pov={state.pov}
-            />
-          </NavigatorOptionCard>
+            <div className="polaris-navigator-operations-column polaris-navigator-map">
+              <div className="polaris-navigator-operations-inner polaris-navigator-operations-body">
+                <NavigatorOperatorFleet />
 
-          <NavigatorOptionCard
-            bodyClassName="polaris-navigator-detections-body"
-            bodyVariant="scroll"
-            className="polaris-nav-detections-list-card polaris-nav-option-card--grow polaris-nav-option-card--polaris-heading"
-            headerAside={
-              <div className="polaris-detection-log-toolbar">
-                <button
-                  className="polaris-detection-log-pill"
-                  disabled={
-                    busyAction !== null || !state.yolo_runtime.inference_enabled
-                  }
-                  title={
-                    !state.yolo_runtime.inference_enabled
-                      ? "Turn on YOLO inference in Settings to pause labeling"
-                      : undefined
-                  }
-                  type="button"
-                  onClick={() => {
-                    void handleYoloModeChange(
-                      state.yolo_runtime.mode === "live" ? "paused" : "live",
-                    );
-                  }}
+                <NavigatorOptionCard
+                  bodyVariant="scroll"
+                  className="polaris-nav-option-card--grow polaris-nav-option-card--polaris-heading"
+                  title="Orchestrator"
                 >
-                  {state.yolo_runtime.mode === "live" ? "Pause" : "Resume"}
-                </button>
-                <button
-                  className="polaris-detection-log-pill polaris-detection-log-pill--muted"
-                  disabled={
-                    busyAction !== null ||
-                    (state.pois.length === 0 && state.yolo_objects.length === 0)
-                  }
-                  type="button"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Clear all detection anchors (VLM POIs and YOLO objects) from memory?",
-                      )
-                    ) {
-                      void handleClearSemanticMemory();
-                    }
-                  }}
-                >
-                  Clear
-                </button>
+                  <OperatorRail
+                    activityEntries={activityEntries}
+                    busyAction={busyAction}
+                    chat={state.chat}
+                    embedSegment="agent"
+                    embedded
+                    items={semanticItems}
+                    onClearFocus={() => {
+                      void handleClearFocus();
+                    }}
+                    onFocusItem={(item) => {
+                      void handleFocusItem(item);
+                    }}
+                    onGoToItem={(item) => {
+                      void handleGoToItem(item);
+                    }}
+                    onHighlightItem={(item) => {
+                      void handleHighlightItem(item);
+                    }}
+                    onResetChat={() => {
+                      void handleResetChat();
+                    }}
+                    onSelectItem={(item) => {
+                      void handleSelectItem(item);
+                    }}
+                    onSubmitChatMessage={(message) => {
+                      void handleSubmitChatMessage(message);
+                    }}
+                    selectedItem={state.ui.selected_item}
+                    selectedPreview={selectedPreview}
+                  />
+                </NavigatorOptionCard>
               </div>
-            }
-            title="Detection log"
+            </div>
+          </aside>
+
+          <div className="polaris-navigator-map-column polaris-navigator-map">
+            <PanelShell
+              aside={navigatorMapHeaderActions}
+              bodyClassName="panel-body-stage"
+              className="map-panel polaris-navigator-map-panel--compact-title"
+              title="Navigator"
+            >
+              <MapPane
+                layers={state.layers}
+                map={state.map}
+                pinViewModeControlsBottom
+                refitOnLayoutReady
+                viewportScreenAnchorY={NAVIGATOR_MAP_VIEWPORT_ANCHOR_Y}
+                robotOperatorHoverCard={defaultRobotOperatorHoverCard("navigator")}
+                showMapToolbar={false}
+                onCameraChange={queueCameraSync}
+                onClearFocus={() => {
+                  void handleClearFocus();
+                }}
+                onFocusItem={(item) => {
+                  void handleFocusItem(item);
+                }}
+                onFocusMap={() => {
+                  void handleFocusMap();
+                }}
+                onFocusRobot={() => {
+                  void handleFocusRobot();
+                }}
+                onNavigate={(x, y) => {
+                  void handleNavigate(x, y);
+                }}
+                onSelectItem={(item) => {
+                  void handleSelectItem(item);
+                }}
+                path={state.path}
+                pois={state.pois}
+                robotPose={state.robot_pose}
+                ui={state.ui}
+                yoloObjects={state.yolo_objects}
+              />
+            </PanelShell>
+
+            <div
+              aria-label="Latest activity"
+              className="polaris-navigator-map-activity-below"
+              data-testid="polaris-navigator-activity-line"
+            >
+              <p
+                aria-live="polite"
+                className={`polaris-navigator-activity-line${latestActivity ? ` ${navigatorActivityToneClass(latestActivity.tone)}` : " polaris-navigator-activity-line--neutral"}`}
+              >
+                {latestActivity
+                  ? formatNavigatorActivityLine(latestActivity)
+                  : "No recent activity"}
+              </p>
+            </div>
+          </div>
+
+          <aside
+            aria-label="Camera and detections"
+            className="polaris-navigator-detections-column polaris-navigator-map"
           >
-            <OperatorRail
-              activityEntries={activityEntries}
-              busyAction={busyAction}
-              chat={state.chat}
-              embedSegment="memory"
-              embedded
-              items={semanticItems}
-              onClearFocus={() => {
-                void handleClearFocus();
-              }}
-              onFocusItem={(item) => {
-                void handleFocusItem(item);
-              }}
-              onGoToItem={(item) => {
-                void handleGoToItem(item);
-              }}
-              onHighlightItem={(item) => {
-                void handleHighlightItem(item);
-              }}
-              onResetChat={() => {
-                void handleResetChat();
-              }}
-              onSelectItem={(item) => {
-                void handleSelectItem(item);
-              }}
-              onSubmitChatMessage={(message) => {
-                void handleSubmitChatMessage(message);
-              }}
-              selectedItem={state.ui.selected_item}
-              selectedPreview={selectedPreview}
-            />
-          </NavigatorOptionCard>
-        </aside>
-      </main>
+            <NavigatorOptionCard
+              className="polaris-nav-detections-camera-card polaris-nav-option-card--polaris-heading"
+              headerAside={
+                <button
+                  aria-label={
+                    cameraHeaderCaptureEnabled
+                      ? state.connected
+                        ? "Take a picture (live feed)"
+                        : "Take a picture"
+                      : "Camera feed not ready"
+                  }
+                  className="polaris-nav-camera-header-capture"
+                  disabled={!cameraHeaderCaptureEnabled}
+                  type="button"
+                  onClick={() => {
+                    cameraFeedRef.current?.captureSnapshot();
+                  }}
+                >
+                  <CameraIcon
+                    aria-hidden
+                    className="polaris-nav-camera-header-capture-icon"
+                  />
+                </button>
+              }
+              title="Camera"
+            >
+              <LiveFeedPanel
+                ref={cameraFeedRef}
+                connected={state.connected}
+                embedded
+                frameLabel=""
+                onCaptureAvailabilityChange={setCameraHeaderCaptureEnabled}
+                placeholder
+                poseLabel={null}
+                pov={state.pov}
+              />
+            </NavigatorOptionCard>
+
+            <NavigatorOptionCard
+              bodyClassName="polaris-navigator-detections-body"
+              bodyVariant="scroll"
+              className="polaris-nav-detections-list-card polaris-nav-option-card--grow polaris-nav-option-card--polaris-heading"
+              headerAside={
+                <div className="polaris-detection-log-toolbar">
+                  <button
+                    className="polaris-detection-log-pill"
+                    disabled={
+                      busyAction !== null || !state.yolo_runtime.inference_enabled
+                    }
+                    title={
+                      !state.yolo_runtime.inference_enabled
+                        ? "Turn on YOLO inference in Settings to pause labeling"
+                        : undefined
+                    }
+                    type="button"
+                    onClick={() => {
+                      void handleYoloModeChange(
+                        state.yolo_runtime.mode === "live" ? "paused" : "live",
+                      );
+                    }}
+                  >
+                    {state.yolo_runtime.mode === "live" ? "Pause" : "Resume"}
+                  </button>
+                  <button
+                    className="polaris-detection-log-pill polaris-detection-log-pill--muted"
+                    disabled={
+                      busyAction !== null ||
+                      (state.pois.length === 0 && state.yolo_objects.length === 0)
+                    }
+                    type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Clear all detection anchors (VLM POIs and YOLO objects) from memory?",
+                        )
+                      ) {
+                        void handleClearSemanticMemory();
+                      }
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              }
+              title="Detection log"
+            >
+              <OperatorRail
+                activityEntries={activityEntries}
+                busyAction={busyAction}
+                chat={state.chat}
+                embedSegment="memory"
+                embedded
+                items={semanticItems}
+                onClearFocus={() => {
+                  void handleClearFocus();
+                }}
+                onFocusItem={(item) => {
+                  void handleFocusItem(item);
+                }}
+                onGoToItem={(item) => {
+                  void handleGoToItem(item);
+                }}
+                onHighlightItem={(item) => {
+                  void handleHighlightItem(item);
+                }}
+                onResetChat={() => {
+                  void handleResetChat();
+                }}
+                onSelectItem={(item) => {
+                  void handleSelectItem(item);
+                }}
+                onSubmitChatMessage={(message) => {
+                  void handleSubmitChatMessage(message);
+                }}
+                selectedItem={state.ui.selected_item}
+                selectedPreview={selectedPreview}
+              />
+            </NavigatorOptionCard>
+          </aside>
+        </main>
+      </div>
 
       {selectedPoi || selectedYoloObject ? (
         <div

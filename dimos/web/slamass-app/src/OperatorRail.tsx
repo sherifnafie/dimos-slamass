@@ -46,7 +46,7 @@ type OperatorRailProps = {
   embedded?: boolean;
   /**
    * Navigator: `activity` = timeline only; `memory` = detection thumbnails only (no agent / detail card);
-   * `agent` = chat only; `full` (default) = Timeline + Semantic + Agent in one rail.
+   * `agent` = chat only; `full` (default) = Timeline + Semantic + Orchestrator in one rail.
    */
   embedSegment?: "full" | "activity" | "memory" | "agent";
 };
@@ -400,7 +400,7 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
         }}
         type="button"
       >
-        Agent
+        Orchestrator
       </button>
     </div>
   );
@@ -430,13 +430,15 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
       <div className="operator-rail-embedded operator-rail-embedded--segment-agent">
         <div className="rail-stack">
           <div className="rail-content">
-            <ChatPanel
-              chat={chat}
-              exampleSuggestionPrompts={EXAMPLE_AGENT_SUGGESTION_PROMPTS}
-              exampleWhenEmpty={EXAMPLE_AGENT_CHAT_MESSAGES}
-              onResetChat={onResetChat}
-              onSubmitMessage={onSubmitChatMessage}
-            />
+            <div className="polaris-navigator-orchestrator-chat-deferred">
+              <ChatPanel
+                chat={chat}
+                exampleSuggestionPrompts={EXAMPLE_AGENT_SUGGESTION_PROMPTS}
+                exampleWhenEmpty={EXAMPLE_AGENT_CHAT_MESSAGES}
+                onResetChat={onResetChat}
+                onSubmitMessage={onSubmitChatMessage}
+              />
+            </div>
           </div>
         </div>
       </div>

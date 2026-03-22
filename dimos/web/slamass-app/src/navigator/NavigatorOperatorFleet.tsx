@@ -32,11 +32,6 @@ function NavigatorOperatorFleetList(): React.ReactElement {
               className="polaris-operator-card polaris-nav-operators-embed-card"
               data-testid={`polaris-nav-operator-${op.id}`}
             >
-              <a
-                aria-label={`View ${op.title} on Operators`}
-                className="polaris-nav-operators-embed-hit"
-                href="/polaris/operators"
-              />
               <div className="polaris-operator-card-media-column">
                 <div
                   className={

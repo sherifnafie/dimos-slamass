@@ -32,7 +32,7 @@ function ChatMessageArticle(props: { message: ChatMessage }): React.ReactElement
     <article className={`chat-message role-${message.role} status-${message.status}`}>
       <div className="chat-message-meta">
         <div className="chat-message-meta-start">
-          <strong>{message.role === "user" ? "You" : "Agent"}</strong>
+          <strong>{message.role === "user" ? "You" : "Orchestrator"}</strong>
         </div>
         <time dateTime={message.created_at}>{formatTime(message.created_at)}</time>
       </div>
@@ -70,6 +70,11 @@ export function ChatPanel(props: ChatPanelProps): React.ReactElement {
   React.useEffect(() => {
     const thread = threadRef.current;
     if (!thread) {
+      return;
+    }
+    /* Empty + example thread: keep viewport pinned to the top. Live messages: stick to latest. */
+    if (chat.messages.length === 0) {
+      thread.scrollTop = 0;
       return;
     }
     thread.scrollTop = thread.scrollHeight;
@@ -151,7 +156,7 @@ export function ChatPanel(props: ChatPanelProps): React.ReactElement {
           />
           <button
             aria-busy={chat.running}
-            aria-label={chat.running ? "Agent is thinking" : "Send message"}
+            aria-label={chat.running ? "Orchestrator is thinking" : "Send message"}
             className="chat-compose-send"
             disabled={chat.running || draft.trim().length === 0}
             type="submit"

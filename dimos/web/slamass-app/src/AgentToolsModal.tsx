@@ -34,7 +34,7 @@ export function AgentToolsModal(props: AgentToolsModalProps): React.ReactElement
       role="presentation"
     >
       <div
-        aria-labelledby="agent-tools-title"
+        aria-labelledby="orchestrator-tools-title"
         aria-modal="true"
         className="dialog-sheet agent-tools-sheet"
         onClick={(event) => event.stopPropagation()}
@@ -43,7 +43,7 @@ export function AgentToolsModal(props: AgentToolsModalProps): React.ReactElement
         <div className="dialog-header">
           <div>
             <p className="eyebrow">Settings</p>
-            <h3 id="agent-tools-title">Agent Tool Calls</h3>
+            <h3 id="orchestrator-tools-title">Orchestrator Tool Calls</h3>
           </div>
           <div className="dialog-header-actions">
             <button className="mini-button" onClick={onReload} type="button">

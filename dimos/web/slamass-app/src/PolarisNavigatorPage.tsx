@@ -9,7 +9,18 @@ export default function PolarisNavigatorPage(): React.ReactElement {
   const dashboard = useNavigatorSlamassState();
 
   return (
-    <PolarisLayout shellBg="white">
+    <PolarisLayout
+      headerAside={
+        <a
+          className="polaris-operators-add-button"
+          data-testid="polaris-header-create-operator"
+          href="/polaris/create"
+        >
+          Create Operator
+        </a>
+      }
+      shellBg="white"
+    >
       <NavigatorDashboardView {...dashboard} />
     </PolarisLayout>
   );

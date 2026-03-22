@@ -8,23 +8,20 @@ test.describe("/polaris", () => {
 
     await expect(page.locator(".polaris-root")).toBeVisible();
     await expect(page.getByTestId("polaris-lander")).toBeVisible();
-    await expect(page.getByTestId("polaris-lander-intro")).toHaveText(
-      /The operating system for the physical world\./,
-    );
+    const landerHeading = /The operating system for the physical world\./;
+    await expect(page.getByTestId("polaris-lander-intro")).toHaveText(landerHeading);
     await expect(
       page.getByRole("heading", {
         level: 1,
-        name: /The operating system for the physical world\./,
+        name: landerHeading,
       }),
     ).toBeVisible();
     await expect(page.getByTestId("polaris-nav-title")).toBeVisible();
     await expect(page.getByTestId("polaris-robot-slot")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: /explore polaris/i })).toBeVisible();
-    await expect(page.getByTestId("polaris-lander-bento")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Specification highlights", level: 2 })).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Unitree A2", exact: true }),
-    ).toHaveAttribute("href", "https://www.unitree.com/A2");
+    const explore = page.getByRole("link", { name: /explore polaris/i });
+    await expect(explore).toBeVisible();
+    await expect(explore).toHaveAttribute("href", "/polaris/navigator");
+    await expect(page.getByTestId("polaris-lander-preview")).toBeVisible();
   });
 });
 
@@ -224,6 +221,20 @@ test.describe("/polaris/navigator", () => {
       Math.round(sidebarH) - Math.round(innerH),
       "operators + agent stack should fill the left column height",
     ).toBeLessThanOrEqual(2);
+  });
+
+  test("header Create Operator links to create flow", async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.goto("/polaris/navigator");
+
+    const create = page.getByTestId("polaris-header-create-operator");
+    await expect(create).toBeVisible();
+    await expect(create).toHaveAttribute("href", "/polaris/create");
+    await expect(create).toHaveText("Create Operator");
+
+    await create.click();
+    await expect(page).toHaveURL(/\/polaris\/create$/);
+    await expect(page.getByTestId("polaris-create-heading")).toBeVisible();
   });
 });
 

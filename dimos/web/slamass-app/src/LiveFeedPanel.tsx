@@ -35,6 +35,10 @@ type LiveFeedPanelProps = {
   showOverlayCaptureButton?: boolean;
   /** Fires when embedded header capture should enable/disable (image loaded + POV available). */
   onCaptureAvailabilityChange?: (canCapture: boolean) => void;
+  /**
+   * When true, skip loading the image and show a neutral lined placeholder (e.g. navigator column).
+   */
+  placeholder?: boolean;
 };
 
 function triggerDownload(blob: Blob, filename: string): void {
@@ -82,6 +86,7 @@ export const LiveFeedPanel = forwardRef<LiveFeedPanelHandle, LiveFeedPanelProps>
     embedded = false,
     showOverlayCaptureButton: showOverlayCaptureButtonProp,
     onCaptureAvailabilityChange,
+    placeholder = false,
   } = props;
   const showOverlayCaptureButton = showOverlayCaptureButtonProp ?? !embedded;
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -89,7 +94,7 @@ export const LiveFeedPanel = forwardRef<LiveFeedPanelHandle, LiveFeedPanelProps>
 
   useEffect(() => {
     setImgReady(false);
-  }, [pov.image_url]);
+  }, [pov.image_url, placeholder]);
 
   /** Browser cache + React Strict Mode: `onLoad` may not run again for the same URL. */
   useLayoutEffect(() => {
@@ -97,7 +102,7 @@ export const LiveFeedPanel = forwardRef<LiveFeedPanelHandle, LiveFeedPanelProps>
     if (el?.complete && el.naturalWidth > 0) {
       setImgReady(true);
     }
-  }, [pov.image_url]);
+  }, [pov.image_url, placeholder]);
 
   const handleCapture = useCallback(() => {
     const img = imgRef.current;
@@ -138,7 +143,7 @@ export const LiveFeedPanel = forwardRef<LiveFeedPanelHandle, LiveFeedPanelProps>
     );
   }, [pov.available, pov.image_url]);
 
-  const canCapture = pov.available && imgReady;
+  const canCapture = !placeholder && pov.available && imgReady;
 
   useImperativeHandle(
     ref,
@@ -154,7 +159,13 @@ export const LiveFeedPanel = forwardRef<LiveFeedPanelHandle, LiveFeedPanelProps>
     onCaptureAvailabilityChange?.(canCapture);
   }, [canCapture, onCaptureAvailabilityChange]);
 
-  const stage = (
+  const stage = placeholder ? (
+    <div
+      aria-label="Camera preview placeholder"
+      className="pov-stage polaris-nav-pov-stage polaris-nav-pov-stage--placeholder"
+      role="img"
+    />
+  ) : (
     <div className="pov-stage polaris-nav-pov-stage">
       <img
         ref={imgRef}

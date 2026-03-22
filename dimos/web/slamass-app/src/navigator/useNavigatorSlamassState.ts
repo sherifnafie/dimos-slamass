@@ -697,7 +697,7 @@ export function useNavigatorSlamassState(): {
 
   const handleSubmitChatMessage = useCallback(
     async (message: string) => {
-      appendActivity("operator", "Agent prompt", message, "accent");
+      appendActivity("operator", "Orchestrator prompt", message, "accent");
       try {
         const payload = await fetchJson<ChatState>("/api/chat", {
           method: "POST",
@@ -723,7 +723,7 @@ export function useNavigatorSlamassState(): {
       });
       appendActivity(
         "system",
-        "Agent reset",
+        "Orchestrator reset",
         "Chat history cleared.",
         "neutral",
       );

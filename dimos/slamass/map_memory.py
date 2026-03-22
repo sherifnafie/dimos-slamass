@@ -236,8 +236,10 @@ class ActiveMapState:
             )
             obs_flat[free_idx] = np.minimum(obs_flat[free_idx] + 1, np.iinfo(np.uint16).max)
 
-        self.image_version += 1
-        return bool(np.any(occ_dom) or np.any(free_dom))
+        changed = bool(np.any(occ_dom) or np.any(free_dom))
+        if changed:
+            self.image_version += 1
+        return changed
 
     def preview_png_bytes(self) -> bytes:
         probability = 1.0 / (1.0 + np.exp(-self.log_odds))
