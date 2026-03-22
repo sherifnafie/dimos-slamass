@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from dimos.agents.mcp.mcp_server import McpServer
+from dimos.agents.skills.speak_skill import speak_skill
 from dimos.core.blueprints import autoconnect
 from dimos.core.transport import pLCMTransport
 from dimos.perception.detection.detectors.yoloe import Yoloe2DDetector, YoloePromptMode
@@ -40,6 +41,7 @@ unitree_go2_slamass_mcp = autoconnect(
         max_freq=2,
     ),
     McpServer.blueprint(),
+    speak_skill(),
     unitree_skills(),
 ).remappings(
     [
