@@ -18,6 +18,10 @@ import functools
 import threading
 import time
 from typing import Any, TypeAlias
+import tempfile
+import os
+from openai import OpenAI
+from aiortc.contrib.media import MediaPlayer
 
 import numpy as np
 from numpy.typing import NDArray
@@ -397,3 +401,59 @@ class UnitreeWebRTCConnection(Resource):
 
         if hasattr(self, "thread") and self.thread.is_alive():
             self.thread.join(timeout=2.0)
+
+    def speak(self, text: str) -> bool:
+        """Generate audio using OpenAI TTS and stream to Go2 speaker."""
+        try:
+            # 1. Generate speech via OpenAI API (Ensure OPENAI_API_KEY is in your environment)
+            client = OpenAI()
+            response = client.audio.speech.create(
+                model="tts-1",
+                voice="alloy", # You can use alloy, echo, fable, onyx, nova, or shimmer
+                input=text
+            )
+            
+            # 2. Save to temporary file
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+            temp_file.close()
+            response.stream_to_file(temp_file.name)
+            
+            # 3. Stream to WebRTC connection
+            async def async_stream_audio():
+                player = MediaPlayer(temp_file.name)
+                
+                # Check if an audio sender already exists to avoid adding multiple tracks
+                sender = next((s for s in self.conn.pc.getSenders() if s.track and s.track.kind == "audio"), None)
+                
+                if sender:
+                    # Replace track if an audio channel is already negotiated
+                    await sender.replaceTrack(player.audio)
+                else:
+                    # Add new audio track
+                    self.conn.pc.addTrack(player.audio)
+                
+                # Optional: cleanup the file after playing
+                def cleanup_file():
+                    try:
+                        os.remove(temp_file.name)
+                    except OSError:
+                        pass
+                
+                player.audio.on("ended", cleanup_file)
+
+            # Run the streaming asynchronously in the active loop
+            if self.loop.is_running():
+                asyncio.run_coroutine_threadsafe(async_stream_audio(), self.loop)
+                
+            return True
+            
+        except Exception as e:
+            print(f"Failed to play OpenAI TTS audio: {e}")
+            return False
+
+        @rpc
+        def speak(self, text: str) -> bool:
+            """Play generated voice text on the Go2 speaker using OpenAI TTS."""
+            if hasattr(self.connection, "speak"):
+                return self.connection.speak(text)
+            return False

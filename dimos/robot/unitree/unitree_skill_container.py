@@ -196,6 +196,7 @@ class UnitreeSkillContainer(Module):
         "NavigationInterface.is_goal_reached",
         "NavigationInterface.cancel_goal",
         "GO2Connection.publish_request",
+        "GO2Connection.speak",
     ]
 
     @rpc
@@ -328,6 +329,25 @@ class UnitreeSkillContainer(Module):
         except Exception as e:
             logger.error(f"Failed to execute {command_name}: {e}")
             return "Failed to execute the command."
+        
+    @skill
+    def say(self, text: str) -> str:
+        """Say a phrase out loud using the robot's built-in speaker with OpenAI voice.
+        
+        Args:
+            text: The text string to be spoken by the robot.
+        """
+        try:
+            speak_rpc = self.get_rpc_calls("GO2Connection.speak")
+        except Exception:
+            logger.error("GO2Connection.speak not connected properly")
+            return "Failed to connect to the robot's speaker."
+
+        success = speak_rpc(text)
+        if success:
+            return f"Successfully generated and said: '{text}'"
+        else:
+            return "Failed to play audio through the speaker."
 
 
 _commands = "\n".join(
