@@ -4,7 +4,10 @@ import {
 } from "@heroicons/react/24/outline";
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 
-import { POLARIS_OPERATOR_FLEET } from "../polarisOperatorFleet";
+import {
+  POLARIS_OPERATOR_FLEET,
+  type PolarisOperatorFleetEntry,
+} from "../polarisOperatorFleet";
 import { NavigatorOptionCard } from "./NavigatorOptionCard";
 
 function statusLabel(active: "green" | "blue" | "grey"): string {
@@ -17,7 +20,12 @@ function statusLabel(active: "green" | "blue" | "grey"): string {
   return "Active";
 }
 
-function NavigatorOperatorFleetList(): React.ReactElement {
+function NavigatorOperatorFleetList(props: {
+  onGo2OperatorHoverChange?: (hovered: boolean) => void;
+  prependedOperators?: PolarisOperatorFleetEntry[];
+}): React.ReactElement {
+  const { onGo2OperatorHoverChange, prependedOperators = [] } = props;
+  const roster = [...prependedOperators, ...POLARIS_OPERATOR_FLEET];
   return (
     <div className="polaris-nav-operators-embed-shell">
       <ul
@@ -25,97 +33,121 @@ function NavigatorOperatorFleetList(): React.ReactElement {
         className="polaris-operators-list polaris-nav-operators-embed"
         role="list"
       >
-        {POLARIS_OPERATOR_FLEET.map((op) => (
-          <li className="polaris-operators-list-item" key={op.id} role="listitem">
-            <article
-              aria-label={op.title}
-              className="polaris-operator-card polaris-nav-operators-embed-card"
-              data-testid={`polaris-nav-operator-${op.id}`}
-            >
-              <div className="polaris-operator-card-media-column">
-                <div
-                  className={
-                    op.imageUrl
-                      ? "polaris-operator-card-visual"
-                      : "polaris-operator-card-visual polaris-operator-card-visual--empty"
-                  }
-                >
-                  {op.imageUrl ? (
-                    <img
-                      alt={op.imageAlt}
-                      className="polaris-operator-card-img polaris-operator-card-img--static"
-                      decoding="async"
-                      src={op.imageUrl}
-                    />
-                  ) : (
-                    <span className="polaris-operator-card-placeholder">
-                      {op.emptyVisualLabel ?? "Preview"}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="polaris-operator-card-body">
-                <h2 className="polaris-operator-card-title">
-                  <span className="polaris-operator-card-title-text">
-                    {op.titleHref ? (
-                      <a
-                        className="polaris-operator-card-title-link"
-                        href={op.titleHref}
-                        rel="noopener noreferrer"
-                        target="_blank"
-                      >
-                        {op.title}
-                      </a>
-                    ) : (
-                      op.title
-                    )}
-                  </span>
-                  {op.active ? (
-                    <span
-                      aria-label={statusLabel(op.active)}
-                      className="polaris-operator-card-active"
-                      role="status"
-                    >
-                      <span
-                        aria-hidden
-                        className={
-                          op.active === "blue"
-                            ? "polaris-operator-card-active-dot polaris-operator-card-active-dot--blue"
-                            : op.active === "grey"
-                              ? "polaris-operator-card-active-dot polaris-operator-card-active-dot--grey"
-                              : "polaris-operator-card-active-dot polaris-operator-card-active-dot--green"
-                        }
+        {roster.map((op) => {
+          const go2HoverHandlers =
+            op.id === "go2" && onGo2OperatorHoverChange
+              ? {
+                  onMouseEnter: () => {
+                    onGo2OperatorHoverChange(true);
+                  },
+                  onMouseLeave: () => {
+                    onGo2OperatorHoverChange(false);
+                  },
+                }
+              : {};
+          return (
+            <li className="polaris-operators-list-item" key={op.id} role="listitem">
+              <article
+                aria-label={op.title}
+                className="polaris-operator-card polaris-nav-operators-embed-card"
+                data-testid={`polaris-nav-operator-${op.id}`}
+                {...go2HoverHandlers}
+              >
+                <div className="polaris-operator-card-media-column">
+                  <div
+                    className={
+                      op.imageUrl
+                        ? "polaris-operator-card-visual"
+                        : "polaris-operator-card-visual polaris-operator-card-visual--empty"
+                    }
+                  >
+                    {op.imageUrl ? (
+                      <img
+                        alt={op.imageAlt}
+                        className="polaris-operator-card-img polaris-operator-card-img--static"
+                        decoding="async"
+                        src={op.imageUrl}
                       />
+                    ) : (
+                      <span className="polaris-operator-card-placeholder">
+                        {op.emptyVisualLabel ?? "Preview"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="polaris-operator-card-body">
+                  <h2 className="polaris-operator-card-title">
+                    <span className="polaris-operator-card-title-text">
+                      {op.titleHref ? (
+                        <a
+                          className="polaris-operator-card-title-link"
+                          href={op.titleHref}
+                          rel="noopener noreferrer"
+                          target="_blank"
+                        >
+                          {op.title}
+                        </a>
+                      ) : (
+                        op.title
+                      )}
                     </span>
+                    {op.active ? (
+                      <span
+                        aria-label={statusLabel(op.active)}
+                        className="polaris-operator-card-active"
+                        role="status"
+                      >
+                        <span
+                          aria-hidden
+                          className={
+                            op.active === "blue"
+                              ? "polaris-operator-card-active-dot polaris-operator-card-active-dot--blue"
+                              : op.active === "grey"
+                                ? "polaris-operator-card-active-dot polaris-operator-card-active-dot--grey"
+                                : "polaris-operator-card-active-dot polaris-operator-card-active-dot--green"
+                          }
+                        />
+                      </span>
+                    ) : null}
+                  </h2>
+                  {op.category ? (
+                    <p className="polaris-operator-card-sub polaris-operator-card-meta">
+                      <span className="polaris-operator-card-meta-label">{op.category.label}</span>{" "}
+                      <span className="polaris-operator-card-meta-value">{op.category.value}</span>
+                    </p>
                   ) : null}
-                </h2>
-                {op.category ? (
                   <p className="polaris-operator-card-sub polaris-operator-card-meta">
-                    <span className="polaris-operator-card-meta-label">{op.category.label}</span>{" "}
-                    <span className="polaris-operator-card-meta-value">{op.category.value}</span>
+                    <span className="polaris-operator-card-meta-label">Location</span>{" "}
+                    <span className="polaris-operator-card-meta-value">{op.location}</span>
                   </p>
-                ) : null}
-                <p className="polaris-operator-card-sub polaris-operator-card-meta">
-                  <span className="polaris-operator-card-meta-label">Location</span>{" "}
-                  <span className="polaris-operator-card-meta-value">{op.location}</span>
-                </p>
-                <p className="polaris-operator-card-sub polaris-operator-card-meta">
-                  <span className="polaris-operator-card-meta-label">Mission</span>{" "}
-                  <span className="polaris-operator-card-meta-value">{op.task}</span>
-                </p>
-              </div>
-            </article>
-          </li>
-        ))}
+                  <p className="polaris-operator-card-sub polaris-operator-card-meta">
+                    <span className="polaris-operator-card-meta-label">Mission</span>{" "}
+                    <span className="polaris-operator-card-meta-value">{op.task}</span>
+                  </p>
+                </div>
+              </article>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
 }
 
+export type NavigatorOperatorFleetProps = {
+  /** First fleet row (Unitree Go2) drives the map robot gamecard hover when set. */
+  onGo2OperatorHoverChange?: (hovered: boolean) => void;
+  /** Operators from a completed create flow; listed above the demo fleet. */
+  prependedOperators?: PolarisOperatorFleetEntry[];
+};
+
 /**
  * Fleet roster in the navigator “Operators” column — same card structure as `/polaris/operators`, scaled for the sidebar.
  */
-export function NavigatorOperatorFleet(): React.ReactElement {
+export function NavigatorOperatorFleet(
+  props: NavigatorOperatorFleetProps,
+): React.ReactElement {
+  const { onGo2OperatorHoverChange, prependedOperators } = props;
   const [extended, setExtended] = useState(false);
   const titleId = useId();
   const collapseButtonRef = useRef<HTMLButtonElement>(null);
@@ -188,7 +220,10 @@ export function NavigatorOperatorFleet(): React.ReactElement {
         }
         title="Operators"
       >
-        <NavigatorOperatorFleetList />
+        <NavigatorOperatorFleetList
+          onGo2OperatorHoverChange={onGo2OperatorHoverChange}
+          prependedOperators={prependedOperators}
+        />
       </NavigatorOptionCard>
 
       {extended ? (
@@ -224,7 +259,10 @@ export function NavigatorOperatorFleet(): React.ReactElement {
               </button>
             </header>
             <div className="polaris-nav-operators-extend-panel-body">
-              <NavigatorOperatorFleetList />
+              <NavigatorOperatorFleetList
+                onGo2OperatorHoverChange={onGo2OperatorHoverChange}
+                prependedOperators={prependedOperators}
+              />
             </div>
           </div>
         </div>

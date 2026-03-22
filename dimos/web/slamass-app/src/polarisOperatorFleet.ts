@@ -40,7 +40,7 @@ export const POLARIS_OPERATOR_FLEET: PolarisOperatorFleetEntry[] = [
     category: { label: "Type", value: "Unitree Go2 EDU" },
     location: "Bench",
     task: "Calibration",
-    active: "green",
+    active: "grey",
     imageUrl: POLARIS_GO2_EDU_PREVIEW_URL,
     imageAlt: "Unitree Go2",
     mountThumbUrl: POLARIS_OPERATOR_MOUNT_GO2_EDU_URL,

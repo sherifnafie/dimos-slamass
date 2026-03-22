@@ -164,12 +164,6 @@
   animation-delay: 0.17s;
 }
 
-.polaris-fade-stagger--create > .polaris-create-rule {
-  opacity: 0;
-  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  animation-delay: 0.23s;
-}
-
 .polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-pick-grid > .polaris-create-pick-cell {
   opacity: 0;
   animation: polaris-fade-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -187,10 +181,28 @@
   animation-delay: 0.41s;
 }
 
-.polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-progress-line {
+.polaris-fade-stagger--create > .polaris-create-step-surface {
+  opacity: 0;
+  animation: polaris-fade-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.29s;
+}
+
+.polaris-fade-stagger--create > .polaris-create-wizard-actions {
   opacity: 0;
   animation: polaris-fade-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   animation-delay: 0.47s;
+}
+
+.polaris-fade-stagger--create > .polaris-create-progress-line {
+  opacity: 0;
+  animation: polaris-fade-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.53s;
+}
+
+.polaris-fade-stagger--create > .polaris-create-wizard-advance-footer {
+  opacity: 0;
+  animation: polaris-fade-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.59s;
 }
 
 /* `/polaris/navigator` — back, title, lede (same cadence as create) */
@@ -253,9 +265,11 @@
   .polaris-fade-stagger--create > .polaris-create-back,
   .polaris-fade-stagger--create > .polaris-operators-page-head.polaris-create-page-head,
   .polaris-fade-stagger--create > .polaris-create-lede.polaris-operator-card-sub,
-  .polaris-fade-stagger--create > .polaris-create-rule,
   .polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-pick-grid > .polaris-create-pick-cell,
-  .polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-progress-line,
+  .polaris-fade-stagger--create > .polaris-create-step-surface,
+  .polaris-fade-stagger--create > .polaris-create-wizard-actions,
+  .polaris-fade-stagger--create > .polaris-create-progress-line,
+  .polaris-fade-stagger--create > .polaris-create-wizard-advance-footer,
   .polaris-fade-stagger--navigator > .polaris-navigator-back,
   .polaris-fade-stagger--navigator > .polaris-operators-page-head.polaris-navigator-page-head,
   .polaris-fade-stagger--navigator > .polaris-operator-card-sub.polaris-navigator-lede,
@@ -412,10 +426,38 @@
   flex-wrap: wrap;
 }
 
+.polaris-operators-page-head.polaris-operators-page-head--operators-stack {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+
+.polaris-operators-page-head.polaris-operators-page-head--operators-stack .polaris-operators-page-title {
+  align-self: flex-start;
+}
+
+.polaris-operators-add-button--operators-list-cta {
+  box-sizing: border-box;
+  width: 100%;
+  justify-content: center;
+  padding: 0.72rem 1.35rem;
+  font-size: 0.9375rem;
+}
+
+.polaris-operators-add-button--operators-list-cta .polaris-operators-add-button-plus {
+  font-size: 1.12em;
+}
+
 @media (min-width: 768px) {
   .polaris-operators-page-head {
     margin-top: 2.25rem;
     margin-bottom: 2.25rem;
+  }
+
+  .polaris-operators-add-button--operators-list-cta {
+    padding: 0.88rem 1.5rem;
+    font-size: 1.0625rem;
   }
 }
 
@@ -508,16 +550,46 @@
   }
 }
 
+.polaris-root .polaris-lander-explore-button.polaris-operators-add-button {
+  gap: 0.45rem;
+  padding: 0.65rem 1.35rem;
+  border-radius: 0.35rem;
+  font-size: 0.9375rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-root .polaris-lander-explore-button.polaris-operators-add-button {
+    padding: 0.78rem 1.65rem;
+    font-size: 1.0625rem;
+  }
+}
+
 .polaris-root .polaris-lander-explore-button .polaris-lander-explore-star {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 1.1em;
-  font-size: 1.15em;
+  width: 1.15em;
+  font-size: 1.28em;
   font-weight: 300;
   line-height: 1;
   animation: polaris-lander-explore-star-spin 10s linear infinite;
+}
+
+/* Lander hero tagline + `/create` lede — same type (lighter grey, light weight). */
+.polaris-lander-hero-copy .polaris-lander-tagline,
+.polaris-create-lede.polaris-operator-card-sub {
+  color: #64748b;
+  font-size: 1rem;
+  font-weight: 300;
+  line-height: 1.65;
+}
+
+@media (min-width: 768px) {
+  .polaris-lander-hero-copy .polaris-lander-tagline,
+  .polaris-create-lede.polaris-operator-card-sub {
+    font-size: 1.0625rem;
+  }
 }
 
 /* Hero: copy left, preview right — tagline no longer centered */
@@ -621,7 +693,7 @@
 
 @media (min-width: 640px) {
   .polaris-lander-preview-skew {
-    min-height: 32rem;
+    min-height: 44rem;
   }
 }
 
@@ -635,8 +707,8 @@
   /* Side-by-side hero: large preview in the wider column */
   .polaris-lander-hero-grid .polaris-lander-preview-skew {
     height: auto;
-    max-height: min(88vh, 56rem);
-    min-height: 26rem;
+    max-height: min(94vh, 78rem);
+    min-height: 38rem;
   }
 }
 
@@ -685,24 +757,15 @@
 }
 
 .polaris-create-lede.polaris-operator-card-sub {
+  box-sizing: border-box;
   margin: 0 0 1.25rem;
-  max-width: 40rem;
+  max-width: none;
+  width: 100%;
 }
 
 @media (min-width: 768px) {
   .polaris-create-lede.polaris-operator-card-sub {
     margin-bottom: 1.5rem;
-  }
-}
-
-.polaris-create-rule {
-  margin: 0 0 1.5rem;
-  max-width: 42rem;
-}
-
-@media (min-width: 768px) {
-  .polaris-create-rule {
-    margin-bottom: 1.75rem;
   }
 }
 
@@ -712,15 +775,197 @@
   min-width: 0;
 }
 
+.polaris-create-step-surface {
+  min-width: 0;
+}
+
+.polaris-create-use-case-panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.polaris-create-use-case-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 9rem;
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 0.25rem;
+  background: #fff;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+  resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.polaris-create-use-case-textarea::placeholder {
+  color: #94a3b8;
+}
+
+.polaris-create-use-case-textarea:hover {
+  border-color: rgba(15, 23, 42, 0.18);
+}
+
+.polaris-create-use-case-textarea:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--polaris-tile-border-accent) 55%, #64748b);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--polaris-tile-border-accent) 18%, transparent);
+}
+
+.polaris-create-use-case-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: #64748b;
+}
+
+.polaris-create-step-panel {
+  box-sizing: border-box;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 0.25rem;
+  background: rgba(248, 250, 252, 0.72);
+  padding: 1.25rem 1.35rem;
+}
+
+.polaris-create-step-panel-copy {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+  color: #475569;
+}
+
+.polaris-create-step-inline-advance {
+  display: inline-flex;
+  margin-top: 1rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--polaris-tile-border-accent) 35%, #0f172a);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--polaris-tile-border-accent) 70%, transparent);
+  text-underline-offset: 0.2em;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.polaris-create-step-inline-advance:hover {
+  color: #0f172a;
+  text-decoration-color: color-mix(in srgb, var(--polaris-tile-border-accent) 45%, #64748b);
+}
+
+.polaris-create-step-inline-advance:focus {
+  outline: none;
+}
+
+.polaris-create-step-inline-advance:focus-visible {
+  border-radius: 0.2rem;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #a3a3a3;
+}
+
+.polaris-create-wizard-advance-footer {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  justify-content: flex-end;
+  margin-top: 0.625rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-create-wizard-advance-footer {
+    margin-top: 0.75rem;
+  }
+}
+
+.polaris-create-step-inline-advance--footer {
+  margin-top: 0;
+  text-align: right;
+}
+
+.polaris-create-wizard-actions {
+  margin-top: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-create-wizard-actions {
+    margin-top: 1.5rem;
+  }
+}
+
+.polaris-create-wizard-cta.polaris-operators-add-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  pointer-events: none;
+}
+
+.polaris-create-deploy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.polaris-create-deploy-overlay-spinner {
+  width: 2.75rem;
+  height: 2.75rem;
+  color: #0f172a;
+  animation: polaris-create-deploy-spin 0.8s linear infinite;
+}
+
+@keyframes polaris-create-deploy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .polaris-create-deploy-overlay-spinner {
+    animation-duration: 1.6s;
+  }
+}
+
+.polaris-create-deploy-overlay-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* `/polaris/create` — thin onboarding bar under cards (lavender → polaris blue) */
 .polaris-create-progress-line {
   width: 100%;
-  margin-top: 1rem;
+  margin-top: 1.25rem;
 }
 
 @media (min-width: 768px) {
   .polaris-create-progress-line {
-    margin-top: 1.25rem;
+    margin-top: 1.375rem;
   }
 }
 
@@ -775,6 +1020,19 @@
   }
 }
 
+/* Define Skills: keep square tiles from stretching full width on mobile */
+.polaris-create-pick-grid.polaris-create-pick-grid--skills {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-create-pick-grid.polaris-create-pick-grid--skills {
+    gap: 1.25rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .polaris-create-pick-cell {
   margin: 0;
   padding: 0;
@@ -789,6 +1047,19 @@
   border: 1px solid #e5e5e5;
   border-radius: 0.875rem;
   background: #fff;
+}
+
+.polaris-create-pick-card.polaris-create-pick-card--activatable {
+  cursor: pointer;
+}
+
+.polaris-create-pick-card.polaris-create-pick-card--activatable:focus {
+  outline: none;
+}
+
+.polaris-create-pick-card.polaris-create-pick-card--activatable:focus-visible {
+  outline: 2px solid color-mix(in srgb, #0ea5e9 65%, #64748b);
+  outline-offset: 2px;
 }
 
 @media (min-width: 768px) {
@@ -809,6 +1080,23 @@
   }
 }
 
+/* Go2 card: blue fill while this pick is active (hover selection). */
+.polaris-create-pick-card.polaris-create-pick-card--go2-selected {
+  background: linear-gradient(
+    180deg,
+    rgb(191 219 254) 0%,
+    rgb(224 242 254) 42%,
+    rgb(240 249 255) 100%
+  );
+  border-color: color-mix(in srgb, #38bdf8 35%, #bae6fd);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .polaris-create-pick-card.polaris-create-pick-card--go2-selected.polaris-create-pick-card--go2-hover:hover {
+    border-color: color-mix(in srgb, #0ea5e9 45%, #7dd3fc);
+  }
+}
+
 /* Portrait create picks (G1, B2): soft grey → white background (TSX adds wash overlays on top) */
 .polaris-create-pick-card.polaris-create-pick-card--portrait {
   background: linear-gradient(
@@ -817,6 +1105,27 @@
     rgb(248 250 252) 40%,
     rgb(255 255 255) 100%
   );
+}
+
+/* Mount step: Z1 / D1-T stay white; grey portrait fill only for coming-soon Custom mount */
+.polaris-create-pick-card--portrait.polaris-create-mount-pick--white {
+  background: #fff;
+}
+
+.polaris-create-pick-card--portrait.polaris-create-mount-pick--white.polaris-create-pick-card--go2-selected {
+  background: linear-gradient(
+    180deg,
+    rgb(191 219 254) 0%,
+    rgb(224 242 254) 42%,
+    rgb(240 249 255) 100%
+  );
+  border-color: color-mix(in srgb, #38bdf8 35%, #bae6fd);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .polaris-create-pick-card--portrait.polaris-create-mount-pick--white.polaris-create-pick-card--go2-selected.polaris-create-pick-card--go2-hover:hover {
+    border-color: color-mix(in srgb, #0ea5e9 45%, #7dd3fc);
+  }
 }
 
 /* Robot art: no inner well — same max footprint as operators thumbnails (12rem × 9rem) */
@@ -838,8 +1147,12 @@
   object-fit: contain;
 }
 
-/* Portrait create picks (G1, B2): media fills under title (grid stretch); image pinned to card bottom */
-.polaris-create-pick-card--portrait .polaris-create-pick-card-media {
+/*
+ * Tall media well — shared shell for portrait picks (G1, B2) and Go2 (`--robot-well`).
+ * Card size unchanged; Go2 robot is smaller and centered inside the well.
+ */
+.polaris-create-pick-card--portrait .polaris-create-pick-card-media,
+.polaris-create-pick-card--robot-well .polaris-create-pick-card-media {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -847,12 +1160,20 @@
   min-height: 0;
   margin-top: 0;
   align-self: stretch;
-  justify-content: flex-end;
   align-items: center;
 }
 
+.polaris-create-pick-card--portrait .polaris-create-pick-card-media {
+  justify-content: flex-end;
+}
+
+.polaris-create-pick-card--robot-well .polaris-create-pick-card-media {
+  justify-content: center;
+}
+
 @media (max-width: 767px) {
-  .polaris-create-pick-card--portrait .polaris-create-pick-card-media {
+  .polaris-create-pick-card--portrait .polaris-create-pick-card-media,
+  .polaris-create-pick-card--robot-well .polaris-create-pick-card-media {
     /* Single-column grid: no row stretch — give a tall well so the robot still sits on the bottom line */
     min-height: 15rem;
   }
@@ -867,6 +1188,130 @@
   height: auto;
   object-fit: contain;
   object-position: bottom center;
+}
+
+.polaris-create-pick-card--robot-well .polaris-create-pick-card-img {
+  display: block;
+  flex-shrink: 0;
+  max-width: min(8.75rem, 88%);
+  max-height: min(12.5rem, 38vh);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: center center;
+}
+
+/* Define Skills: square tiles — same border / hover / selected as robot picks; compact icons */
+.polaris-create-pick-card--skill-square {
+  box-sizing: border-box;
+  aspect-ratio: 1;
+  min-height: 0;
+  justify-content: center;
+  padding: 0.85rem 0.55rem 0.9rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-create-pick-card--skill-square {
+    padding: 1rem 0.65rem 1.05rem;
+  }
+}
+
+.polaris-create-pick-card--skill-square .polaris-create-skill-square-media {
+  display: flex;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 0.4rem;
+  align-self: stretch;
+}
+
+.polaris-create-pick-card--skill-square .polaris-create-skill-square-body.polaris-create-pick-card-body {
+  flex: 0 0 auto;
+  margin: 0;
+  align-self: stretch;
+}
+
+.polaris-create-pick-card--skill-square .polaris-create-skill-square-title.polaris-operator-card-title {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+@media (min-width: 640px) {
+  .polaris-create-pick-card--skill-square .polaris-create-skill-square-title.polaris-operator-card-title {
+    font-size: 0.7rem;
+  }
+}
+
+.polaris-create-pick-card--skill-square.polaris-create-pick-card--go2-selected
+  .polaris-create-skill-square-title
+  .polaris-operator-card-title-text {
+  color: #0f172a;
+}
+
+/* Custom Skill / coming soon — same grey treatment as G1 & B2 robot picks */
+.polaris-create-pick-card--skill-square.polaris-create-pick-card--skill-soon {
+  cursor: not-allowed;
+  background: linear-gradient(
+    180deg,
+    rgb(241 245 249) 0%,
+    rgb(248 250 252) 40%,
+    rgb(255 255 255) 100%
+  );
+}
+
+.polaris-create-pick-card--skill-square.polaris-create-pick-card--skill-soon
+  .polaris-create-skill-square-title
+  .polaris-operator-card-title-text {
+  color: #64748b;
+}
+
+.polaris-create-pick-card--skill-square .polaris-create-skill-pick-icon {
+  display: block;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  color: #64748b;
+  stroke-width: 1.5;
+}
+
+@media (min-width: 640px) {
+  .polaris-create-pick-card--skill-square .polaris-create-skill-pick-icon {
+    width: 1.65rem;
+    height: 1.65rem;
+  }
+}
+
+.polaris-create-pick-card--go2-selected .polaris-create-skill-pick-icon {
+  color: color-mix(in srgb, var(--polaris-tile-border-accent) 22%, #0f172a);
+}
+
+.polaris-create-mount-custom-mount-title.polaris-operator-card-title {
+  margin-bottom: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+@media (min-width: 640px) {
+  .polaris-create-mount-custom-mount-title.polaris-operator-card-title {
+    font-size: 0.875rem;
+    letter-spacing: 0.07em;
+  }
+}
+
+.polaris-create-pick-card--portrait .polaris-create-mount-empty-preview {
+  align-self: flex-end;
+  margin-bottom: 0.35rem;
+  text-align: center;
 }
 
 .polaris-create-pick-card-body.polaris-operator-card-body {
@@ -1055,8 +1500,8 @@
 
 .polaris-operator-card-active-dot--grey {
   background: #a3a3a3;
-  box-shadow: 0 0 0 0 rgba(115, 115, 115, 0.45);
-  animation: polaris-operator-active-pulse-grey 1.6s ease-out infinite;
+  box-shadow: 0 0 0 2px rgba(115, 115, 115, 0.28);
+  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1071,8 +1516,7 @@
   }
 
   .polaris-operator-card-active-dot--grey {
-    animation: none;
-    box-shadow: 0 0 0 2px rgba(115, 115, 115, 0.35);
+    box-shadow: 0 0 0 2px rgba(115, 115, 115, 0.28);
   }
 }
 
@@ -1097,18 +1541,6 @@
   }
   100% {
     box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
-  }
-}
-
-@keyframes polaris-operator-active-pulse-grey {
-  0% {
-    box-shadow: 0 0 0 0 rgba(115, 115, 115, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 0.5rem rgba(115, 115, 115, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(115, 115, 115, 0);
   }
 }
 
@@ -1785,52 +2217,6 @@
 }
 
 /* —— Detection log (timeline feed, navigator third column) —— */
-/* Detection log card header — match `.polaris-operator-card-cta` chrome */
-.polaris-detection-log-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.35rem;
-}
-
-.polaris-detection-log-pill {
-  padding: 0.45rem 0.85rem;
-  border: 1px solid #ececec;
-  border-radius: 0.25rem;
-  background: #fefefe;
-  color: #404040;
-  font-family: inherit;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.polaris-detection-log-pill:hover:not(:disabled) {
-  border-color: #d4d4d4;
-  background: #fafafa;
-  color: #0a0a0a;
-}
-
-.polaris-detection-log-pill:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.polaris-detection-log-pill--muted {
-  color: #737373;
-}
-
-.polaris-detection-log-pill--muted:hover:not(:disabled) {
-  color: #404040;
-}
 
 /* Detection log — activity-style feed (avatar, date groups, relative time) */
 .polaris-detection-activity-log {
@@ -1861,15 +2247,16 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 1.05rem;
+  gap: 1.45rem;
 }
 
 .polaris-detection-activity-entry {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  padding: 0.4rem 0.35rem;
+  padding: 0.45rem 0.35rem 1.1rem;
   border-radius: 10px;
+  border-bottom: 1px solid #e2e8f0;
   transition: background-color 0.12s ease;
 }
 
@@ -1891,14 +2278,17 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-size: 0.875rem;
-  font-weight: 700;
   line-height: 1;
 }
 
+.polaris-detection-activity-camera-icon {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
 .polaris-detection-activity-avatar--yolo {
-  background: #dcfce7;
-  color: #14532d;
+  background: transparent;
+  color: #64748b;
 }
 
 .polaris-detection-activity-avatar--vlm {
@@ -1976,49 +2366,6 @@
 .polaris-detection-activity-abs {
   color: #64748b;
   font-weight: 400;
-}
-
-.polaris-detection-activity-aside {
-  flex-shrink: 0;
-  padding-top: 0.1rem;
-}
-
-.polaris-detection-activity-go {
-  cursor: pointer;
-  border-radius: 0.35rem;
-  border: 1px solid rgba(37, 99, 235, 0.35);
-  background: #fff;
-  padding: 0.32rem 0.65rem;
-  font-family: inherit;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
-  color: #2563eb;
-  transition:
-    background-color 0.12s ease,
-    border-color 0.12s ease,
-    color 0.12s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.polaris-detection-activity-go:hover:not(:disabled) {
-  border-color: #2563eb;
-  background: rgba(37, 99, 235, 0.06);
-  color: #1d4ed8;
-}
-
-.polaris-detection-activity-go:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.polaris-detection-activity-go:focus {
-  outline: none;
-}
-
-.polaris-detection-activity-go:focus-visible {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(37, 99, 235, 0.45);
 }
 
 .polaris-nav-detections-empty {

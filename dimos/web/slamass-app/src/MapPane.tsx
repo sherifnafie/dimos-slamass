@@ -121,6 +121,15 @@ type MapPaneProps = {
    */
   viewportScreenAnchorX?: number;
   viewportScreenAnchorY?: number;
+  /**
+   * When true, show the robot operator gamecard as if the map marker were hovered (e.g. first Go2 row
+   * hover in the navigator Operators list).
+   */
+  operatorFleetGo2Hover?: boolean;
+  /**
+   * One-shot emphasis after deploy from create flow: marker pops and the operator gamecard is visible.
+   */
+  robotMarkerDeployPop?: boolean;
 };
 
 type DragState = {
@@ -156,6 +165,8 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     pinViewModeControlsBottom = false,
     viewportScreenAnchorX,
     viewportScreenAnchorY,
+    operatorFleetGo2Hover = false,
+    robotMarkerDeployPop = false,
   } = props;
 
   const viewportBuildOptions = React.useMemo((): BuildViewportOptions => {
@@ -708,7 +719,13 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 <div
                   aria-describedby="map-robot-operator-gamecard"
                   aria-label={`Robot — ${card.instanceName}`}
-                  className="robot-marker"
+                  className={[
+                    "robot-marker",
+                    operatorFleetGo2Hover ? "robot-marker--fleet-hover" : "",
+                    robotMarkerDeployPop ? "robot-marker--deploy-pop" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   onPointerDown={stopEvent}
                   style={{
                     left: `${robotX}px`,

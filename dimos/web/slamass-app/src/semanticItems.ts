@@ -1,5 +1,54 @@
 import { Poi, SemanticItem, SemanticItemRef, YoloObject } from "./types";
 
+/** Placeholder detection row when the log is empty (UI sample, not a real YOLO object). */
+export const POLARIS_DEMO_CAMERA_CAPTURE_ID = "polaris-demo-camera-capture";
+
+const POLARIS_DEMO_CAPTURE_THUMB =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><rect fill='#dcfce7' width='64' height='64'/><text x='50%' y='52%' dominant-baseline='middle' text-anchor='middle' fill='#14532d' font-size='20' font-family='system-ui,sans-serif'>P</text></svg>",
+  );
+
+export function isPolarisDemoCameraCaptureRef(
+  item: SemanticItemRef | null | undefined,
+): boolean {
+  return item?.kind === "yolo_object" && item.entity_id === POLARIS_DEMO_CAMERA_CAPTURE_ID;
+}
+
+/** Same shape as `SelectedSemanticPreview` from OperatorRail (kept here to avoid circular imports). */
+export function polarisDemoCameraCapturePreviewFields(): {
+  kind: "yolo_object";
+  entity_id: string;
+  title: string;
+  subtitle: string;
+  summary: string;
+  thumbnail_url: string;
+} {
+  return {
+    kind: "yolo_object",
+    entity_id: POLARIS_DEMO_CAMERA_CAPTURE_ID,
+    title: "Picture taken",
+    subtitle: "94% confidence",
+    summary: "1 linked detection. Best view stored for revisit (sample).",
+    thumbnail_url: POLARIS_DEMO_CAPTURE_THUMB,
+  };
+}
+
+export function polarisDemoCameraCaptureSemanticItem(): SemanticItem {
+  return {
+    kind: "yolo_object",
+    entity_id: POLARIS_DEMO_CAMERA_CAPTURE_ID,
+    title: "Picture taken",
+    subtitle: "94%",
+    world_x: 0,
+    world_y: 0,
+    world_yaw: 0,
+    thumbnail_url: POLARIS_DEMO_CAPTURE_THUMB,
+    updated_at: new Date().toISOString(),
+    summary: "Snapshot from the camera feed (sample).",
+  };
+}
+
 export function semanticKey(item: SemanticItemRef | null): string {
   if (!item) {
     return "none";

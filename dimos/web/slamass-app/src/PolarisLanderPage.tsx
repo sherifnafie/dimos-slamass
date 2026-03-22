@@ -16,7 +16,7 @@ export default function PolarisLanderPage(): React.ReactElement {
             <div className="polaris-fade-stagger polaris-lander-hero-grid grid grid-cols-1 items-start gap-10 sm:gap-12 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.4fr)] lg:items-center lg:gap-12 xl:gap-16">
               <div className="polaris-lander-hero-copy relative z-10 text-left">
                 <h1 className="polaris-lander-title" data-testid="polaris-lander-intro">
-                  The operating system{" "}
+                  The intelligent OS{" "}
                   <br />
                   for the physical world.
                 </h1>

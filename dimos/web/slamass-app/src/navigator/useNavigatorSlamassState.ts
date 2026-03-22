@@ -7,7 +7,7 @@ import React, {
 } from "react";
 
 import { apiUrl, normalizeAppStateForDev } from "../apiBase";
-import { mergePoi, mergeYoloObject } from "../semanticItems";
+import { isPolarisDemoCameraCaptureRef, mergePoi, mergeYoloObject } from "../semanticItems";
 import type {
   AppState,
   ChatState,
@@ -515,6 +515,9 @@ export function useNavigatorSlamassState(): {
           },
         }));
       });
+      if (item != null && isPolarisDemoCameraCaptureRef(item)) {
+        return;
+      }
       try {
         await issueUiCommand("/api/ui/select-item", {
           method: "POST",
@@ -532,6 +535,9 @@ export function useNavigatorSlamassState(): {
 
   const handleFocusItem = useCallback(
     async (item: SemanticItemRef) => {
+      if (isPolarisDemoCameraCaptureRef(item)) {
+        return;
+      }
       try {
         await issueUiCommand(
           `/api/ui/focus-item/${item.kind}/${item.entity_id}`,
@@ -624,6 +630,15 @@ export function useNavigatorSlamassState(): {
 
   const handleGoToItem = useCallback(
     async (item: SemanticItemRef) => {
+      if (isPolarisDemoCameraCaptureRef(item)) {
+        appendActivity(
+          "operator",
+          "Go to item",
+          "Sample capture — connect the stack to navigate to real detections.",
+          "neutral",
+        );
+        return;
+      }
       const actionKey = `go-${item.kind}-${item.entity_id}`;
       appendActivity(
         "operator",
@@ -680,6 +695,9 @@ export function useNavigatorSlamassState(): {
 
   const handleHighlightItem = useCallback(
     async (item: SemanticItemRef) => {
+      if (isPolarisDemoCameraCaptureRef(item)) {
+        return;
+      }
       try {
         await issueUiCommand("/api/ui/highlight-items", {
           method: "POST",

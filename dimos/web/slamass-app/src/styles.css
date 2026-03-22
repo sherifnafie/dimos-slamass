@@ -1297,10 +1297,28 @@ img {
 
 /* pointer-events: auto while visible so the cursor can move onto the card without losing :hover. */
 .robot-marker:hover .robot-marker-gamecard,
-.robot-marker:focus-visible .robot-marker-gamecard {
+.robot-marker:focus-visible .robot-marker-gamecard,
+.robot-marker.robot-marker--fleet-hover .robot-marker-gamecard,
+.robot-marker.robot-marker--deploy-pop .robot-marker-gamecard {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+}
+
+.robot-marker.robot-marker--deploy-pop .robot-marker-disc {
+  animation: robot-marker-deploy-disc-pop 0.78s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes robot-marker-deploy-disc-pop {
+  0% {
+    transform: scale(0.28);
+  }
+  58% {
+    transform: scale(1.48);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .poi-pin:hover .poi-pin-gamecard,
@@ -1586,6 +1604,10 @@ img {
 
   .robot-marker-pulse-ring--2 {
     display: none;
+  }
+
+  .robot-marker.robot-marker--deploy-pop .robot-marker-disc {
+    animation: none;
   }
 }
 

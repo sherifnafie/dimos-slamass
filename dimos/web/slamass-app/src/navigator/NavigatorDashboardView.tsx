@@ -11,12 +11,25 @@ import { AgentToolsModal } from "../AgentToolsModal";
 import { LiveFeedPanel, type LiveFeedPanelHandle } from "../LiveFeedPanel";
 import { MapPane } from "../MapPane";
 import { NAVIGATOR_MAP_VIEWPORT_ANCHOR_Y } from "../mapViewport";
+import {
+  buildFleetEntryFromDeploy,
+  fleetEntriesToHydrateJson,
+  parseHydratedFleetEntries,
+} from "../polarisDeployFleetEntry";
+import {
+  readPolarisDeployHydratedFleetJson,
+  takePolarisDeployPendingPayload,
+  writePolarisDeployHydratedFleetJson,
+} from "../polarisDeploySession";
+import type { PolarisOperatorFleetEntry } from "../polarisOperatorFleet";
 import { defaultRobotOperatorHoverCard } from "../robotOperatorLabel";
 import { OperatorRail, SelectedSemanticPreview } from "../OperatorRail";
 import { PanelShell } from "../PanelShell";
 import { SettingsCogGlyphs } from "../SettingsCogGlyphs";
 import {
   buildSemanticItems,
+  isPolarisDemoCameraCaptureRef,
+  polarisDemoCameraCapturePreviewFields,
   resolveSelectedPoi,
   resolveSelectedYoloObject,
 } from "../semanticItems";
@@ -66,6 +79,17 @@ function formatNavigatorActivityLine(entry: ActivityEntry): string {
   return `${entry.timestamp} · ${entry.title} — ${detail}`;
 }
 
+function initialDeployedOperators(): PolarisOperatorFleetEntry[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  const raw = readPolarisDeployHydratedFleetJson();
+  if (!raw) {
+    return [];
+  }
+  return parseHydratedFleetEntries(raw);
+}
+
 function navigatorActivityToneClass(tone: ActivityEntry["tone"]): string {
   switch (tone) {
     case "danger":
@@ -113,6 +137,11 @@ export function NavigatorDashboardView(
     reportActionError,
   } = props;
 
+  const [go2OperatorFleetHover, setGo2OperatorFleetHover] = useState(false);
+  const [deployedOperators, setDeployedOperators] = useState<PolarisOperatorFleetEntry[]>(() =>
+    initialDeployedOperators(),
+  );
+  const [robotMarkerDeployPop, setRobotMarkerDeployPop] = useState(false);
   const [controlsMenuOpen, setControlsMenuOpen] = useState(false);
   const [teleopEnabled, setTeleopEnabled] = useState(false);
   const [agentToolsOpen, setAgentToolsOpen] = useState(false);
@@ -126,6 +155,35 @@ export function NavigatorDashboardView(
     activityEntries.length === 0
       ? null
       : activityEntries[activityEntries.length - 1];
+
+  const appendActivityRef = useRef(appendActivity);
+  appendActivityRef.current = appendActivity;
+
+  useEffect(() => {
+    const pending = takePolarisDeployPendingPayload();
+    if (!pending) {
+      return;
+    }
+    const entry = buildFleetEntryFromDeploy(pending);
+    if (!entry) {
+      return;
+    }
+    writePolarisDeployHydratedFleetJson(fleetEntriesToHydrateJson([entry]));
+    setDeployedOperators([entry]);
+    setRobotMarkerDeployPop(true);
+    appendActivityRef.current(
+      "system",
+      "Operator deployed",
+      `${entry.title} is live on the map.`,
+      "success",
+    );
+    const endPop = window.setTimeout(() => {
+      setRobotMarkerDeployPop(false);
+    }, 2800);
+    return () => {
+      window.clearTimeout(endPop);
+    };
+  }, []);
 
   const controlsMenuRef = useRef<HTMLDivElement>(null);
   const cameraFeedRef = useRef<LiveFeedPanelHandle>(null);
@@ -150,6 +208,9 @@ export function NavigatorDashboardView(
   );
 
   const selectedPreview = React.useMemo<SelectedSemanticPreview | null>(() => {
+    if (state.ui.selected_item && isPolarisDemoCameraCaptureRef(state.ui.selected_item)) {
+      return polarisDemoCameraCapturePreviewFields();
+    }
     if (selectedPoi) {
       return {
         kind: "vlm_poi",
@@ -171,7 +232,7 @@ export function NavigatorDashboardView(
       };
     }
     return null;
-  }, [selectedPoi, selectedYoloObject]);
+  }, [selectedPoi, selectedYoloObject, state.ui.selected_item]);
 
   const loadAgentTools = useCallback(async () => {
     setAgentToolsLoading(true);
@@ -532,7 +593,10 @@ export function NavigatorDashboardView(
           >
             <div className="polaris-navigator-operations-column polaris-navigator-map">
               <div className="polaris-navigator-operations-inner polaris-navigator-operations-body">
-                <NavigatorOperatorFleet />
+                <NavigatorOperatorFleet
+                  onGo2OperatorHoverChange={setGo2OperatorFleetHover}
+                  prependedOperators={deployedOperators}
+                />
 
                 <NavigatorOptionCard
                   bodyVariant="scroll"
@@ -585,7 +649,9 @@ export function NavigatorDashboardView(
               <MapPane
                 layers={state.layers}
                 map={state.map}
+                operatorFleetGo2Hover={go2OperatorFleetHover}
                 pinViewModeControlsBottom
+                robotMarkerDeployPop={robotMarkerDeployPop}
                 refitOnLayoutReady
                 viewportScreenAnchorY={NAVIGATOR_MAP_VIEWPORT_ANCHOR_Y}
                 robotOperatorHoverCard={defaultRobotOperatorHoverCard("navigator")}
@@ -679,48 +745,6 @@ export function NavigatorDashboardView(
               bodyClassName="polaris-navigator-detections-body"
               bodyVariant="scroll"
               className="polaris-nav-detections-list-card polaris-nav-option-card--grow polaris-nav-option-card--polaris-heading"
-              headerAside={
-                <div className="polaris-detection-log-toolbar">
-                  <button
-                    className="polaris-detection-log-pill"
-                    disabled={
-                      busyAction !== null || !state.yolo_runtime.inference_enabled
-                    }
-                    title={
-                      !state.yolo_runtime.inference_enabled
-                        ? "Turn on YOLO inference in Settings to pause labeling"
-                        : undefined
-                    }
-                    type="button"
-                    onClick={() => {
-                      void handleYoloModeChange(
-                        state.yolo_runtime.mode === "live" ? "paused" : "live",
-                      );
-                    }}
-                  >
-                    {state.yolo_runtime.mode === "live" ? "Pause" : "Resume"}
-                  </button>
-                  <button
-                    className="polaris-detection-log-pill polaris-detection-log-pill--muted"
-                    disabled={
-                      busyAction !== null ||
-                      (state.pois.length === 0 && state.yolo_objects.length === 0)
-                    }
-                    type="button"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "Clear all detection anchors (VLM POIs and YOLO objects) from memory?",
-                        )
-                      ) {
-                        void handleClearSemanticMemory();
-                      }
-                    }}
-                  >
-                    Clear
-                  </button>
-                </div>
-              }
               title="Detection log"
             >
               <OperatorRail

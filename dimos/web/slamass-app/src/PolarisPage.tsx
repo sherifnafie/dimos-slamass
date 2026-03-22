@@ -8,12 +8,12 @@ export default function PolarisPage(): React.ReactElement {
     <PolarisLayout>
       <main className="polaris-operators-main min-h-[calc(100vh-7rem)] bg-white px-4 py-8 sm:px-8 sm:py-10">
         <div className="polaris-operators-inner polaris-fade-stagger polaris-fade-stagger--operators mx-auto w-full max-w-3xl">
-          <div className="polaris-operators-page-head">
+          <div className="polaris-operators-page-head polaris-operators-page-head--operators-stack">
             <h1 className="polaris-operators-page-title" data-testid="polaris-operators-heading">
               Operators
             </h1>
             <a
-              className="polaris-operators-add-button"
+              className="polaris-operators-add-button polaris-operators-add-button--operators-list-cta"
               data-testid="polaris-add-operator-button"
               href="/polaris/create"
             >
@@ -130,41 +130,6 @@ export default function PolarisPage(): React.ReactElement {
                         ↗
                       </span>
                     </a>
-                    {op.mountThumbUrl ? (
-                      <div className="polaris-operator-card-manipulator-row">
-                        {op.mountThumbHref ? (
-                          <a
-                            aria-label={
-                              op.mountValue
-                                ? `Unitree ${op.mountValue} product page`
-                                : "Mount product page"
-                            }
-                            className="polaris-operator-card-mount-thumb-link"
-                            href={op.mountThumbHref}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                          >
-                            <span className="polaris-operator-card-select-thumb">
-                              <img
-                                alt=""
-                                className="polaris-operator-card-select-thumb-img"
-                                decoding="async"
-                                src={op.mountThumbUrl}
-                              />
-                            </span>
-                          </a>
-                        ) : (
-                          <div aria-hidden className="polaris-operator-card-select-thumb">
-                            <img
-                              alt=""
-                              className="polaris-operator-card-select-thumb-img"
-                              decoding="async"
-                              src={op.mountThumbUrl}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
                   </div>
                 </article>
               </li>

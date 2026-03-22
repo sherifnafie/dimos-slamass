@@ -8,7 +8,7 @@ test.describe("/polaris", () => {
 
     await expect(page.locator(".polaris-root")).toBeVisible();
     await expect(page.getByTestId("polaris-lander")).toBeVisible();
-    const landerHeading = /The operating system for the physical world\./;
+    const landerHeading = /The intelligent OS\s+for the physical world\./;
     await expect(page.getByTestId("polaris-lander-intro")).toHaveText(landerHeading);
     await expect(
       page.getByRole("heading", {
@@ -242,6 +242,36 @@ test.describe("/polaris/create", () => {
   test("direct URL loads choose operator page", async ({ page }) => {
     await page.goto("/polaris/create");
     await expect(page.getByTestId("polaris-create-heading")).toHaveText("Choose Operator");
+  });
+
+  test("wizard: clicking Go2 opens Define Skills and advances progress", async ({ page }) => {
+    await page.goto("/polaris/create");
+    await page.getByTestId("polaris-create-pick-go2").click();
+    await expect(page.getByTestId("polaris-create-heading")).toHaveText("Define Skills");
+    await expect(page.getByTestId("polaris-create-define-skills")).toBeVisible();
+    const bar = page.getByRole("progressbar");
+    await expect(bar).toHaveAttribute("aria-valuenow", "2");
+    await page.getByTestId("polaris-create-advance-mount").click();
+    await expect(page.getByTestId("polaris-create-heading")).toHaveText("Mount Manipulators");
+    await expect(bar).toHaveAttribute("aria-valuenow", "3");
+    await expect(page.getByTestId("polaris-create-wizard-deploy")).not.toBeVisible();
+    await page.getByTestId("polaris-create-advance-use-case").click();
+    await expect(page.getByTestId("polaris-create-heading")).toHaveText("Use case");
+    await expect(page.getByTestId("polaris-create-use-case")).toBeVisible();
+    await expect(bar).toHaveAttribute("aria-valuenow", "4");
+    await expect(page.getByTestId("polaris-create-wizard-deploy")).toBeVisible();
+  });
+
+  test("wizard back returns to previous step with Operators link", async ({ page }) => {
+    await page.goto("/polaris/create");
+    await page.getByTestId("polaris-create-pick-go2").click();
+    await expect(page.getByTestId("polaris-create-heading")).toHaveText("Define Skills");
+    await page.getByTestId("polaris-create-back").click();
+    await expect(page.getByTestId("polaris-create-heading")).toHaveText("Choose Operator");
+    await expect(page.getByTestId("polaris-create-back")).toHaveAttribute(
+      "href",
+      "/polaris/operators",
+    );
   });
 
   test("/create alias loads choose operator page", async ({ page }) => {

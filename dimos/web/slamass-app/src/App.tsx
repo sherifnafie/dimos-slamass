@@ -11,8 +11,10 @@ import { SaveMapGlyphs } from "./SaveMapGlyphs";
 import { SettingsCogGlyphs } from "./SettingsCogGlyphs";
 import {
   buildSemanticItems,
+  isPolarisDemoCameraCaptureRef,
   mergePoi,
   mergeYoloObject,
+  polarisDemoCameraCapturePreviewFields,
   resolveSelectedPoi,
   resolveSelectedYoloObject,
 } from "./semanticItems";
@@ -245,6 +247,9 @@ export default function App(): React.ReactElement {
   );
 
   const selectedPreview = React.useMemo<SelectedSemanticPreview | null>(() => {
+    if (state.ui.selected_item && isPolarisDemoCameraCaptureRef(state.ui.selected_item)) {
+      return polarisDemoCameraCapturePreviewFields();
+    }
     if (selectedPoi) {
       return {
         kind: "vlm_poi",
@@ -266,7 +271,7 @@ export default function App(): React.ReactElement {
       };
     }
     return null;
-  }, [selectedPoi, selectedYoloObject]);
+  }, [selectedPoi, selectedYoloObject, state.ui.selected_item]);
 
   const appendActivity = React.useCallback(
     (role: ActivityRole, title: string, detail: string, tone: ActivityTone = "neutral") => {
@@ -910,6 +915,15 @@ export default function App(): React.ReactElement {
 
   const handleGoToItem = React.useCallback(
     async (item: SemanticItemRef) => {
+      if (isPolarisDemoCameraCaptureRef(item)) {
+        appendActivity(
+          "operator",
+          "Go to item",
+          "Sample capture — connect the stack to navigate to real detections.",
+          "neutral",
+        );
+        return;
+      }
       const actionKey = `go-${item.kind}-${item.entity_id}`;
       appendActivity("operator", "Go to item", describeSemanticItem(item), "accent");
       setBusyAction(actionKey);
@@ -962,6 +976,9 @@ export default function App(): React.ReactElement {
           },
         }));
       });
+      if (item != null && isPolarisDemoCameraCaptureRef(item)) {
+        return;
+      }
       try {
         await issueUiCommand("/api/ui/select-item", {
           method: "POST",
@@ -979,6 +996,9 @@ export default function App(): React.ReactElement {
 
   const handleFocusItem = React.useCallback(
     async (item: SemanticItemRef) => {
+      if (isPolarisDemoCameraCaptureRef(item)) {
+        return;
+      }
       try {
         await issueUiCommand(`/api/ui/focus-item/${item.kind}/${item.entity_id}`, {
           method: "POST",
@@ -993,6 +1013,9 @@ export default function App(): React.ReactElement {
 
   const handleHighlightItem = React.useCallback(
     async (item: SemanticItemRef) => {
+      if (isPolarisDemoCameraCaptureRef(item)) {
+        return;
+      }
       try {
         await issueUiCommand("/api/ui/highlight-items", {
           method: "POST",

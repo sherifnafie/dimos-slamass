@@ -15,8 +15,7 @@ export const POLARIS_GO2_EDU_PREVIEW_URL =
   "https://www.unitree.com/images/9896d21bdef4443d821a324931d8af0c_800x800.png";
 
 /** First operator pick on `/polaris/create` (Unitree Go2). */
-export const POLARIS_CREATE_PICK_FIRST_URL =
-  "https://www.robotshop.com/cdn/shop/files/go2-5_3816b0b8-b809-4663-8d1d-d6d4716df416.webp?v=1725642533&width=500";
+export const POLARIS_CREATE_PICK_FIRST_URL = POLARIS_GO2_PREVIEW_URL;
 
 /** Second operator pick on `/polaris/create` (Unitree G1). */
 export const POLARIS_CREATE_PICK_SECOND_URL =
