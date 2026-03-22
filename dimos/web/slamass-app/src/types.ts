@@ -100,6 +100,8 @@ export interface SemanticItem {
   world_yaw: number;
   thumbnail_url: string;
   updated_at: string;
+  /** Optional POI summary for detection-log detail line */
+  summary?: string;
 }
 
 export interface InspectionState {

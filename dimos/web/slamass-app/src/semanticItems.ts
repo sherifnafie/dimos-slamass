@@ -68,17 +68,21 @@ export function mergeYoloObject(existing: YoloObject[], nextObject: YoloObject):
 export function buildSemanticItems(pois: Poi[], yoloObjects: YoloObject[]): SemanticItem[] {
   const poiItems = pois
     .filter((poi) => poi.status !== "deleted")
-    .map<SemanticItem>((poi) => ({
-      kind: "vlm_poi",
-      entity_id: poi.poi_id,
-      title: poi.title,
-      subtitle: poi.category,
-      world_x: poi.target_x,
-      world_y: poi.target_y,
-      world_yaw: poi.anchor_yaw,
-      thumbnail_url: poi.thumbnail_url,
-      updated_at: poi.updated_at,
-    }));
+    .map<SemanticItem>((poi) => {
+      const summary = poi.summary?.trim();
+      return {
+        kind: "vlm_poi",
+        entity_id: poi.poi_id,
+        title: poi.title,
+        subtitle: poi.category,
+        world_x: poi.target_x,
+        world_y: poi.target_y,
+        world_yaw: poi.anchor_yaw,
+        thumbnail_url: poi.thumbnail_url,
+        updated_at: poi.updated_at,
+        summary: summary && summary.length > 0 ? summary : undefined,
+      };
+    });
 
   const yoloItems = yoloObjects
     .filter((object) => object.status !== "deleted")

@@ -388,38 +388,6 @@
   justify-content: flex-end;
 }
 
-/* Quick log — compact line in header; inherits Polaris sans (Helvetica / Arial). */
-.polaris-root .polaris-header .polaris-header-navigator-lede {
-  margin: 0;
-  max-width: min(100%, 38rem);
-  text-align: right;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  line-height: 1.2;
-  letter-spacing: 0.02em;
-  color: #64748b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.polaris-root .polaris-header .polaris-header-navigator-lede__time {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: #334155;
-}
-
-.polaris-root .polaris-header .polaris-header-navigator-lede__msg {
-  font-weight: 500;
-  color: #64748b;
-}
-
-@media (min-width: 768px) {
-  .polaris-root .polaris-header .polaris-header-navigator-lede {
-    font-size: 0.75rem;
-  }
-}
-
 /* `/polaris/operators` page heading row — title + Add Operator (aligned with list width). */
 .polaris-operators-page-head {
   display: flex;
@@ -1518,7 +1486,7 @@
 /* Image well only: same fill as `.polaris-navigator-map .robot-marker-gamecard-media`. */
 .polaris-operators-list .polaris-operator-card-visual:not(.polaris-operator-card-visual--empty) {
   border: 0.5px solid rgba(15, 23, 42, 0.12);
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--polaris-operator-visual-bg);
 }
 
 .polaris-operator-card-img--static {
@@ -2237,6 +2205,14 @@
   overflow: hidden;
 }
 
+.polaris-nav-detections-list-card .polaris-nav-option-card-head-aside {
+  max-width: none;
+}
+
+.polaris-nav-detections-list-card .polaris-nav-option-card-header {
+  align-items: center;
+}
+
 @media (min-width: 960px) {
   .polaris-navigator-detections-column {
     height: 100%;
@@ -2355,6 +2331,247 @@
 .polaris-navigator-detections-column .operator-rail-embedded--segment-memory .rail-stack {
   padding: 0;
   gap: 0;
+}
+
+/* —— Detection log (timeline feed, navigator third column) —— */
+/* Detection log card header — match `.polaris-operator-card-cta` chrome */
+.polaris-detection-log-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.polaris-detection-log-pill {
+  padding: 0.45rem 0.85rem;
+  border: 1px solid #ececec;
+  border-radius: 0.25rem;
+  background: #fefefe;
+  color: #404040;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.polaris-detection-log-pill:hover:not(:disabled) {
+  border-color: #d4d4d4;
+  background: #fafafa;
+  color: #0a0a0a;
+}
+
+.polaris-detection-log-pill:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.polaris-detection-log-pill--muted {
+  color: #737373;
+}
+
+.polaris-detection-log-pill--muted:hover:not(:disabled) {
+  color: #404040;
+}
+
+/* Detection log — activity-style feed (avatar, date groups, relative time) */
+.polaris-detection-activity-log {
+  margin: 0;
+  padding: 0.2rem 0 0.35rem;
+}
+
+.polaris-detection-activity-day {
+  margin: 0 0 1.35rem;
+}
+
+.polaris-detection-activity-day:last-child {
+  margin-bottom: 0;
+}
+
+.polaris-detection-activity-day-label {
+  margin: 0 0 1rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+
+.polaris-detection-activity-day-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1.05rem;
+}
+
+.polaris-detection-activity-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.4rem 0.35rem;
+  border-radius: 10px;
+  transition: background-color 0.12s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .polaris-detection-activity-entry:hover {
+    background: rgba(15, 23, 42, 0.025);
+  }
+}
+
+.polaris-detection-activity-entry--selected {
+  background: rgba(59, 130, 246, 0.07);
+}
+
+.polaris-detection-activity-avatar {
+  display: flex;
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.polaris-detection-activity-avatar--yolo {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.polaris-detection-activity-avatar--vlm {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.polaris-detection-activity-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.polaris-detection-activity-main:focus {
+  outline: none;
+}
+
+.polaris-detection-activity-main:focus-visible {
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #94a3b8;
+}
+
+.polaris-detection-activity-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.35rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.polaris-detection-activity-headline strong {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.polaris-detection-activity-sep {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.polaris-detection-activity-rel {
+  color: #94a3b8;
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.polaris-detection-activity-desc {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: #475569;
+}
+
+.polaris-detection-activity-link {
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.polaris-detection-activity-coords {
+  color: #2563eb;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.polaris-detection-activity-abs {
+  color: #64748b;
+  font-weight: 400;
+}
+
+.polaris-detection-activity-aside {
+  flex-shrink: 0;
+  padding-top: 0.1rem;
+}
+
+.polaris-detection-activity-go {
+  cursor: pointer;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  background: #fff;
+  padding: 0.32rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  color: #2563eb;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.polaris-detection-activity-go:hover:not(:disabled) {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.06);
+  color: #1d4ed8;
+}
+
+.polaris-detection-activity-go:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.polaris-detection-activity-go:focus {
+  outline: none;
+}
+
+.polaris-detection-activity-go:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(37, 99, 235, 0.45);
+}
+
+.polaris-nav-detections-empty {
+  padding: 1.25rem 0.75rem;
 }
 
 /* Agent option card is the outer frame — no second box around chat */
@@ -2550,6 +2767,7 @@
 
 .polaris-nav-operators-fleet-card .polaris-nav-option-card-header {
   align-items: center;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 /* Expand / collapse (match thin header icon treatment — cf. camera capture header). */
@@ -2653,15 +2871,72 @@
 }
 
 /* Navigator sidebar: reuse `/polaris/operators` operator cards (scaled + stretched link to operators). */
+.polaris-nav-operators-fleet-card > .polaris-nav-option-card-body {
+  padding: 0 0 0.75rem;
+  box-sizing: border-box;
+}
+
+/*
+ * Operator list: content inset from card edges; row dividers bleed full card width (negative margin on items).
+ * No outer frame — avoids a second border inside the option card.
+ */
+.polaris-nav-operators-embed-shell {
+  --polaris-nav-operators-embed-inset: 0.75rem;
+  box-sizing: border-box;
+  margin: 0.5rem var(--polaris-nav-operators-embed-inset) 0;
+  overflow: visible;
+}
+
+.polaris-nav-operators-embed-shell .polaris-operators-list-item {
+  margin-inline: calc(-1 * var(--polaris-nav-operators-embed-inset));
+}
+
+.polaris-nav-operators-extend-panel-body .polaris-nav-operators-embed-shell {
+  /* Match panel horizontal padding so row dividers span the full dialog content width. */
+  --polaris-nav-operators-embed-inset: 0.85rem;
+  margin: 0.35rem 0 0;
+}
+
 .polaris-nav-operators-embed.polaris-operators-list {
   gap: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.polaris-nav-operators-embed .polaris-operators-list-item {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .polaris-nav-operators-embed-card.polaris-operator-card {
   position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
   align-items: flex-start;
   gap: 0.65rem;
-  padding: 0.75rem 0;
+  /* Extra vertical room so row dividers don’t hug the thumbnails/text */
+  padding: 1.125rem 0.65rem;
+}
+
+.polaris-nav-operators-embed-shell .polaris-nav-operators-embed-card.polaris-operator-card {
+  padding-inline: calc(0.65rem + var(--polaris-nav-operators-embed-inset, 0.75rem));
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+}
+
+.polaris-nav-operators-embed-shell .polaris-operators-list-item:first-child .polaris-nav-operators-embed-card.polaris-operator-card {
+  border-top: none;
+}
+
+.polaris-nav-operators-embed-shell .polaris-operators-list-item:last-child .polaris-nav-operators-embed-card.polaris-operator-card {
+  border-bottom: none;
+}
+
+.polaris-nav-operators-embed-card .polaris-operator-card-body {
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -2713,21 +2988,6 @@
   margin: 0.18rem 0 0;
   font-size: 0.72rem;
   line-height: 1.35;
-}
-
-.polaris-nav-operators-embed-card .polaris-operator-card-cta-column {
-  gap: 0.55rem;
-  margin-top: 0.05rem;
-}
-
-.polaris-nav-operators-embed-card .polaris-operator-card-cta {
-  padding: 0.3rem 0.62rem;
-  font-size: 0.7rem;
-}
-
-.polaris-nav-operators-embed-cta-fake.polaris-operator-card-cta {
-  pointer-events: none;
-  cursor: default;
 }
 
 .polaris-nav-layer-row {
@@ -3288,6 +3548,41 @@
   z-index: 5;
 }
 
+/* Settings cog directly beside robot Controls; icon size matches `.polaris-map-controls-dock__robot-icon` (1.15rem). */
+.polaris-navigator-root .polaris-navigator-map-header-controls-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.12rem;
+}
+
+.polaris-navigator-root
+  .polaris-navigator-map-header-actions
+  .polaris-navigator-map-settings-anchor
+  .polaris-navigator-map-settings-cog.action-button.settings-cog-button {
+  width: 1.5rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0.18rem;
+  border-radius: 8px;
+}
+
+.polaris-navigator-root .polaris-navigator-map-settings-anchor .settings-cog-icon-stack {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.polaris-navigator-root .polaris-navigator-map-settings-anchor .settings-cog-icon,
+.polaris-navigator-root .polaris-navigator-map-settings-anchor .settings-cog-icon--outline,
+.polaris-navigator-root .polaris-navigator-map-settings-anchor .settings-cog-icon--solid {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.polaris-navigator-root .polaris-navigator-map-settings-anchor .settings-cog-icon--outline,
+.polaris-navigator-root .polaris-navigator-map-settings-anchor .settings-cog-icon--solid {
+  margin: -0.575rem 0 0 -0.575rem;
+}
+
 /* Controls dock in map header: match icon row, dropdown below trigger (not in document flow). */
 .polaris-navigator-root .polaris-navigator-map-header-actions .polaris-map-controls-dock {
   flex-shrink: 0;
@@ -3680,7 +3975,7 @@
 
 .polaris-navigator-map .robot-marker-gamecard-media,
 .polaris-navigator-map .poi-pin-gamecard-media {
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--polaris-operator-visual-bg);
   border-right: 0.5px solid rgba(15, 23, 42, 0.12);
 }
 

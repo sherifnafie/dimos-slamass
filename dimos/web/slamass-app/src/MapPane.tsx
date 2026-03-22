@@ -15,6 +15,7 @@ import {
   screenToWorld,
   worldToImagePixels,
   zoomCameraAtScreenPoint,
+  type BuildViewportOptions,
 } from "./mapViewport";
 import { refFromPoi, refFromYoloObject, semanticKey } from "./semanticItems";
 import type { RobotOperatorHoverCard } from "./robotOperatorLabel";
@@ -91,6 +92,41 @@ function yoloLabelVisibility(zoom: number): "none" | "priority" | "all" {
   return "all";
 }
 
+/** Compass above map zoom controls; needle matches map overlay yaw (see POI heading lines). */
+function MapHeadingCompass(props: { robotPose: RobotPose | null }): React.ReactElement {
+  const { robotPose } = props;
+  const hasPose = robotPose !== null;
+  const needleDeg = hasPose ? 90 - (robotPose.yaw * 180) / Math.PI : 0;
+  const headingDeg = hasPose
+    ? Math.round(((((robotPose.yaw * 180) / Math.PI) % 360) + 360) % 360)
+    : null;
+
+  return (
+    <div
+      className="map-compass"
+      role="img"
+      aria-label={
+        hasPose && headingDeg !== null
+          ? `Map compass, north at top. Robot heading about ${headingDeg} degrees.`
+          : "Map compass, north at top. Robot pose not available."
+      }
+    >
+      <div className="map-compass-face">
+        <span className="map-compass-cardinal map-compass-cardinal--n">N</span>
+        <span className="map-compass-cardinal map-compass-cardinal--e">E</span>
+        <span className="map-compass-cardinal map-compass-cardinal--s">S</span>
+        <span className="map-compass-cardinal map-compass-cardinal--w">W</span>
+        {hasPose ? (
+          <div
+            className="map-compass-needle"
+            style={{ transform: `rotate(${needleDeg}deg)` }}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 type MapPaneProps = {
   map: MapState | null;
   robotPose: RobotPose | null;
@@ -124,6 +160,12 @@ type MapPaneProps = {
    * (e.g. when actions live in `PanelShell` header `aside`).
    */
   pinViewModeControlsBottom?: boolean;
+  /**
+   * Where the camera center is pinned on the map surface (0–1). Default 0.5 / 0.5 (geometric center).
+   * Navigator uses a lower `y` so the map sits higher under the panel title on load.
+   */
+  viewportScreenAnchorX?: number;
+  viewportScreenAnchorY?: number;
 };
 
 type DragState = {
@@ -157,7 +199,16 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     refitOnLayoutReady = false,
     mapOverlayTopRight,
     pinViewModeControlsBottom = false,
+    viewportScreenAnchorX,
+    viewportScreenAnchorY,
   } = props;
+
+  const viewportBuildOptions = React.useMemo((): BuildViewportOptions => {
+    return {
+      screenAnchorX: viewportScreenAnchorX ?? 0.5,
+      screenAnchorY: viewportScreenAnchorY ?? 0.5,
+    };
+  }, [viewportScreenAnchorX, viewportScreenAnchorY]);
 
   const mapMeasureKey = map ? `${map.width}x${map.height}` : null;
   const [containerRef, size] = useSize<HTMLDivElement>(mapMeasureKey);
@@ -203,7 +254,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       }
       event.preventDefault();
       const cam = cameraRef.current;
-      const viewportNow = buildViewport(map, width, height, cam);
+      const viewportNow = buildViewport(map, width, height, cam, viewportBuildOptions);
       const localX = event.clientX - rect.left;
       const localY = event.clientY - rect.top;
       const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
@@ -220,14 +271,14 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     return () => {
       el.removeEventListener("wheel", onWheel);
     };
-  }, [map, onCameraChange]);
+  }, [map, onCameraChange, viewportBuildOptions]);
 
   const viewport = React.useMemo(() => {
     if (!map || size.width <= 0 || size.height <= 0) {
       return null;
     }
-    return buildViewport(map, size.width, size.height, ui.camera);
-  }, [map, size.height, size.width, ui.camera]);
+    return buildViewport(map, size.width, size.height, ui.camera, viewportBuildOptions);
+  }, [map, size.height, size.width, ui.camera, viewportBuildOptions]);
 
   const mapFadeSourceKey = React.useMemo(
     () => (map ? `${map.map_id}|${map.image_version}|${map.image_url}` : null),
@@ -321,8 +372,8 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     if (!map || !viewport) {
       return;
     }
-    const cx = size.width / 2;
-    const cy = size.height / 2;
+    const cx = size.width * viewport.screenAnchorX;
+    const cy = size.height * viewport.screenAnchorY;
     onCameraChange(
       zoomCameraAtScreenPoint(map, ui.camera, cx, cy, ui.camera.zoom * 1.1, viewport),
     );
@@ -332,8 +383,8 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     if (!map || !viewport) {
       return;
     }
-    const cx = size.width / 2;
-    const cy = size.height / 2;
+    const cx = size.width * viewport.screenAnchorX;
+    const cy = size.height * viewport.screenAnchorY;
     onCameraChange(
       zoomCameraAtScreenPoint(map, ui.camera, cx, cy, ui.camera.zoom / 1.1, viewport),
     );
@@ -384,12 +435,12 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       if (size.width <= 0 || size.height <= 0) {
         return;
       }
-      const vp = buildViewport(map, size.width, size.height, cameraRef.current);
+      const vp = buildViewport(map, size.width, size.height, cameraRef.current, viewportBuildOptions);
       const next = panCamera(map, cameraRef.current, ddx, ddy, vp);
       cameraRef.current = next;
       onCameraChange(next);
     },
-    [map, onCameraChange, size.height, size.width, viewport],
+    [map, onCameraChange, size.height, size.width, viewport, viewportBuildOptions],
   );
 
   const handlePointerUp = React.useCallback(
@@ -480,6 +531,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
 
   const floatingZoomFitControls = showFloatingZoomFit ? (
     <div className="map-floating-controls">
+      <MapHeadingCompass robotPose={robotPose} />
       <div aria-label="Zoom map" className="map-zoom-pill" role="group">
         <button
           aria-label="Zoom in"

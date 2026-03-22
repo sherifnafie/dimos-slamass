@@ -19,7 +19,27 @@ export type MapViewport = {
   imageTop: number;
   imageWidth: number;
   imageHeight: number;
+  /** 0–1: horizontal anchor where the camera center is placed on screen (default 0.5). */
+  screenAnchorX: number;
+  /** 0–1: vertical anchor where the camera center is placed on screen (default 0.5). Lower = map sits higher. */
+  screenAnchorY: number;
 };
+
+/** Framing passed to `buildViewport`; values outside ~0.05–0.95 are clamped. */
+export type BuildViewportOptions = {
+  screenAnchorX?: number;
+  screenAnchorY?: number;
+};
+
+/**
+ * Default vertical anchor for Navigator / Polaris map column: camera center sits above the geometric
+ * middle so the costmap reads higher under the panel header (tall map stage).
+ */
+export const NAVIGATOR_MAP_VIEWPORT_ANCHOR_Y = 0.38;
+
+function clampScreenAnchor(value: number): number {
+  return Math.min(0.95, Math.max(0.05, value));
+}
 
 export function clampZoom(zoom: number): number {
   return Math.max(MIN_MAP_ZOOM, Math.min(MAX_MAP_ZOOM, zoom));
@@ -77,7 +97,10 @@ export function buildViewport(
   width: number,
   height: number,
   camera: UiCameraState,
+  options?: BuildViewportOptions,
 ): MapViewport {
+  const screenAnchorX = clampScreenAnchor(options?.screenAnchorX ?? 0.5);
+  const screenAnchorY = clampScreenAnchor(options?.screenAnchorY ?? 0.5);
   const normalizedCamera = normalizeCamera(map, camera);
   const basePixelsPerCell = Math.min(width / map.width, height / map.height);
   const pixelsPerCell = basePixelsPerCell * normalizedCamera.zoom;
@@ -92,10 +115,12 @@ export function buildViewport(
     pixelsPerCell,
     centerCellX,
     centerCellY,
-    imageLeft: width / 2 - centerCellX * pixelsPerCell,
-    imageTop: height / 2 - (map.height - centerCellY) * pixelsPerCell,
+    imageLeft: width * screenAnchorX - centerCellX * pixelsPerCell,
+    imageTop: height * screenAnchorY - (map.height - centerCellY) * pixelsPerCell,
     imageWidth,
     imageHeight,
+    screenAnchorX,
+    screenAnchorY,
   };
 }
 
@@ -171,8 +196,10 @@ export function zoomCameraAtScreenPoint(
   const cellY = (worldY - map.origin_y) / map.resolution;
   const basePixelsPerCell = Math.min(viewport.width / map.width, viewport.height / map.height);
   const pixelsPerCell = basePixelsPerCell * clampedZoom;
-  const centerCellX = cellX - (screenX - viewport.width / 2) / pixelsPerCell;
-  const centerCellY = cellY + (screenY - viewport.height / 2) / pixelsPerCell;
+  const ax = viewport.width * viewport.screenAnchorX;
+  const ay = viewport.height * viewport.screenAnchorY;
+  const centerCellX = cellX - (screenX - ax) / pixelsPerCell;
+  const centerCellY = cellY + (screenY - ay) / pixelsPerCell;
 
   return normalizeCamera(map, {
     center_x: map.origin_x + centerCellX * map.resolution,

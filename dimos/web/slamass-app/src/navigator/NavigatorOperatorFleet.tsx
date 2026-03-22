@@ -19,107 +19,101 @@ function statusLabel(active: "green" | "blue" | "grey"): string {
 
 function NavigatorOperatorFleetList(): React.ReactElement {
   return (
-    <ul
-      aria-label="Operators"
-      className="polaris-operators-list polaris-nav-operators-embed"
-      role="list"
-    >
-      {POLARIS_OPERATOR_FLEET.map((op) => (
-        <li className="polaris-operators-list-item" key={op.id} role="listitem">
-          <article
-            aria-label={op.title}
-            className="polaris-operator-card polaris-nav-operators-embed-card"
-            data-testid={`polaris-nav-operator-${op.id}`}
-          >
-            <a
-              aria-label={`View ${op.title} on Operators`}
-              className="polaris-nav-operators-embed-hit"
-              href="/polaris/operators"
-            />
-            <div className="polaris-operator-card-media-column">
-              <div
-                className={
-                  op.imageUrl
-                    ? "polaris-operator-card-visual"
-                    : "polaris-operator-card-visual polaris-operator-card-visual--empty"
-                }
-              >
-                {op.imageUrl ? (
-                  <img
-                    alt={op.imageAlt}
-                    className="polaris-operator-card-img polaris-operator-card-img--static"
-                    decoding="async"
-                    src={op.imageUrl}
-                  />
-                ) : (
-                  <span className="polaris-operator-card-placeholder">
-                    {op.emptyVisualLabel ?? "Preview"}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="polaris-operator-card-body">
-              <h2 className="polaris-operator-card-title">
-                <span className="polaris-operator-card-title-text">
-                  {op.titleHref ? (
-                    <a
-                      className="polaris-operator-card-title-link"
-                      href={op.titleHref}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                    >
-                      {op.title}
-                    </a>
-                  ) : (
-                    op.title
-                  )}
-                </span>
-                {op.active ? (
-                  <span
-                    aria-label={statusLabel(op.active)}
-                    className="polaris-operator-card-active"
-                    role="status"
-                  >
-                    <span
-                      aria-hidden
-                      className={
-                        op.active === "blue"
-                          ? "polaris-operator-card-active-dot polaris-operator-card-active-dot--blue"
-                          : op.active === "grey"
-                            ? "polaris-operator-card-active-dot polaris-operator-card-active-dot--grey"
-                            : "polaris-operator-card-active-dot polaris-operator-card-active-dot--green"
-                      }
+    <div className="polaris-nav-operators-embed-shell">
+      <ul
+        aria-label="Operators"
+        className="polaris-operators-list polaris-nav-operators-embed"
+        role="list"
+      >
+        {POLARIS_OPERATOR_FLEET.map((op) => (
+          <li className="polaris-operators-list-item" key={op.id} role="listitem">
+            <article
+              aria-label={op.title}
+              className="polaris-operator-card polaris-nav-operators-embed-card"
+              data-testid={`polaris-nav-operator-${op.id}`}
+            >
+              <a
+                aria-label={`View ${op.title} on Operators`}
+                className="polaris-nav-operators-embed-hit"
+                href="/polaris/operators"
+              />
+              <div className="polaris-operator-card-media-column">
+                <div
+                  className={
+                    op.imageUrl
+                      ? "polaris-operator-card-visual"
+                      : "polaris-operator-card-visual polaris-operator-card-visual--empty"
+                  }
+                >
+                  {op.imageUrl ? (
+                    <img
+                      alt={op.imageAlt}
+                      className="polaris-operator-card-img polaris-operator-card-img--static"
+                      decoding="async"
+                      src={op.imageUrl}
                     />
+                  ) : (
+                    <span className="polaris-operator-card-placeholder">
+                      {op.emptyVisualLabel ?? "Preview"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="polaris-operator-card-body">
+                <h2 className="polaris-operator-card-title">
+                  <span className="polaris-operator-card-title-text">
+                    {op.titleHref ? (
+                      <a
+                        className="polaris-operator-card-title-link"
+                        href={op.titleHref}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        {op.title}
+                      </a>
+                    ) : (
+                      op.title
+                    )}
                   </span>
+                  {op.active ? (
+                    <span
+                      aria-label={statusLabel(op.active)}
+                      className="polaris-operator-card-active"
+                      role="status"
+                    >
+                      <span
+                        aria-hidden
+                        className={
+                          op.active === "blue"
+                            ? "polaris-operator-card-active-dot polaris-operator-card-active-dot--blue"
+                            : op.active === "grey"
+                              ? "polaris-operator-card-active-dot polaris-operator-card-active-dot--grey"
+                              : "polaris-operator-card-active-dot polaris-operator-card-active-dot--green"
+                        }
+                      />
+                    </span>
+                  ) : null}
+                </h2>
+                {op.category ? (
+                  <p className="polaris-operator-card-sub polaris-operator-card-meta">
+                    <span className="polaris-operator-card-meta-label">{op.category.label}</span>{" "}
+                    <span className="polaris-operator-card-meta-value">{op.category.value}</span>
+                  </p>
                 ) : null}
-              </h2>
-              {op.category ? (
                 <p className="polaris-operator-card-sub polaris-operator-card-meta">
-                  <span className="polaris-operator-card-meta-label">{op.category.label}</span>{" "}
-                  <span className="polaris-operator-card-meta-value">{op.category.value}</span>
+                  <span className="polaris-operator-card-meta-label">Location</span>{" "}
+                  <span className="polaris-operator-card-meta-value">{op.location}</span>
                 </p>
-              ) : null}
-              <p className="polaris-operator-card-sub polaris-operator-card-meta">
-                <span className="polaris-operator-card-meta-label">Location</span>{" "}
-                <span className="polaris-operator-card-meta-value">{op.location}</span>
-              </p>
-              <p className="polaris-operator-card-sub polaris-operator-card-meta">
-                <span className="polaris-operator-card-meta-label">Mission</span>{" "}
-                <span className="polaris-operator-card-meta-value">{op.task}</span>
-              </p>
-            </div>
-            <div className="polaris-operator-card-cta-column">
-              <span className="polaris-operator-card-cta polaris-nav-operators-embed-cta-fake">
-                <span className="polaris-operator-card-cta-label">Operators</span>
-                <span aria-hidden className="polaris-operator-card-cta-icon">
-                  ↗
-                </span>
-              </span>
-            </div>
-          </article>
-        </li>
-      ))}
-    </ul>
+                <p className="polaris-operator-card-sub polaris-operator-card-meta">
+                  <span className="polaris-operator-card-meta-label">Mission</span>{" "}
+                  <span className="polaris-operator-card-meta-value">{op.task}</span>
+                </p>
+              </div>
+            </article>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

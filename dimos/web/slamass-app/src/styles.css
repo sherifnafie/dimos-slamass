@@ -23,6 +23,13 @@
   /* Map robot operator disc — shared with settings cog hover (solid icon). */
   --map-operator-disc-fill: #e0f2fe;
   --map-operator-disc-border: #7dd3fc;
+  /* Operator card / map gamecard image well — user chat bubbles use the same fill. */
+  --polaris-operator-visual-bg: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  --polaris-operator-visual-bg-on-dark: linear-gradient(
+    180deg,
+    rgba(248, 250, 252, 0.22) 0%,
+    rgba(241, 245, 249, 0.14) 100%
+  );
 }
 
 * {
@@ -1027,6 +1034,72 @@ img {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+}
+
+/* Heading compass: above +/− zoom (map Y+ is north / up on the costmap). */
+.map-compass {
+  flex-shrink: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.map-compass-face {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: none;
+}
+
+.map-compass-cardinal {
+  position: absolute;
+  z-index: 1;
+  font-size: 0.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.map-compass-cardinal--n {
+  top: 4px;
+  left: 50%;
+  color: #0f172a;
+  transform: translateX(-50%);
+}
+
+.map-compass-cardinal--s {
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.map-compass-cardinal--e {
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+}
+
+.map-compass-cardinal--w {
+  top: 50%;
+  left: 4px;
+  transform: translateY(-50%);
+}
+
+.map-compass-needle {
+  position: absolute;
+  z-index: 2;
+  bottom: 50%;
+  left: 50%;
+  width: 2px;
+  height: 13px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, #e0f2fe 0%, #7dd3fc 100%);
+  transform-origin: 50% 100%;
 }
 
 .map-zoom-pill {
@@ -2077,13 +2150,14 @@ img {
 
 .chat-message.role-user .chat-message-body {
   padding: 10px 14px;
-  border-radius: 16px;
-  background: #e8eaed;
+  border-radius: 24px;
+  background: var(--polaris-operator-visual-bg);
   border: none;
+  box-shadow: none;
 }
 
 .chat-message.role-user.status-running .chat-message-body {
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.35);
+  box-shadow: none;
 }
 
 .chat-message.role-assistant.status-running .chat-message-body p {
@@ -2105,6 +2179,60 @@ img {
   gap: 10px;
   align-items: center;
   padding: 0 2px;
+}
+
+.chat-message-meta-start {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.chat-example-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-example-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 4px 2px 0;
+}
+
+.chat-example-suggestion {
+  cursor: pointer;
+  border-radius: 0.25rem;
+  border: 1px solid #ececec;
+  background: #fefefe;
+  padding: 0.45rem 0.85rem;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: #404040;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chat-example-suggestion:hover {
+  border-color: #d4d4d4;
+  background: #f7f7f7;
+  color: #262626;
+}
+
+.chat-example-suggestion:focus {
+  outline: none;
+}
+
+.chat-example-suggestion:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #a3a3a3;
 }
 
 .chat-message-meta strong {
@@ -2132,7 +2260,7 @@ img {
 }
 
 .chat-message.role-user .chat-message-body p {
-  color: #1e293b;
+  color: #334155;
 }
 
 .chat-tool-row {
@@ -2154,46 +2282,146 @@ img {
 }
 
 .chat-message.role-user .chat-tool-row span {
-  background: rgba(255, 255, 255, 0.65);
-  border-color: rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.7);
+  border: none;
 }
 
-/* Compose: white card-style area (reference UI) */
+/* Compose: single rounded bar + circular send (reference: simple command field) */
 .chat-compose {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px 14px;
+  gap: 8px;
+  padding: 10px 12px 12px;
   border-top: none;
   background: #fff;
 }
 
-.chat-compose textarea {
-  width: 100%;
-  min-height: 84px;
-  resize: vertical;
-  padding: 12px 14px;
+.chat-compose-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 4px 2px 4px 14px;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 12px;
+  border-radius: 28px;
   background: #fff;
-  color: #0f172a;
-  font-family: inherit;
-  font-size: 0.875rem;
-  line-height: 1.45;
+  box-sizing: border-box;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-.chat-compose textarea::placeholder {
-  color: #94a3b8;
-}
-
-.chat-compose textarea:focus {
-  outline: none;
+.chat-compose-bar:focus-within {
   border-color: rgba(15, 23, 42, 0.22);
   box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.2);
 }
 
-.chat-compose textarea:disabled {
+.chat-compose-input {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.5rem;
+  max-height: 5.5rem;
+  margin: 0;
+  padding: 10px 0 10px 0;
+  resize: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  overflow-y: auto;
+}
+
+.chat-compose-input::placeholder {
+  color: #94a3b8;
+}
+
+.chat-compose-input:focus {
+  outline: none;
+}
+
+.chat-compose-input:disabled {
   opacity: 0.72;
+}
+
+.chat-compose-send {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin: 0 0 2px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #0f172a;
+  color: #fff;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.12s ease;
+}
+
+.chat-compose-send:hover:not(:disabled) {
+  background: #1e293b;
+}
+
+.chat-compose-send:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.chat-compose-send:disabled {
+  cursor: not-allowed;
+  opacity: 0.32;
+}
+
+.chat-compose-send:focus {
+  outline: none;
+}
+
+.chat-compose-send:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #64748b;
+}
+
+.chat-compose-send-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.chat-compose-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.chat-compose-reset {
+  margin: 0;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.chat-compose-reset:hover {
+  color: #64748b;
+}
+
+.chat-compose-reset:focus {
+  outline: none;
+}
+
+.chat-compose-reset:focus-visible {
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.35);
 }
 
 /* Dark console (main Slamass / App workspace): frameless agent + light user bubble on dark rail */
@@ -2218,7 +2446,8 @@ img {
 }
 
 .console-panel .chat-message.role-user .chat-message-body {
-  background: rgba(226, 232, 240, 0.18);
+  background: var(--polaris-operator-visual-bg-on-dark);
+  box-shadow: none;
 }
 
 .console-panel .chat-message.role-user .chat-message-body p {
@@ -2236,21 +2465,18 @@ img {
   border-top: none;
 }
 
-.console-panel .chat-compose textarea {
+.console-panel .chat-compose-bar {
   background: #fff;
-  color: #0f172a;
   border-color: rgba(15, 23, 42, 0.12);
 }
 
-.console-panel .chat-compose textarea:focus {
+.console-panel .chat-compose-bar:focus-within {
   border-color: rgba(15, 23, 42, 0.22);
   box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.25);
 }
 
-.chat-compose-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+.console-panel .chat-compose-input {
+  color: #0f172a;
 }
 
 .thread-empty {

@@ -10,6 +10,7 @@ import React, {
 import { AgentToolsModal } from "../AgentToolsModal";
 import { LiveFeedPanel, type LiveFeedPanelHandle } from "../LiveFeedPanel";
 import { MapPane } from "../MapPane";
+import { NAVIGATOR_MAP_VIEWPORT_ANCHOR_Y } from "../mapViewport";
 import { defaultRobotOperatorHoverCard } from "../robotOperatorLabel";
 import { OperatorRail, SelectedSemanticPreview } from "../OperatorRail";
 import { PanelShell } from "../PanelShell";
@@ -329,55 +330,24 @@ export function NavigatorDashboardView(
 
   const navigatorMapHeaderActions = (
     <div className="topbar-actions polaris-navigator-map-header-actions">
-      <NavigatorMapControlsHover
-        busyAction={busyAction}
-        connected={state.connected}
-        inspectionRunning={state.inspection.status === "running"}
-        map={state.map}
-        openaiConfigured={state.openai_configured}
-        robotPose={state.robot_pose}
-        teleopEnabled={teleopEnabled}
-        onClearFocus={() => {
-          void handleClearFocus();
-        }}
-        onFitMap={() => {
-          void handleFocusMap();
-        }}
-        onFocusRobot={() => {
-          void handleFocusRobot();
-        }}
-        onInspect={() => {
-          void handleInspectNow();
-        }}
-        onSaveMap={() => {
-          void handleSaveMap();
-        }}
-        onStopMotion={() => {
-          void handleStopMotion();
-        }}
-        onStopStack={() => {
-          void handleStopDimos();
-        }}
-        onToggleTeleop={handleToggleTeleop}
-      />
+      <div className="polaris-navigator-map-header-controls-group">
+        <div className="topbar-menu polaris-navigator-map-settings-anchor" ref={controlsMenuRef}>
+          <button
+            aria-expanded={controlsMenuOpen}
+            aria-haspopup="menu"
+            aria-label="Settings"
+            className="action-button secondary settings-cog-button polaris-navigator-map-settings-cog"
+            onClick={() => {
+              setControlsMenuOpen((current) => !current);
+            }}
+            title="Settings"
+            type="button"
+          >
+            <SettingsCogGlyphs />
+          </button>
 
-      <div className="topbar-menu" ref={controlsMenuRef}>
-        <button
-          aria-expanded={controlsMenuOpen}
-          aria-haspopup="menu"
-          aria-label="Settings"
-          className="action-button secondary settings-cog-button"
-          onClick={() => {
-            setControlsMenuOpen((current) => !current);
-          }}
-          title="Settings"
-          type="button"
-        >
-          <SettingsCogGlyphs />
-        </button>
-
-        {controlsMenuOpen ? (
-          <div className="menu-popover">
+          {controlsMenuOpen ? (
+            <div className="menu-popover">
             <label className="menu-field">
               <span>Inspect mode</span>
               <select
@@ -486,7 +456,40 @@ export function NavigatorDashboardView(
               Clear semantic memory
             </button>
           </div>
-        ) : null}
+          ) : null}
+        </div>
+
+        <NavigatorMapControlsHover
+          busyAction={busyAction}
+          connected={state.connected}
+          inspectionRunning={state.inspection.status === "running"}
+          map={state.map}
+          openaiConfigured={state.openai_configured}
+          robotPose={state.robot_pose}
+          teleopEnabled={teleopEnabled}
+          onClearFocus={() => {
+            void handleClearFocus();
+          }}
+          onFitMap={() => {
+            void handleFocusMap();
+          }}
+          onFocusRobot={() => {
+            void handleFocusRobot();
+          }}
+          onInspect={() => {
+            void handleInspectNow();
+          }}
+          onSaveMap={() => {
+            void handleSaveMap();
+          }}
+          onStopMotion={() => {
+            void handleStopMotion();
+          }}
+          onStopStack={() => {
+            void handleStopDimos();
+          }}
+          onToggleTeleop={handleToggleTeleop}
+        />
       </div>
     </div>
   );
@@ -583,6 +586,7 @@ export function NavigatorDashboardView(
               map={state.map}
               pinViewModeControlsBottom
               refitOnLayoutReady
+              viewportScreenAnchorY={NAVIGATOR_MAP_VIEWPORT_ANCHOR_Y}
               robotOperatorHoverCard={defaultRobotOperatorHoverCard("navigator")}
               showMapToolbar={false}
               onCameraChange={queueCameraSync}
@@ -673,7 +677,49 @@ export function NavigatorDashboardView(
             bodyClassName="polaris-navigator-detections-body"
             bodyVariant="scroll"
             className="polaris-nav-detections-list-card polaris-nav-option-card--grow polaris-nav-option-card--polaris-heading"
-            title="Detections"
+            headerAside={
+              <div className="polaris-detection-log-toolbar">
+                <button
+                  className="polaris-detection-log-pill"
+                  disabled={
+                    busyAction !== null || !state.yolo_runtime.inference_enabled
+                  }
+                  title={
+                    !state.yolo_runtime.inference_enabled
+                      ? "Turn on YOLO inference in Settings to pause labeling"
+                      : undefined
+                  }
+                  type="button"
+                  onClick={() => {
+                    void handleYoloModeChange(
+                      state.yolo_runtime.mode === "live" ? "paused" : "live",
+                    );
+                  }}
+                >
+                  {state.yolo_runtime.mode === "live" ? "Pause" : "Resume"}
+                </button>
+                <button
+                  className="polaris-detection-log-pill polaris-detection-log-pill--muted"
+                  disabled={
+                    busyAction !== null ||
+                    (state.pois.length === 0 && state.yolo_objects.length === 0)
+                  }
+                  type="button"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Clear all detection anchors (VLM POIs and YOLO objects) from memory?",
+                      )
+                    ) {
+                      void handleClearSemanticMemory();
+                    }
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            }
+            title="Detection log"
           >
             <OperatorRail
               activityEntries={activityEntries}
