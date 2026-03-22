@@ -106,7 +106,7 @@ type DragState = {
   startCamera: UiCameraState;
 };
 
-const ROBOT_SPRITE_SIZE = 44;
+const ROBOT_SPRITE_SIZE = 60;
 
 export function MapPane(props: MapPaneProps): React.ReactElement {
   const {
@@ -127,6 +127,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
   } = props;
   const [containerRef, size] = useSize<HTMLDivElement>();
   const dragStateRef = React.useRef<DragState | null>(null);
+  const [robotSpriteFailed, setRobotSpriteFailed] = React.useState(false);
 
   const viewport = React.useMemo(() => {
     if (!map || size.width <= 0 || size.height <= 0) {
@@ -460,12 +461,23 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                   aria-hidden="true"
                   className="robot-marker"
                   style={{
+                    width: `${ROBOT_SPRITE_SIZE}px`,
+                    height: `${ROBOT_SPRITE_SIZE}px`,
                     left: `${robotX}px`,
                     top: `${robotY}px`,
                     transform: `translate(-50%, -50%) rotate(${robotRotationDegrees}deg)`,
                   }}
                 >
-                  <img alt="" className="robot-marker-image" src={go2TopdownSprite} />
+                  {robotSpriteFailed ? (
+                    <div className="robot-marker-fallback" />
+                  ) : (
+                    <img
+                      alt=""
+                      className="robot-marker-image"
+                      onError={() => setRobotSpriteFailed(true)}
+                      src={go2TopdownSprite}
+                    />
+                  )}
                 </div>
               );
             })()}
