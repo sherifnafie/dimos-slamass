@@ -16,7 +16,10 @@ export default defineConfig({
     },
   },
   server: {
+    /** Use hostname `localhost` so http://localhost:3001/ works (not IPv4-only 127.0.0.1). */
+    host: "localhost",
     port: 3001,
+    strictPort: true,
     open: false,
     /**
      * Fallback if you prefer same-origin `/api` (e.g. tools that cannot set CORS).

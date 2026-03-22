@@ -152,6 +152,12 @@ export interface ChatToolDefinition {
 }
 
 export interface AppState {
+  /** websocket_vis base (Socket.IO + dashboard on `/` when using `rerun-web`). From slamass `--map-socket-url`. */
+  dimos_viewer_url: string | null;
+  /** Rerun 3D web viewer (`:9090` → gRPC `:9876`), same as DimOS dashboard right pane. Requires `dimos --viewer rerun-web run …`. */
+  dimos_rerun_web_viewer_url: string | null;
+  /** When false, Inspect / VLM / operator chat need `OPENAI_API_KEY`; map, POV, and teleop still work. */
+  openai_configured: boolean;
   connected: boolean;
   robot_pose: RobotPose | null;
   path: Array<[number, number]>;

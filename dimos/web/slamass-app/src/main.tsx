@@ -14,7 +14,16 @@ if (!container) {
 }
 
 function normalizePathname(): string {
-  return window.location.pathname.replace(/\/+$/, "") || "/";
+  let path = window.location.pathname.replace(/\/+/g, "/");
+  const base = import.meta.env.BASE_URL;
+  if (base && base !== "/") {
+    const prefix = base.endsWith("/") ? base.slice(0, -1) : base;
+    if (prefix && (path === prefix || path.startsWith(`${prefix}/`))) {
+      path = path.slice(prefix.length);
+    }
+  }
+  path = path.replace(/\/+/g, "/").replace(/\/+$/, "") || "/";
+  return path.startsWith("/") ? path : `/${path}`;
 }
 
 type PolarisEntry = "none" | "lander" | "operators" | "navigator" | "create";

@@ -28,11 +28,12 @@ import shutil
 import subprocess
 import time
 from typing import Any
+from urllib.parse import quote, urlparse
 import zlib
 
 import aiohttp
 from dotenv import find_dotenv, load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -146,6 +147,11 @@ def load_slamass_env() -> None:
 
 
 load_slamass_env()
+
+
+def slamass_openai_configured() -> bool:
+    """True when a non-empty ``OPENAI_API_KEY`` is set (env or dotenv loaded at import)."""
+    return bool(os.getenv("OPENAI_API_KEY", "").strip())
 
 
 def default_state_dir() -> Path:
@@ -693,6 +699,20 @@ def normalize_yolo_mode(value: str) -> str:
     return normalized
 
 
+# Rerun web UI + gRPC proxy (keep in sync with dimos/visualization/rerun/bridge.py).
+_RERUN_GRPC_PORT = 9876
+_RERUN_WEB_PORT = 9090
+
+
+def build_dimos_rerun_web_viewer_url(map_socket_url: str) -> str:
+    """Rerun 3D web viewer URL (same right-pane target as web/templates/rerun_dashboard.html)."""
+    parsed = urlparse(map_socket_url)
+    host = parsed.hostname or "localhost"
+    scheme = parsed.scheme or "http"
+    inner = f"rerun+http://{host}:{_RERUN_GRPC_PORT}/proxy"
+    return f"{scheme}://{host}:{_RERUN_WEB_PORT}/?url={quote(inner, safe='')}"
+
+
 class MapSocketClient:
     def __init__(
         self,
@@ -875,10 +895,20 @@ class SlamassService:
         self.state_dir = state_dir
         self.storage = storage or SlamassStorage(state_dir)
         self.mcp_client = mcp_client or McpToolClient(mcp_url)
-        self.analyzer = analyzer or OpenAIInspectionAnalyzer(model_name=model_name)
+        self._openai_configured = slamass_openai_configured()
+        if analyzer is not None:
+            self.analyzer = analyzer
+        elif self._openai_configured:
+            self.analyzer = OpenAIInspectionAnalyzer(model_name=model_name)
+        else:
+            self.analyzer = None
         self.chat_agent = chat_agent or SlamassChatAgent(model_name=chat_model_name)
-        self._chat_vlm = OpenAIVlModel(model_name=chat_model_name)
+        self._chat_vlm = (
+            OpenAIVlModel(model_name=chat_model_name) if self._openai_configured else None
+        )
         self._stop_command_runner = stop_command_runner or run_dimos_stop_command
+        self._dimos_viewer_url = map_socket_url.rstrip("/")
+        self._dimos_rerun_web_viewer_url = build_dimos_rerun_web_viewer_url(map_socket_url)
         self.map_client = MapSocketClient(
             map_socket_url,
             on_connection=self._handle_connection_change,
@@ -966,7 +996,8 @@ class SlamassService:
             await self.flush_active_map(force=True)
         with contextlib_suppress(asyncio.CancelledError):
             await self._maybe_stop_mcp_client()
-        self._chat_vlm.stop()
+        if self._chat_vlm is not None:
+            self._chat_vlm.stop()
         self.storage.close()
 
     async def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
@@ -1011,6 +1042,9 @@ class SlamassService:
                 "layers": self._serialize_layers_locked(),
                 "ui": self._serialize_ui_locked(),
                 "chat": self._serialize_chat_locked(),
+                "openai_configured": self._openai_configured,
+                "dimos_viewer_url": self._dimos_viewer_url,
+                "dimos_rerun_web_viewer_url": self._dimos_rerun_web_viewer_url,
             }
 
     async def navigate(self, x: float, y: float, yaw: float | None = None) -> None:
@@ -1398,6 +1432,7 @@ class SlamassService:
                 ],
                 "layers": self._serialize_layers_locked(),
                 "yolo_runtime": self._serialize_yolo_runtime_locked(),
+                "openai_configured": self._openai_configured,
             }
 
     async def chat_search_semantic_memory(
@@ -1524,6 +1559,11 @@ class SlamassService:
             "Base the answer only on visible evidence and keep it concise.\n\n"
             f"Question: {query.strip() or 'What is visible in the current view?'}"
         )
+        if self._chat_vlm is None:
+            return {
+                "ok": False,
+                "error": "OpenAI is not configured (set OPENAI_API_KEY to enable look_current_view).",
+            }
         answer = await asyncio.to_thread(self._chat_vlm.query, dimos_image, prompt)
         return {"ok": True, "answer": answer}
 
@@ -1572,7 +1612,7 @@ class SlamassService:
                 raise HTTPException(status_code=409, detail="Inspection already running")
             pose = self.robot_pose
             manual_mode = self.inspection_settings.manual_mode
-            self.inspection_state = {"status": "running", "message": "Inspecting current view", "poi_id": None}
+            self.inspection_state = {"status": "running", "message": "Inspecting ...", "poi_id": None}
         await self.publish_event("inspection_updated", dict(self.inspection_state))
 
         if pose is None:
@@ -1588,6 +1628,16 @@ class SlamassService:
             hero_path = self.storage.create_image_asset(image_bytes, ".jpg")
             thumb_path = self.storage.create_image_asset(thumbnail_bytes, ".jpg")
             dimos_image = jpeg_bytes_to_dimos_image(image_bytes)
+            if self.analyzer is None:
+                await self._set_inspection_state(
+                    "failed",
+                    "Inspect requires OPENAI_API_KEY (VLM). Map, POV, and teleop work without it.",
+                    None,
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail="OpenAI API key not configured; Inspect is unavailable.",
+                )
             analysis = self.analyzer.analyze(dimos_image)
             payload_json = json.dumps(analysis.as_payload())
             effective_create_poi = analysis.should_create_poi
@@ -1602,6 +1652,11 @@ class SlamassService:
 
             poi: PoiRecord | None = None
             if effective_create_poi:
+                await self._set_inspection_state(
+                    "running",
+                    "Marking Point of Interest ...",
+                    None,
+                )
                 async with self._state_lock:
                     duplicate = self._find_duplicate_poi_locked(analysis, pose)
                     if duplicate is not None:
@@ -1658,6 +1713,98 @@ class SlamassService:
             logger.exception("Inspect Now failed")
             await self._set_inspection_state("failed", str(exc), None)
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    async def ingest_user_pov_snapshot(self, image_bytes: bytes) -> dict[str, Any]:
+        """Persist a user-captured POV JPEG as a POI so it appears in Detections (semantic list)."""
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Empty image body")
+        if len(image_bytes) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image too large")
+
+        try:
+            dimos_image = jpeg_bytes_to_dimos_image(image_bytes)
+        except Exception as exc:
+            logger.info("POV snapshot JPEG decode failed: %s", exc)
+            raise HTTPException(status_code=400, detail="Invalid JPEG image") from exc
+
+        async with self._state_lock:
+            pose = self.robot_pose
+            map_state = self.map_state
+        if pose is None:
+            raise HTTPException(status_code=409, detail="No robot pose available")
+
+        map_id = map_state.map_id if map_state is not None else "active"
+
+        thumbnail_bytes = make_thumbnail(image_bytes)
+        hero_path = self.storage.create_image_asset(image_bytes, ".jpg")
+        thumb_path = self.storage.create_image_asset(thumbnail_bytes, ".jpg")
+
+        poi: PoiRecord
+        payload_json: str
+
+        try:
+            if self.analyzer is not None:
+                analysis = self.analyzer.analyze(dimos_image)
+                payload_json = json.dumps(analysis.as_payload())
+                async with self._state_lock:
+                    duplicate = self._find_duplicate_poi_locked(analysis, pose)
+                    if duplicate is not None:
+                        poi = self._updated_poi_from_existing(
+                            duplicate, analysis, pose, hero_path, thumb_path
+                        )
+                    else:
+                        poi = self.storage.new_poi(
+                            map_id=map_id,
+                            anchor_x=pose.x,
+                            anchor_y=pose.y,
+                            anchor_yaw=pose.yaw,
+                            title=analysis.title,
+                            summary=analysis.summary,
+                            category=analysis.category,
+                            interest_score=analysis.interest_score,
+                            thumbnail_path=thumb_path,
+                            hero_image_path=hero_path,
+                            objects=analysis.objects,
+                        )
+                    self.storage.upsert_poi(poi)
+                    self.pois[poi.poi_id] = poi
+            else:
+                payload_json = json.dumps({"source": "user_pov_snapshot", "vlm": False})
+                async with self._state_lock:
+                    poi = self.storage.new_poi(
+                        map_id=map_id,
+                        anchor_x=pose.x,
+                        anchor_y=pose.y,
+                        anchor_yaw=pose.yaw,
+                        title="POV snapshot",
+                        summary="Saved from the live camera feed.",
+                        category="User snapshot",
+                        interest_score=0.5,
+                        thumbnail_path=thumb_path,
+                        hero_image_path=hero_path,
+                        objects=[],
+                    )
+                    self.storage.upsert_poi(poi)
+                    self.pois[poi.poi_id] = poi
+        except OpenAIError as exc:
+            logger.exception("POV snapshot VLM failed")
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        observation = self.storage.new_observation(
+            poi_id=poi.poi_id,
+            world_x=pose.x,
+            world_y=pose.y,
+            world_yaw=pose.yaw,
+            image_path=hero_path,
+            thumbnail_path=thumb_path,
+            model_payload_json=payload_json,
+            gate_result="user_snapshot",
+        )
+        self.storage.insert_observation(observation)
+
+        await self.publish_event("poi_upserted", self._serialize_poi(poi))
+        await self.focus_poi(poi.poi_id, zoom=UI_FOCUS_POI_ZOOM)
+        return {"poi_id": poi.poi_id, "poi": self._serialize_poi(poi)}
 
     async def delete_poi(self, poi_id: str) -> None:
         ui_payload: dict[str, Any] | None = None
@@ -2856,6 +3003,11 @@ def create_app(
             media_type="image/jpeg",
             headers={"Cache-Control": "no-store"},
         )
+
+    @app.post("/api/pov/snapshot/ingest")
+    async def post_pov_snapshot_ingest(file: UploadFile = File(...)) -> dict[str, Any]:
+        body = await file.read()
+        return await slamass.ingest_user_pov_snapshot(body)
 
     @app.get("/api/map/active")
     async def get_active_map() -> dict[str, Any]:

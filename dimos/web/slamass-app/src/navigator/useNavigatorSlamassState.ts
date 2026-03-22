@@ -66,6 +66,9 @@ function persistLayoutMode(next: LayoutMode): void {
 }
 
 const emptyState: AppState = {
+  dimos_viewer_url: null,
+  dimos_rerun_web_viewer_url: null,
+  openai_configured: true,
   connected: false,
   robot_pose: null,
   path: [],

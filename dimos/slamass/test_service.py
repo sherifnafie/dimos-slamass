@@ -17,6 +17,7 @@ import base64
 from pathlib import Path
 
 import cv2
+from fastapi import HTTPException
 import numpy as np
 import pytest
 
@@ -167,6 +168,51 @@ def test_openai_inspection_analyzer_uses_slamass_default_model() -> None:
 
 
 @pytest.mark.asyncio
+async def test_service_snapshot_dimos_rerun_web_viewer_url(tmp_path: Path) -> None:
+    from urllib.parse import quote
+
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://127.0.0.1:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+    )
+    snapshot = await service.snapshot()
+    inner = "rerun+http://127.0.0.1:9876/proxy"
+    expected = f"http://127.0.0.1:9090/?url={quote(inner, safe='')}"
+    assert snapshot["dimos_rerun_web_viewer_url"] == expected
+    assert snapshot["dimos_viewer_url"] == "http://127.0.0.1:7779"
+    assert "openai_configured" in snapshot
+    assert isinstance(snapshot["openai_configured"], bool)
+
+
+@pytest.mark.asyncio
+async def test_service_inspect_now_without_openai_key_returns_503(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+    )
+    assert service.analyzer is None
+    assert service._chat_vlm is None
+    assert service._openai_configured is False
+    service.robot_pose = RobotPose(x=1.0, y=2.0, z=0.0, yaw=0.2)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.inspect_now()
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
 async def test_service_inspect_now_creates_and_dedupes_poi(tmp_path: Path) -> None:
     storage = SlamassStorage(tmp_path)
     service = SlamassService(
@@ -186,6 +232,60 @@ async def test_service_inspect_now_creates_and_dedupes_poi(tmp_path: Path) -> No
     assert result_two["status"] == "accepted"
     assert len(storage.list_pois()) == 1
     assert len(service.pois) == 1
+
+
+@pytest.mark.asyncio
+async def test_service_ingest_user_pov_snapshot_without_analyzer(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+    )
+    service.robot_pose = RobotPose(x=1.0, y=2.0, z=0.0, yaw=0.2)
+
+    result = await service.ingest_user_pov_snapshot(make_test_jpeg())
+
+    assert result["poi_id"]
+    assert len(storage.list_pois()) == 1
+    assert storage.list_pois()[0].title == "POV snapshot"
+
+
+@pytest.mark.asyncio
+async def test_service_ingest_user_pov_snapshot_with_fake_analyzer(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(title="Handheld frame"),
+    )
+    service.robot_pose = RobotPose(x=1.0, y=2.0, z=0.0, yaw=0.2)
+
+    result = await service.ingest_user_pov_snapshot(make_test_jpeg())
+
+    assert result["poi_id"]
+    assert service.pois[result["poi_id"]].title == "Handheld frame"
+
+
+@pytest.mark.asyncio
+async def test_service_ingest_user_pov_snapshot_requires_pose(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.ingest_user_pov_snapshot(make_test_jpeg())
+    assert exc_info.value.status_code == 409
 
 
 @pytest.mark.asyncio

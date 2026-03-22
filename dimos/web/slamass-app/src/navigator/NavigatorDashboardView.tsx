@@ -12,7 +12,11 @@ import { MapPane } from "../MapPane";
 import { defaultRobotOperatorHoverCard } from "../robotOperatorLabel";
 import { OperatorRail, SelectedSemanticPreview } from "../OperatorRail";
 import { PanelShell } from "../PanelShell";
+import { InspectGlyphs } from "../InspectGlyphs";
+import { SaveMapGlyphs } from "../SaveMapGlyphs";
 import { SettingsCogGlyphs } from "../SettingsCogGlyphs";
+import { StopStackGlyphs } from "../StopStackGlyphs";
+import { TeleopGlyphs } from "../TeleopGlyphs";
 import {
   buildSemanticItems,
   resolveSelectedPoi,
@@ -29,6 +33,7 @@ import type { ChatToolDefinition, ManualInspectionMode } from "../types";
 import { fetchJson } from "./fetchJson";
 import { NavigatorOperatorFleet } from "./NavigatorOperatorFleet";
 import { NavigatorOptionCard } from "./NavigatorOptionCard";
+import type { ActivityEntry } from "./useNavigatorSlamassState";
 import { useNavigatorSlamassState } from "./useNavigatorSlamassState";
 
 type NavigatorDashboardViewProps = ReturnType<
@@ -54,15 +59,25 @@ function formatTimestamp(value: string | null): string {
   }).format(date);
 }
 
-function formatPoseLabel(
-  state: NavigatorDashboardViewProps["state"],
-): string | null {
-  if (!state.robot_pose) {
-    return null;
+function formatNavigatorActivityLine(entry: ActivityEntry): string {
+  const detail = entry.detail.trim();
+  if (detail.length === 0) {
+    return `${entry.timestamp} · ${entry.title}`;
   }
-  return `${state.robot_pose.x.toFixed(2)}, ${state.robot_pose.y.toFixed(2)} | ${formatYaw(
-    state.robot_pose.yaw,
-  )}`;
+  return `${entry.timestamp} · ${entry.title} — ${detail}`;
+}
+
+function navigatorActivityToneClass(tone: ActivityEntry["tone"]): string {
+  switch (tone) {
+    case "danger":
+      return "tone-danger";
+    case "accent":
+      return "tone-accent";
+    case "success":
+      return "tone-success";
+    default:
+      return "polaris-navigator-activity-line--neutral";
+  }
 }
 
 export function NavigatorDashboardView(
@@ -107,6 +122,11 @@ export function NavigatorDashboardView(
   const [agentTools, setAgentTools] = useState<ChatToolDefinition[] | null>(
     null,
   );
+
+  const latestActivity =
+    activityEntries.length === 0
+      ? null
+      : activityEntries[activityEntries.length - 1];
 
   const controlsMenuRef = useRef<HTMLDivElement>(null);
   const teleopIntervalRef = useRef<number | null>(null);
@@ -306,237 +326,250 @@ export function NavigatorDashboardView(
     };
   }, [appendActivity, handleStopMotion, reportActionError, teleopEnabled]);
 
-  const poseLabel = formatPoseLabel(state);
-  const povLabel = state.pov.updated_at
-    ? formatTimestamp(state.pov.updated_at)
-    : "No frame";
-  const mapLabel = state.map ? formatTimestamp(state.map.updated_at) : "No map";
+  const navigatorMapHeaderActions = (
+    <div className="topbar-actions polaris-navigator-map-header-actions">
+      <button
+        aria-label={
+          state.inspection.status === "running"
+            ? "Inspecting"
+            : state.openai_configured
+              ? "Inspect"
+              : "Inspect (needs OPENAI_API_KEY)"
+        }
+        className="action-button secondary settings-cog-button"
+        disabled={
+          busyAction !== null ||
+          state.inspection.status === "running" ||
+          !state.openai_configured
+        }
+        onClick={() => {
+          void handleInspectNow();
+        }}
+        title={
+          state.openai_configured
+            ? state.inspection.status === "running"
+              ? "Inspecting…"
+              : "Inspect (VLM)"
+            : "Inspect needs OPENAI_API_KEY (VLM)"
+        }
+        type="button"
+      >
+        <InspectGlyphs />
+        <span className="sr-only">
+          {state.inspection.status === "running" ? "Inspecting" : "Inspect"}
+        </span>
+      </button>
+
+      <button
+        aria-label={teleopEnabled ? "Teleop on — click to disarm" : "Teleop off — click to arm"}
+        className={`action-button settings-cog-button ${teleopEnabled ? "danger" : "success"}`}
+        disabled={busyAction === "system-stop"}
+        onClick={() => {
+          handleToggleTeleop();
+        }}
+        title={teleopEnabled ? "Teleop armed — click to disarm" : "Teleop disarmed — click to arm"}
+        type="button"
+      >
+        <TeleopGlyphs />
+        <span className="sr-only">
+          {teleopEnabled ? "Teleop on" : "Teleop off"}
+        </span>
+      </button>
+
+      <button
+        aria-busy={busyAction === "system-stop"}
+        aria-label={
+          busyAction === "system-stop"
+            ? "Stopping DimOS stack"
+            : "Stop DimOS stack"
+        }
+        className="action-button danger settings-cog-button navigator-toolbar-stop-icon"
+        disabled={busyAction === "system-stop"}
+        onClick={() => {
+          void handleStopDimos();
+        }}
+        title={
+          busyAction === "system-stop"
+            ? "Stopping…"
+            : "Stop DimOS stack (SIGTERM)"
+        }
+        type="button"
+      >
+        <StopStackGlyphs />
+        {busyAction === "system-stop" ? (
+          <span className="sr-only">Stopping</span>
+        ) : null}
+      </button>
+
+      <button
+        aria-label="Save map"
+        className="action-button secondary settings-cog-button"
+        disabled={busyAction !== null || state.map === null}
+        onClick={() => {
+          void handleSaveMap();
+        }}
+        title="Save map"
+        type="button"
+      >
+        <SaveMapGlyphs />
+      </button>
+
+      <div className="topbar-menu" ref={controlsMenuRef}>
+        <button
+          aria-expanded={controlsMenuOpen}
+          aria-haspopup="menu"
+          aria-label="Settings"
+          className="action-button secondary settings-cog-button"
+          onClick={() => {
+            setControlsMenuOpen((current) => !current);
+          }}
+          title="Settings"
+          type="button"
+        >
+          <SettingsCogGlyphs />
+        </button>
+
+        {controlsMenuOpen ? (
+          <div className="menu-popover">
+            <label className="menu-field">
+              <span>Inspect mode</span>
+              <select
+                onChange={(event) => {
+                  void handleInspectionModeChange(
+                    event.target.value as ManualInspectionMode,
+                  );
+                  setControlsMenuOpen(false);
+                }}
+                value={state.inspection_settings.manual_mode}
+              >
+                <option value="ai_gate">AI Gate</option>
+                <option value="always_create">Always Create</option>
+              </select>
+            </label>
+            <button
+              className="menu-item"
+              onClick={() => {
+                handleOpenAgentTools();
+              }}
+              type="button"
+            >
+              Agent tool calls
+            </button>
+            <button
+              className="menu-item"
+              onClick={() => {
+                void handleYoloModeChange(
+                  state.yolo_runtime.mode === "live" ? "paused" : "live",
+                );
+                setControlsMenuOpen(false);
+              }}
+              type="button"
+            >
+              {state.yolo_runtime.mode === "live"
+                ? "Pause YOLO labeling"
+                : "Resume YOLO labeling"}
+            </button>
+            <button
+              className="menu-item"
+              onClick={() => {
+                void handleYoloInferenceEnabledChange(
+                  !state.yolo_runtime.inference_enabled,
+                );
+                setControlsMenuOpen(false);
+              }}
+              type="button"
+            >
+              {state.yolo_runtime.inference_enabled
+                ? "Turn YOLO inference off"
+                : "Turn YOLO inference on"}
+            </button>
+            <button
+              className="menu-item"
+              onClick={() => {
+                void handleLayerToggle(
+                  "show_yolo",
+                  !state.layers.show_yolo,
+                );
+                setControlsMenuOpen(false);
+              }}
+              type="button"
+            >
+              {state.layers.show_yolo
+                ? "Hide YOLO layer"
+                : "Show YOLO layer"}
+            </button>
+            <button
+              className="menu-item"
+              onClick={() => {
+                void handleLayerToggle(
+                  "show_pois",
+                  !state.layers.show_pois,
+                );
+                setControlsMenuOpen(false);
+              }}
+              type="button"
+            >
+              {state.layers.show_pois ? "Hide VLM layer" : "Show VLM layer"}
+            </button>
+            <div className="menu-divider" />
+            <p className="menu-section-label">Danger zone</p>
+            <button
+              className="menu-item menu-item-danger"
+              disabled={busyAction !== null || state.map === null}
+              onClick={() => {
+                void handleClearLowLevelMapMemory();
+                setControlsMenuOpen(false);
+              }}
+              type="button"
+            >
+              Clear low-level map
+            </button>
+            <button
+              className="menu-item menu-item-danger"
+              disabled={
+                busyAction !== null ||
+                (state.pois.length === 0 && state.yolo_objects.length === 0)
+              }
+              onClick={() => {
+                void handleClearSemanticMemory();
+                setControlsMenuOpen(false);
+              }}
+              type="button"
+            >
+              Clear semantic memory
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 
   return (
     <div className="app-shell--light polaris-navigator-root">
-      <div className="px-4 pt-2 sm:px-8 sm:pt-3">
-        <div className="polaris-operators-inner polaris-fade-stagger polaris-fade-stagger--navigator mx-auto w-full max-w-3xl">
-          <a
-            className="polaris-navigator-back"
-            data-testid="polaris-navigator-back"
-            href="/polaris/operators"
-          >
-            ← Operators
-          </a>
-          <div className="polaris-operators-page-head polaris-navigator-page-head">
-            <h1
-              className="polaris-operators-page-title"
-              data-testid="polaris-navigator-heading"
-            >
-              Navigator
-            </h1>
-          </div>
-          <p className="polaris-operator-card-sub polaris-navigator-lede">
-            Spatial mapping and agent console
-          </p>
-        </div>
-      </div>
-
-      <div className="px-4 pb-2 sm:px-8 sm:pb-2">
-        <div className="polaris-navigator-toolbar polaris-navigator-toolbar--actions mx-auto flex w-full max-w-[min(100vw-2rem,1600px)] flex-wrap items-center justify-between gap-3">
+      <div className="px-4 pb-1 pt-0 sm:px-8 sm:pb-1.5 sm:pt-1">
+        <div className="polaris-navigator-toolbar polaris-navigator-toolbar--actions mx-auto flex w-full max-w-[min(100vw-2rem,1600px)] flex-wrap items-center gap-3">
           <div className="topbar-status">
-          {slamassApiStatus === "loading" ? (
-            <span className="toolbar-chip">API…</span>
-          ) : null}
-          {slamassApiStatus === "error" ? (
-            <span className="toolbar-chip tone-danger">API unreachable</span>
-          ) : null}
-          {teleopEnabled ? (
-            <span className="toolbar-chip tone-danger">Teleop armed</span>
-          ) : null}
-          {state.inspection.status === "running" ? (
-            <span className="toolbar-chip tone-running">Inspecting</span>
-          ) : null}
-          {state.chat.running ? (
-            <span className="toolbar-chip tone-accent">Agent thinking</span>
-          ) : null}
-          {!state.yolo_runtime.inference_enabled ? (
-            <span className="toolbar-chip tone-danger">YOLO off</span>
-          ) : null}
-          {state.yolo_runtime.mode !== "live" ? (
-            <span className="toolbar-chip tone-accent">YOLO paused</span>
-          ) : null}
-          </div>
-
-          <div className="topbar-actions">
-          <button
-            className="action-button"
-            disabled={
-              busyAction !== null || state.inspection.status === "running"
-            }
-            onClick={() => {
-              void handleInspectNow();
-            }}
-            type="button"
-          >
-            {state.inspection.status === "running" ? "Inspecting" : "Inspect"}
-          </button>
-
-          <button
-            className="action-button secondary"
-            disabled={busyAction !== null || state.map === null}
-            onClick={() => {
-              void handleSaveMap();
-            }}
-            type="button"
-          >
-            Save
-          </button>
-
-          <button
-            className={`action-button ${teleopEnabled ? "danger" : "success"}`}
-            disabled={busyAction === "system-stop"}
-            onClick={() => {
-              handleToggleTeleop();
-            }}
-            type="button"
-          >
-            {teleopEnabled ? "Teleop On" : "Teleop Off"}
-          </button>
-
-          <button
-            className="action-button danger"
-            disabled={busyAction === "system-stop"}
-            onClick={() => {
-              void handleStopDimos();
-            }}
-            type="button"
-          >
-            {busyAction === "system-stop" ? "Stopping" : "Stop"}
-          </button>
-
-          <div className="topbar-menu" ref={controlsMenuRef}>
-            <button
-              aria-expanded={controlsMenuOpen}
-              aria-haspopup="menu"
-              aria-label="Settings"
-              className="action-button secondary settings-cog-button"
-              onClick={() => {
-                setControlsMenuOpen((current) => !current);
-              }}
-              title="Settings"
-              type="button"
-            >
-              <SettingsCogGlyphs />
-            </button>
-
-            {controlsMenuOpen ? (
-              <div className="menu-popover">
-                <label className="menu-field">
-                  <span>Inspect mode</span>
-                  <select
-                    onChange={(event) => {
-                      void handleInspectionModeChange(
-                        event.target.value as ManualInspectionMode,
-                      );
-                      setControlsMenuOpen(false);
-                    }}
-                    value={state.inspection_settings.manual_mode}
-                  >
-                    <option value="ai_gate">AI Gate</option>
-                    <option value="always_create">Always Create</option>
-                  </select>
-                </label>
-                <button
-                  className="menu-item"
-                  onClick={() => {
-                    handleOpenAgentTools();
-                  }}
-                  type="button"
-                >
-                  Agent tool calls
-                </button>
-                <button
-                  className="menu-item"
-                  onClick={() => {
-                    void handleYoloModeChange(
-                      state.yolo_runtime.mode === "live" ? "paused" : "live",
-                    );
-                    setControlsMenuOpen(false);
-                  }}
-                  type="button"
-                >
-                  {state.yolo_runtime.mode === "live"
-                    ? "Pause YOLO labeling"
-                    : "Resume YOLO labeling"}
-                </button>
-                <button
-                  className="menu-item"
-                  onClick={() => {
-                    void handleYoloInferenceEnabledChange(
-                      !state.yolo_runtime.inference_enabled,
-                    );
-                    setControlsMenuOpen(false);
-                  }}
-                  type="button"
-                >
-                  {state.yolo_runtime.inference_enabled
-                    ? "Turn YOLO inference off"
-                    : "Turn YOLO inference on"}
-                </button>
-                <button
-                  className="menu-item"
-                  onClick={() => {
-                    void handleLayerToggle(
-                      "show_yolo",
-                      !state.layers.show_yolo,
-                    );
-                    setControlsMenuOpen(false);
-                  }}
-                  type="button"
-                >
-                  {state.layers.show_yolo
-                    ? "Hide YOLO layer"
-                    : "Show YOLO layer"}
-                </button>
-                <button
-                  className="menu-item"
-                  onClick={() => {
-                    void handleLayerToggle(
-                      "show_pois",
-                      !state.layers.show_pois,
-                    );
-                    setControlsMenuOpen(false);
-                  }}
-                  type="button"
-                >
-                  {state.layers.show_pois ? "Hide VLM layer" : "Show VLM layer"}
-                </button>
-                <div className="menu-divider" />
-                <p className="menu-section-label">Danger zone</p>
-                <button
-                  className="menu-item menu-item-danger"
-                  disabled={busyAction !== null || state.map === null}
-                  onClick={() => {
-                    void handleClearLowLevelMapMemory();
-                    setControlsMenuOpen(false);
-                  }}
-                  type="button"
-                >
-                  Clear low-level map
-                </button>
-                <button
-                  className="menu-item menu-item-danger"
-                  disabled={
-                    busyAction !== null ||
-                    (state.pois.length === 0 && state.yolo_objects.length === 0)
-                  }
-                  onClick={() => {
-                    void handleClearSemanticMemory();
-                    setControlsMenuOpen(false);
-                  }}
-                  type="button"
-                >
-                  Clear semantic memory
-                </button>
-              </div>
+            {slamassApiStatus === "loading" ? (
+              <span className="toolbar-chip">API…</span>
             ) : null}
-          </div>
+            {slamassApiStatus === "error" ? (
+              <span className="toolbar-chip tone-danger">API unreachable</span>
+            ) : null}
+            {teleopEnabled ? (
+              <span className="toolbar-chip tone-danger">Teleop armed</span>
+            ) : null}
+            {state.inspection.status === "running" ? (
+              <span className="toolbar-chip tone-running">Inspecting</span>
+            ) : null}
+            {state.chat.running ? (
+              <span className="toolbar-chip tone-accent">Agent thinking</span>
+            ) : null}
+            {!state.yolo_runtime.inference_enabled ? (
+              <span className="toolbar-chip tone-danger">YOLO off</span>
+            ) : null}
+            {state.yolo_runtime.mode !== "live" ? (
+              <span className="toolbar-chip tone-accent">YOLO paused</span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -550,81 +583,19 @@ export function NavigatorDashboardView(
           className="polaris-navigator-sidebar"
         >
           <div className="polaris-navigator-operations-column polaris-navigator-map">
-            <PanelShell
-              className="map-panel"
-              bodyClassName="polaris-navigator-operations-body"
-              title="Operators"
-            >
-              <NavigatorOperatorFleet />
-
-              <NavigatorOptionCard
-                description="New frames appear as the stream updates."
-                headerAside={
-                  <div className="polaris-nav-option-card-chips">
-                    {poseLabel ? (
-                      <span className="toolbar-chip monospace-chip">
-                        {poseLabel}
-                      </span>
-                    ) : null}
-                    <span className="toolbar-chip">
-                      {state.pov.available ? `Updated ${povLabel}` : povLabel}
-                    </span>
-                  </div>
-                }
-                kicker="Robot camera"
-                title="Capture feed"
-              >
-                <LiveFeedPanel
-                  connected={state.connected}
-                  embedded
-                  frameLabel={povLabel}
-                  poseLabel={poseLabel}
-                  pov={state.pov}
-                />
-              </NavigatorOptionCard>
-
-              <NavigatorOptionCard
-                description="Choose what is drawn on the spatial map."
-                kicker="Map display"
-                title="Layers"
-              >
-                <div
-                  aria-label="Map layer visibility"
-                  className="polaris-nav-layer-row"
-                  role="group"
-                >
-                  <button
-                    className={`polaris-nav-layer-pill${state.layers.show_pois ? " is-on" : ""}`}
-                    onClick={() => {
-                      handleLayerToggle("show_pois", !state.layers.show_pois);
-                    }}
-                    type="button"
-                  >
-                    VLM POIs
-                  </button>
-                  <button
-                    className={`polaris-nav-layer-pill${state.layers.show_yolo ? " is-on" : ""}`}
-                    onClick={() => {
-                      handleLayerToggle("show_yolo", !state.layers.show_yolo);
-                    }}
-                    type="button"
-                  >
-                    YOLO
-                  </button>
-                </div>
-              </NavigatorOptionCard>
+            <div className="polaris-navigator-operations-inner polaris-navigator-operations-body">
+              <NavigatorOperatorFleet inspection={state.inspection} />
 
               <NavigatorOptionCard
                 bodyVariant="scroll"
-                className="polaris-nav-option-card--grow"
-                description="Timeline, semantic anchors, and agent chat."
-                kicker="Workspace"
-                title="Activity & memory"
+                className="polaris-nav-option-card--grow polaris-nav-option-card--polaris-heading"
+                title="Agent"
               >
                 <OperatorRail
                   activityEntries={activityEntries}
                   busyAction={busyAction}
                   chat={state.chat}
+                  embedSegment="agent"
                   embedded
                   items={semanticItems}
                   onClearFocus={() => {
@@ -652,28 +623,24 @@ export function NavigatorDashboardView(
                   selectedPreview={selectedPreview}
                 />
               </NavigatorOptionCard>
-            </PanelShell>
+            </div>
           </div>
         </aside>
 
         <div className="polaris-navigator-map-column polaris-navigator-map">
           <PanelShell
-            aside={
-              <div className="panel-chip-row">
-                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium leading-none text-slate-600">
-                  Updated {mapLabel}
-                </span>
-              </div>
-            }
+            aside={navigatorMapHeaderActions}
             bodyClassName="panel-body-stage"
-            className="map-panel"
+            className="map-panel polaris-navigator-map-panel--compact-title"
             title="Navigator"
           >
             <MapPane
               layers={state.layers}
               map={state.map}
+              pinViewModeControlsBottom
+              refitOnLayoutReady
               robotOperatorHoverCard={defaultRobotOperatorHoverCard("navigator")}
-              showViewModeToggle
+              showMapToolbar={false}
               onCameraChange={queueCameraSync}
               onClearFocus={() => {
                 void handleClearFocus();
@@ -700,7 +667,79 @@ export function NavigatorDashboardView(
               yoloObjects={state.yolo_objects}
             />
           </PanelShell>
+
+          <div
+            aria-label="Latest activity"
+            className="polaris-navigator-map-activity-below"
+            data-testid="polaris-navigator-activity-line"
+          >
+            <p
+              aria-live="polite"
+              className={`polaris-navigator-activity-line${latestActivity ? ` ${navigatorActivityToneClass(latestActivity.tone)}` : " polaris-navigator-activity-line--neutral"}`}
+            >
+              {latestActivity
+                ? formatNavigatorActivityLine(latestActivity)
+                : "No recent activity"}
+            </p>
+          </div>
         </div>
+
+        <aside
+          aria-label="Camera and detections"
+          className="polaris-navigator-detections-column polaris-navigator-map"
+        >
+          <NavigatorOptionCard
+            className="polaris-nav-detections-camera-card polaris-nav-option-card--polaris-heading"
+            title="Camera"
+          >
+            <LiveFeedPanel
+              connected={state.connected}
+              embedded
+              frameLabel=""
+              poseLabel={null}
+              pov={state.pov}
+            />
+          </NavigatorOptionCard>
+
+          <NavigatorOptionCard
+            bodyClassName="polaris-navigator-detections-body"
+            bodyVariant="scroll"
+            className="polaris-nav-detections-list-card polaris-nav-option-card--grow polaris-nav-option-card--polaris-heading"
+            title="Detections"
+          >
+            <OperatorRail
+              activityEntries={activityEntries}
+              busyAction={busyAction}
+              chat={state.chat}
+              embedSegment="memory"
+              embedded
+              items={semanticItems}
+              onClearFocus={() => {
+                void handleClearFocus();
+              }}
+              onFocusItem={(item) => {
+                void handleFocusItem(item);
+              }}
+              onGoToItem={(item) => {
+                void handleGoToItem(item);
+              }}
+              onHighlightItem={(item) => {
+                void handleHighlightItem(item);
+              }}
+              onResetChat={() => {
+                void handleResetChat();
+              }}
+              onSelectItem={(item) => {
+                void handleSelectItem(item);
+              }}
+              onSubmitChatMessage={(message) => {
+                void handleSubmitChatMessage(message);
+              }}
+              selectedItem={state.ui.selected_item}
+              selectedPreview={selectedPreview}
+            />
+          </NavigatorOptionCard>
+        </aside>
       </main>
 
       {selectedPoi || selectedYoloObject ? (

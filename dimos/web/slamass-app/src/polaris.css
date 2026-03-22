@@ -269,12 +269,15 @@
 }
 
 /* Scoped under .polaris-header + px + !important so global styles.css / Tailwind cannot flatten bars. */
+.polaris-root .polaris-header .polaris-header-brand {
+  flex-shrink: 0;
+  align-items: center;
+}
+
 .polaris-root .polaris-header .polaris-menu-button {
-  position: absolute;
-  left: 16px;
-  top: 50%;
-  transform: translateY(-50%);
+  position: relative;
   z-index: 30;
+  flex-shrink: 0;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
@@ -288,12 +291,6 @@
   color: #334155;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-}
-
-@media (min-width: 640px) {
-  .polaris-root .polaris-header .polaris-menu-button {
-    left: 24px;
-  }
 }
 
 .polaris-root .polaris-header .polaris-menu-button:hover {
@@ -380,6 +377,46 @@
 @media (min-width: 768px) {
   .polaris-root .polaris-header .polaris-title {
     font-size: 22px !important;
+  }
+}
+
+.polaris-root .polaris-header .polaris-header-aside {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Quick log — compact line in header; inherits Polaris sans (Helvetica / Arial). */
+.polaris-root .polaris-header .polaris-header-navigator-lede {
+  margin: 0;
+  max-width: min(100%, 38rem);
+  text-align: right;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.polaris-root .polaris-header .polaris-header-navigator-lede__time {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+}
+
+.polaris-root .polaris-header .polaris-header-navigator-lede__msg {
+  font-weight: 500;
+  color: #64748b;
+}
+
+@media (min-width: 768px) {
+  .polaris-root .polaris-header .polaris-header-navigator-lede {
+    font-size: 0.75rem;
   }
 }
 
@@ -1464,8 +1501,8 @@
 }
 
 .polaris-operator-card-visual {
-  --op-card-visual-w: 12rem;
-  --op-card-visual-h: 9rem;
+  --op-card-visual-w: 14rem;
+  --op-card-visual-h: 10.5rem;
   display: flex;
   flex-shrink: 0;
   width: var(--op-card-visual-w);
@@ -2060,16 +2097,16 @@
 .polaris-navigator-workspace {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 0.85rem 1rem 1rem;
+  padding: 0.1rem 1rem 0.85rem;
 }
 
 @media (min-width: 640px) {
   .polaris-navigator-workspace {
-    padding: 1.1rem 2rem 1.25rem;
+    padding: 0.2rem 2rem 1rem;
   }
 }
 
-/* Sidebar 1/3 + map 2/3 (refined option cards) */
+/* Sidebar + map + detections (3 columns on wide screens) */
 .polaris-navigator-main-split {
   display: grid;
   align-items: stretch;
@@ -2081,11 +2118,23 @@
 
 @media (min-width: 960px) {
   .polaris-navigator-main-split {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-    /* Grow with flex parent so map + Operators fill remaining dvh */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr) minmax(0, 0.95fr);
+    /* Grow with flex parent so map + columns fill remaining dvh */
     min-height: 0;
     flex: 1 1 auto;
   }
+
+  /* Use most of the viewport under the Polaris header so map + operators + chat strip stay tall. */
+  .polaris-navigator-main-split.polaris-navigator-workspace {
+    min-height: calc(100vh - 8.25rem);
+    min-height: calc(100dvh - 8.25rem);
+  }
+}
+
+/* Let the map column shrink and pass a definite height into PanelShell (grid default min-height: auto fights this). */
+.polaris-navigator-main-split > * {
+  min-width: 0;
+  min-height: 0;
 }
 
 .polaris-navigator-sidebar {
@@ -2097,41 +2146,225 @@
 
 @media (min-width: 960px) {
   .polaris-navigator-sidebar {
+    height: 100%;
     max-height: 100%;
+    min-height: 0;
     overflow-x: hidden;
     overflow-y: visible;
     padding-right: 0.25rem;
   }
+
+  /* Fill grid row: flex child grows like map / detections columns */
+  .polaris-navigator-sidebar > .polaris-navigator-operations-column {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .polaris-navigator-detections-column {
+    max-height: 100%;
+    overflow: hidden;
+  }
 }
 
-/* Left column: same shell as Navigator map column (PanelShell + map-panel + polaris-navigator-map tokens) */
+/* Left column: fleet + Agent cards only (no outer PanelShell / map-panel frame) */
 .polaris-navigator-operations-column {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  min-height: min(62vh, 540px);
+  min-height: min(76vh, 720px);
+  max-height: min(100vh - 9rem, 100%);
+  max-height: min(100dvh - 9rem, 100%);
+  --map-panel-inline: 1.4rem;
 }
 
 @media (min-width: 960px) {
   .polaris-navigator-operations-column {
-    height: 100%;
     min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
   }
 
-  .polaris-navigator-operations-column .map-panel {
+  .polaris-navigator-operations-column > .polaris-navigator-operations-inner {
     flex: 1 1 auto;
     min-height: 0;
+    height: 100%;
+    max-height: 100%;
   }
+}
+
+/* Third column: compact option cards (same chrome as Operators / Agent in left column) */
+.polaris-navigator-detections-column.polaris-navigator-map {
+  --map-panel-inline: 1.4rem;
+}
+
+.polaris-navigator-detections-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* Smaller feed row vs former map-panel; list fills remainder */
+  grid-template-rows: minmax(0, min(32vh, 240px)) minmax(0, 1fr);
+  gap: 1.125rem;
+  min-width: 0;
+  min-height: 0;
+  max-height: min(100vh - 9rem, 100%);
+  max-height: min(100dvh - 9rem, 100%);
+  overflow: hidden;
+}
+
+.polaris-navigator-detections-column > .polaris-nav-detections-camera-card,
+.polaris-navigator-detections-column > .polaris-nav-detections-list-card {
+  min-height: 0;
+}
+
+.polaris-navigator-detections-column > .polaris-nav-detections-camera-card {
+  overflow: hidden;
+}
+
+.polaris-navigator-detections-column > .polaris-nav-detections-list-card.polaris-nav-option-card--grow {
+  overflow: hidden;
+}
+
+/* Override global `.polaris-nav-option-card-body--scroll` max-height so grid `1fr` row can fill */
+.polaris-navigator-detections-column > .polaris-nav-detections-list-card .polaris-nav-option-card-body--scroll {
+  display: flex;
+  max-height: none;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  padding-block: 0.5rem 0.65rem;
+  padding-inline: 0.65rem;
+  overflow: hidden;
+}
+
+@media (min-width: 960px) {
+  .polaris-navigator-detections-column {
+    height: 100%;
+    max-height: 100%;
+  }
+}
+
+/* Camera card: wrap the landscape feed only (no tall empty body below). */
+.polaris-navigator-detections-column .polaris-nav-detections-camera-card {
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.polaris-navigator-detections-column .polaris-nav-detections-camera-card .polaris-nav-option-card-header {
+  padding-bottom: 0.5rem;
+}
+
+.polaris-navigator-detections-column .polaris-nav-detections-camera-card .polaris-nav-option-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: 0;
+  padding-block: 0 0.65rem;
+  padding-inline: 0.65rem;
+  overflow: hidden;
+}
+
+/* Embedded POV: fixed landscape frame (don’t stretch to fill column height). */
+.polaris-navigator-detections-column .polaris-nav-pov-stage {
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  max-height: min(42vh, 520px);
+  align-self: stretch;
 }
 
 .polaris-navigator-map .polaris-navigator-operations-body {
   display: flex;
+  min-width: 0;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   flex-direction: column;
   gap: 1.125rem;
   padding-block: 1rem 1.25rem;
   padding-inline: var(--map-panel-inline);
+}
+
+/* Left stack: same idea as camera + detections — fixed first block, Agent fills remaining row height */
+.polaris-navigator-map .polaris-navigator-operations-inner.polaris-navigator-operations-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: start;
+  /* No extra inset — workspace + grid gap handle rhythm; avoids Operators sitting lower than Navigator/Camera */
+  padding-block: 0;
+  padding-inline: 0;
+  gap: 1.125rem;
+}
+
+@media (min-width: 960px) {
+  .polaris-navigator-map .polaris-navigator-operations-inner.polaris-navigator-operations-body {
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: stretch;
+    align-items: stretch;
+    overflow: hidden;
+  }
+}
+
+.polaris-navigator-operations-inner > .polaris-nav-option-card {
+  min-width: 0;
+}
+
+@media (min-width: 960px) {
+  .polaris-navigator-operations-inner > .polaris-nav-option-card--grow {
+    display: flex;
+    height: 100%;
+    max-height: none;
+    min-height: 0;
+    flex-direction: column;
+    align-self: stretch;
+    overflow: hidden;
+  }
+}
+
+/* Single full-height rail in the detections column */
+.polaris-navigator-map .polaris-navigator-detections-body {
+  gap: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.polaris-navigator-map .polaris-navigator-detections-body .operator-rail-embedded {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Detections option card is the outer frame — drop nested rail-content box */
+.polaris-navigator-detections-column .operator-rail-embedded--segment-memory .rail-content {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.polaris-navigator-detections-column .operator-rail-embedded--segment-memory .rail-stack {
+  padding: 0;
+  gap: 0;
+}
+
+/* Agent option card is the outer frame — no second box around chat */
+.polaris-navigator-operations-inner .operator-rail-embedded--segment-agent .rail-content {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.polaris-navigator-operations-inner .operator-rail-embedded--segment-agent .rail-stack {
+  padding: 0;
+  gap: 0;
+  height: 100%;
+}
+
+.polaris-navigator-operations-inner .operator-rail-embedded--segment-agent .chat-thread {
+  background: transparent;
 }
 
 .polaris-nav-option-card {
@@ -2173,6 +2406,21 @@
   font-weight: 600;
   letter-spacing: -0.02em;
   color: #0f172a;
+}
+
+/* Navigator sections (Agent, …) — same format as `.polaris-operators-page-title`, one step smaller (cf. sidebar Operators link). */
+.polaris-root .polaris-nav-option-card--polaris-heading .polaris-nav-option-card-title {
+  font-size: 15px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: #475569;
+}
+
+@media (min-width: 768px) {
+  .polaris-root .polaris-nav-option-card--polaris-heading .polaris-nav-option-card-title {
+    font-size: 17px;
+  }
 }
 
 .polaris-nav-option-card-desc {
@@ -2230,9 +2478,16 @@
 }
 
 .polaris-nav-pov-stage {
-  min-height: 260px;
-  max-height: 380px;
-  border-radius: 10px;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  max-height: min(48vh, 580px);
+  overflow: hidden;
+  border: 0.5px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .polaris-nav-operators-view-all {
@@ -2260,99 +2515,90 @@
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px #94a3b8;
 }
 
-.polaris-nav-operators-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* Navigator sidebar: reuse `/polaris/operators` operator cards (scaled + stretched link to operators). */
+.polaris-nav-operators-embed.polaris-operators-list {
+  gap: 0;
 }
 
-.polaris-nav-operators-item {
-  margin: 0;
-}
-
-.polaris-nav-operator-row {
-  display: flex;
-  align-items: center;
+.polaris-nav-operators-embed-card.polaris-operator-card {
+  position: relative;
+  align-items: flex-start;
   gap: 0.65rem;
-  padding: 0.45rem 0.4rem;
-  margin: 0 -0.35rem;
-  border-radius: 8px;
-  color: inherit;
-  text-decoration: none;
-  transition: background-color 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
+  padding: 0.75rem 0;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .polaris-nav-operator-row:hover {
-    background: rgba(15, 23, 42, 0.04);
+  .polaris-nav-operators-embed-card.polaris-operator-card:hover {
+    background: rgba(15, 23, 42, 0.02);
   }
 }
 
-.polaris-nav-operator-row:focus {
+.polaris-nav-operators-embed-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  text-decoration: none;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.polaris-nav-operators-embed-hit:focus {
   outline: none;
 }
 
-.polaris-nav-operator-row:focus-visible {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #94a3b8;
+.polaris-nav-operators-embed-hit:focus-visible {
+  box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px #94a3b8;
 }
 
-.polaris-nav-operator-thumb {
-  display: flex;
-  width: 2.625rem;
-  height: 2.625rem;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
+.polaris-nav-operators-embed-card .polaris-operator-card-title-link {
+  position: relative;
+  z-index: 2;
+}
+
+.polaris-nav-operators-embed-card .polaris-operator-card-visual {
+  --op-card-visual-w: 7.25rem;
+  --op-card-visual-h: 5.4375rem;
+}
+
+.polaris-nav-operators-embed-card .polaris-operator-card-title {
+  margin: 0 0 0.3rem;
+  font-size: 0.9375rem;
+  gap: 0.45rem;
+}
+
+@media (min-width: 640px) {
+  .polaris-nav-operators-embed-card .polaris-operator-card-title {
+    font-size: 0.9375rem;
+  }
+}
+
+.polaris-nav-operators-embed-card .polaris-operator-card-sub {
+  margin: 0.18rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.polaris-nav-operators-embed-card .polaris-operator-card-cta-column {
+  gap: 0.55rem;
+  margin-top: 0.05rem;
+}
+
+.polaris-nav-operators-embed-card .polaris-operator-card-cta {
+  padding: 0.3rem 0.62rem;
+  font-size: 0.7rem;
+}
+
+.polaris-nav-operators-embed-cta-fake.polaris-operator-card-cta {
+  pointer-events: none;
+  cursor: default;
+}
+
+.polaris-nav-operators-embed-mission .polaris-operator-card-meta-value {
   overflow: hidden;
-  border: 0.5px solid rgba(15, 23, 42, 0.12);
-  border-radius: 6px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-}
-
-.polaris-nav-operator-thumb-img {
-  max-width: 85%;
-  max-height: 85%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-}
-
-.polaris-nav-operator-thumb-placeholder {
-  font-size: 0.65rem;
-  font-weight: 500;
-  color: #94a3b8;
-}
-
-.polaris-nav-operator-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 0.08rem;
-}
-
-.polaris-nav-operator-name {
-  font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  color: #0f172a;
-}
-
-.polaris-nav-operator-type {
-  overflow: hidden;
-  font-size: 0.6875rem;
-  font-weight: 400;
-  color: #64748b;
+  color: #2563eb;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.polaris-nav-operator-status.polaris-operator-card-active {
-  margin-left: auto;
 }
 
 .polaris-nav-layer-row {
@@ -2405,18 +2651,61 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  min-height: min(62vh, 540px);
+  gap: 1rem;
+  min-height: min(76vh, 720px);
+  max-height: min(100vh - 9rem, 100%);
+  max-height: min(100dvh - 9rem, 100%);
+}
+
+.polaris-navigator-map-column > .map-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Single-line activity log under the map */
+.polaris-navigator-map-column > .polaris-navigator-map-activity-below {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.polaris-navigator-map-activity-below .polaris-navigator-activity-line {
+  margin: 0;
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 0.8125rem;
+  font-weight: 450;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-soft, #475569);
+}
+
+.polaris-navigator-map-activity-below .polaris-navigator-activity-line.tone-danger {
+  color: var(--danger, #dc2626);
+}
+
+.polaris-navigator-map-activity-below .polaris-navigator-activity-line.tone-accent {
+  color: var(--accent, #f6ad55);
+}
+
+.polaris-navigator-map-activity-below .polaris-navigator-activity-line.tone-success {
+  color: var(--success, #059669);
+}
+
+.polaris-navigator-map-activity-below .polaris-navigator-activity-line--neutral {
+  color: var(--text-soft, #475569);
 }
 
 @media (min-width: 960px) {
   .polaris-navigator-map-column {
     height: 100%;
     min-height: 0;
-  }
-
-  .polaris-navigator-map-column .map-panel {
-    flex: 1 1 auto;
-    min-height: 0;
+    max-height: 100%;
   }
 }
 
@@ -2495,9 +2784,46 @@
   transform: none;
 }
 
+/* Navigator map panel header: icon-only controls (no borders / pill chrome). */
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0.4rem;
+  border: none;
+  background: transparent;
+  background-image: none;
+  color: #475569;
+}
+
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button:hover:not(:disabled),
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button:focus-visible:not(:disabled) {
+  background: rgba(15, 23, 42, 0.06);
+  border: none;
+  color: #334155;
+}
+
 /* Light toolbar: solid cog hover reads as light grey on white. */
 .polaris-navigator-root .settings-cog-icon--solid {
   color: #94a3b8;
+}
+
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.secondary .settings-cog-icon--outline,
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.secondary .settings-cog-icon--solid {
+  color: #64748b;
+}
+
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.success .settings-cog-icon--outline,
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.success .settings-cog-icon--solid {
+  color: #166534;
+}
+
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.danger .settings-cog-icon--outline,
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.danger .settings-cog-icon--solid {
+  color: #991b1b;
 }
 
 .polaris-navigator-root .action-button:hover:not(:disabled),
@@ -2530,6 +2856,26 @@
   background: #fee2e2;
   border-color: #fca5a5;
   color: #7f1d1d;
+}
+
+/* Map header: override bordered danger/success chrome — icons only */
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.danger,
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.success,
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.secondary {
+  border: none;
+  background: transparent;
+}
+
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.danger:hover:not(:disabled),
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.danger:focus-visible:not(:disabled) {
+  background: rgba(254, 226, 226, 0.55);
+  border: none;
+}
+
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.success:hover:not(:disabled),
+.polaris-navigator-root .polaris-navigator-map-header-actions .action-button.success:focus-visible:not(:disabled) {
+  background: rgba(220, 252, 231, 0.65);
+  border: none;
 }
 
 .polaris-navigator-root .action-button.success {
@@ -2806,10 +3152,22 @@
   background: transparent;
 }
 
-/* Map panel title — same typographic format as Navigator / Operators `.polaris-operators-page-title`. */
+/* Map panel title — default `.polaris-operators-page-title` scale; Navigator center panel uses `--compact-title` to match option cards. */
+/* Header actions (Inspect, teleop, …): top-right beside title; popover stacks above panel chrome */
+.polaris-navigator-map-column .panel-header-aside .polaris-navigator-map-header-actions {
+  position: relative;
+  z-index: 5;
+}
+
 .polaris-navigator-map .map-panel .panel-body-stage {
   padding-block: 1rem 1.25rem;
   padding-inline: var(--map-panel-inline);
+}
+
+/* Definite flex height into MapPane so viewport centering matches the visible white frame. */
+.polaris-navigator-map-column > .map-panel > .panel-body.panel-body-stage {
+  flex: 1 1 0%;
+  min-height: 0;
 }
 
 .polaris-navigator-map .map-panel .panel-header {
@@ -2832,6 +3190,21 @@
   }
 }
 
+/* Center map panel only: same title scale as `.polaris-nav-option-card--polaris-heading` (Operators, Agent, …) */
+.polaris-navigator-map-column > .map-panel.polaris-navigator-map-panel--compact-title .panel-header h2 {
+  font-size: 15px !important;
+  font-weight: 300 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: #475569 !important;
+}
+
+@media (min-width: 768px) {
+  .polaris-navigator-map-column > .map-panel.polaris-navigator-map-panel--compact-title .panel-header h2 {
+    font-size: 17px !important;
+  }
+}
+
 /* Flat floor-plan canvas: white, faint grid, minimal chrome */
 .polaris-navigator-map .map-surface {
   background: #fff;
@@ -2849,36 +3222,6 @@
 
 .polaris-navigator-map .map-chrome {
   color: var(--text-soft);
-}
-
-.polaris-navigator-map .map-view-mode-switch {
-  border-color: #e2e8f0;
-  background: #f8fafc;
-}
-
-.polaris-navigator-map .map-view-mode-switch button {
-  color: #64748b;
-}
-
-.polaris-navigator-map .map-view-mode-switch button + button {
-  border-left-color: #e2e8f0;
-}
-
-.polaris-navigator-map .map-view-mode-switch button:hover {
-  color: #475569;
-}
-
-.polaris-navigator-map .map-view-mode-switch button.is-active {
-  background: #fff;
-  color: #0f172a;
-}
-
-.polaris-navigator-map .map-view-mode-switch button:focus-visible {
-  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.35);
-}
-
-.polaris-navigator-map .map-visual-3d-wrap--active {
-  filter: drop-shadow(0 28px 48px rgba(15, 23, 42, 0.14));
 }
 
 .polaris-navigator-map .map-meta span:first-child {
@@ -2927,6 +3270,11 @@
 .polaris-navigator-map .map-tool:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.polaris-navigator-map .map-toolbar-fit-icon {
+  min-width: 2.25rem;
+  padding: 0.45rem 0.5rem;
 }
 
 .polaris-navigator-map .path-line {

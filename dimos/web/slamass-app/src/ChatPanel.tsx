@@ -45,14 +45,16 @@ export function ChatPanel(props: ChatPanelProps): React.ReactElement {
                 <strong>{message.role === "user" ? "You" : "Agent"}</strong>
                 <time>{formatTime(message.created_at)}</time>
               </div>
-              <p>{message.content || (message.status === "running" ? "Working..." : "No content")}</p>
-              {message.tools_used.length > 0 ? (
-                <div className="chat-tool-row">
-                  {message.tools_used.map((toolName) => (
-                    <span key={`${message.message_id}-${toolName}`}>{toolName}</span>
-                  ))}
-                </div>
-              ) : null}
+              <div className="chat-message-body">
+                <p>{message.content || (message.status === "running" ? "Working..." : "No content")}</p>
+                {message.tools_used.length > 0 ? (
+                  <div className="chat-tool-row">
+                    {message.tools_used.map((toolName) => (
+                      <span key={`${message.message_id}-${toolName}`}>{toolName}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </article>
           ))
         ) : (

@@ -157,7 +157,7 @@ This is sparse, curated, and operator-meaningful.
 
 There are now two semantic modalities inside this memory layer:
 
-- `VLM anchors`: sparse, manually triggered scene/place observations backed by a full frame and a richer semantic summary
+- `Point of Interest` (VLM POIs): sparse, manually triggered scene/place observations backed by a full frame and a richer semantic summary
 - `YOLO objects`: denser, automatically promoted world objects backed by repeated 3D detections and a best crop / best-view pose
 
 These should be treated as one semantic dataset with two different acquisition paths.

@@ -78,7 +78,7 @@ test.describe("/polaris/operators", () => {
     await expect(operatorsHeading).toHaveCSS("color", "rgb(71, 85, 105)");
 
     const robotSlots = page.getByTestId("polaris-robot-slot");
-    await expect(robotSlots).toHaveCount(4);
+    await expect(robotSlots).toHaveCount(2);
     await expect(robotSlots.first()).toBeVisible();
     const firstRobotImg = robotSlots.first().locator(".polaris-operator-card-img--static");
     await expect(firstRobotImg).toBeVisible();
@@ -86,29 +86,13 @@ test.describe("/polaris/operators", () => {
       "src",
       /65264e97e81744409042d34bf3ba6da6_400x400\.png/,
     );
+    await expect(robotSlots.first().getByText("Unitree Go2 X")).toBeVisible();
     const secondCardImg = robotSlots.nth(1).locator(".polaris-operator-card-img--static");
     await expect(secondCardImg).toHaveAttribute(
       "src",
       /9896d21bdef4443d821a324931d8af0c_800x800\.png/,
     );
-    const thirdCardImg = robotSlots.nth(2).locator(".polaris-operator-card-img");
-    await expect(thirdCardImg).toBeVisible();
-    await expect(thirdCardImg).toHaveAttribute(
-      "src",
-      /11d0a76afbb74e8fb7f692652b4c33e0_800x800\.png/,
-    );
-    await expect(robotSlots.nth(2).getByText("Unitree AS2")).toBeVisible();
-    const fourthCardImg = robotSlots.nth(3).locator(".polaris-operator-card-img--static");
-    await expect(fourthCardImg).toBeVisible();
-    await expect(fourthCardImg).toHaveAttribute(
-      "src",
-      /874b8a23698a49fda7bd98f01a6fa648_800x800\.png/,
-    );
-    const a2TitleLink = robotSlots
-      .nth(3)
-      .getByRole("link", { name: "Unitree A2", exact: true });
-    await expect(a2TitleLink).toBeVisible();
-    await expect(a2TitleLink).toHaveAttribute("href", "https://www.unitree.com/A2");
+    await expect(robotSlots.nth(1).getByText("Unitree Go2 EDU")).toBeVisible();
 
     await menu.click();
     await expect(
@@ -187,24 +171,59 @@ test.describe("/polaris/operators", () => {
     await expect(navigatorLink).toHaveAttribute("href", "/polaris/navigator");
     await navigatorLink.click();
     await expect(page).toHaveURL(/\/polaris\/navigator/);
-    await expect(page.getByTestId("polaris-navigator-heading")).toHaveText("Navigator");
-    await expect(page.getByTestId("polaris-navigator-back")).toHaveAttribute(
-      "href",
-      "/polaris/operators",
-    );
     await expect(page.getByTestId("polaris-navigator-main")).toBeVisible();
   });
 
   test("/navigator alias loads Navigator with Polaris chrome", async ({ page }) => {
     await page.goto("/navigator");
-    await expect(page.getByTestId("polaris-navigator-heading")).toHaveText("Navigator");
+    await expect(page.getByTestId("polaris-nav-title")).toHaveText("Polaris");
+    await expect(page.getByTestId("polaris-navigator-main")).toBeVisible();
+  });
+
+  test("direct /polaris/navigator loads Polaris navigator shell", async ({ page }) => {
+    await page.goto("/polaris/navigator");
+    await expect(page).toHaveURL(/\/polaris\/navigator/);
     await expect(page.getByTestId("polaris-nav-title")).toHaveText("Polaris");
     await expect(page.getByTestId("polaris-navigator-main")).toBeVisible();
   });
 
   test("/configurator alias matches navigator entry", async ({ page }) => {
     await page.goto("/configurator");
-    await expect(page.getByTestId("polaris-navigator-heading")).toHaveText("Navigator");
+    await expect(page.getByTestId("polaris-navigator-main")).toBeVisible();
+  });
+});
+
+test.describe("/polaris/navigator", () => {
+  test("desktop: three columns share the same row height", async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.goto("/polaris/navigator");
+
+    const main = page.getByTestId("polaris-navigator-main");
+    await expect(main).toBeVisible();
+
+    const columns = main.locator(":scope > *");
+    await expect(columns).toHaveCount(3);
+
+    const heights = await columns.evaluateAll((elements) =>
+      elements.map((el) => Math.round(el.getBoundingClientRect().height)),
+    );
+
+    const minH = Math.min(...heights);
+    const maxH = Math.max(...heights);
+    expect(
+      maxH - minH,
+      `column heights [${heights.join(", ")}]px should match (grid row stretch)`,
+    ).toBeLessThanOrEqual(3);
+
+    const sidebar = page.locator('[aria-label="Navigator options"]');
+    const inner = sidebar.locator(".polaris-navigator-operations-inner");
+    await expect(inner).toBeVisible();
+    const sidebarH = await sidebar.evaluate((el) => el.getBoundingClientRect().height);
+    const innerH = await inner.evaluate((el) => el.getBoundingClientRect().height);
+    expect(
+      Math.round(sidebarH) - Math.round(innerH),
+      "operators + agent stack should fill the left column height",
+    ).toBeLessThanOrEqual(2);
   });
 });
 

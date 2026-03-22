@@ -1,8 +1,17 @@
 import React from "react";
+import {
+  ArrowsPointingInIcon,
+  MinusIcon,
+  PlusIcon,
+} from "@heroicons/react/24/outline";
 
 import {
   buildViewport,
   clampZoom,
+  fitOverviewCamera,
+  MAX_MAP_ZOOM,
+  MIN_MAP_ZOOM,
+  panCamera,
   screenToWorld,
   worldToImagePixels,
   zoomCameraAtScreenPoint,
@@ -20,21 +29,25 @@ import {
   YoloObject,
 } from "./types";
 
-function useSize<T extends HTMLElement>(): [React.RefObject<T>, { width: number; height: number }] {
+function useSize<T extends HTMLElement>(
+  /** Re-run layout measure when this identity changes (e.g. map becomes available). */
+  measureKey?: unknown,
+): [React.RefObject<T>, { width: number; height: number }] {
   const ref = React.useRef<T>(null);
   const [size, setSize] = React.useState({ width: 0, height: 0 });
 
-  React.useEffect(() => {
-    if (!ref.current) {
-      return;
-    }
+  React.useLayoutEffect(() => {
     const el = ref.current;
+    if (!el) {
+      return undefined;
+    }
     const apply = (width: number, height: number) => {
-      setSize({ width, height });
+      setSize((previous) =>
+        previous.width === width && previous.height === height ? previous : { width, height },
+      );
     };
     const measure = () => {
-      const rect = el.getBoundingClientRect();
-      apply(rect.width, rect.height);
+      apply(el.clientWidth, el.clientHeight);
     };
     measure();
     const observer = new ResizeObserver((entries) => {
@@ -42,12 +55,12 @@ function useSize<T extends HTMLElement>(): [React.RefObject<T>, { width: number;
       if (!entry) {
         return;
       }
-      const box = entry.contentRect;
-      apply(box.width, box.height);
+      const target = entry.target as HTMLElement;
+      apply(target.clientWidth, target.clientHeight);
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [measureKey]);
 
   return [ref, size];
 }
@@ -95,14 +108,30 @@ type MapPaneProps = {
   onFocusMap: () => void;
   onFocusRobot: () => void;
   onClearFocus: () => void;
-  /** When set, show a 2D / 3D switcher (perspective tilt in 3D; tap-to-navigate only in 2D). */
-  showViewModeToggle?: boolean;
+  /** When false, hide Fit / Robot / Selected / Clear. Default true. */
+  showMapToolbar?: boolean;
+  /**
+   * Re-apply fit overview once this pane gets a non-zero layout size (navigator split layout).
+   * Centers the map in the map column after flex/grid height is known, independent of the sidebar.
+   */
+  refitOnLayoutReady?: boolean;
+  /**
+   * Navigator: extra controls pinned top-right inside the map surface; map widgets move to bottom-right.
+   */
+  mapOverlayTopRight?: React.ReactNode;
+  /**
+   * Navigator: keep zoom/fit widgets on the bottom-right without a map-surface top overlay
+   * (e.g. when actions live in `PanelShell` header `aside`).
+   */
+  pinViewModeControlsBottom?: boolean;
 };
 
 type DragState = {
   pointerId: number;
   startX: number;
   startY: number;
+  lastX: number;
+  lastY: number;
   moved: boolean;
   startCamera: UiCameraState;
 };
@@ -124,16 +153,40 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     onFocusMap,
     onFocusRobot,
     onClearFocus,
-    showViewModeToggle = false,
+    showMapToolbar = true,
+    refitOnLayoutReady = false,
+    mapOverlayTopRight,
+    pinViewModeControlsBottom = false,
   } = props;
-  const [containerRef, size] = useSize<HTMLDivElement>();
-  const [mapViewMode, setMapViewMode] = React.useState<"2d" | "3d">("2d");
+
+  const mapMeasureKey = map ? `${map.width}x${map.height}` : null;
+  const [containerRef, size] = useSize<HTMLDivElement>(mapMeasureKey);
   const dragStateRef = React.useRef<DragState | null>(null);
   const cameraRef = React.useRef(ui.camera);
 
   React.useEffect(() => {
     cameraRef.current = ui.camera;
   }, [ui.camera]);
+
+  const layoutRefitKeyRef = React.useRef<string>("");
+  React.useLayoutEffect(() => {
+    if (!map) {
+      layoutRefitKeyRef.current = "";
+      return;
+    }
+    if (!refitOnLayoutReady) {
+      return;
+    }
+    if (size.width <= 0 || size.height <= 0) {
+      return;
+    }
+    const key = `${map.width}x${map.height}`;
+    if (layoutRefitKeyRef.current === key) {
+      return;
+    }
+    layoutRefitKeyRef.current = key;
+    onCameraChange(fitOverviewCamera(map));
+  }, [map, onCameraChange, refitOnLayoutReady, size.height, size.width]);
 
   React.useEffect(() => {
     const el = containerRef.current;
@@ -213,6 +266,33 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     event.stopPropagation();
   }, []);
 
+  const showFloatingZoomFit = Boolean(map && viewport);
+
+  const atMinZoom = map ? ui.camera.zoom <= MIN_MAP_ZOOM + 1e-6 : false;
+  const atMaxZoom = map ? ui.camera.zoom >= MAX_MAP_ZOOM - 1e-6 : false;
+
+  const handleZoomIn = React.useCallback(() => {
+    if (!map || !viewport) {
+      return;
+    }
+    const cx = size.width / 2;
+    const cy = size.height / 2;
+    onCameraChange(
+      zoomCameraAtScreenPoint(map, ui.camera, cx, cy, ui.camera.zoom * 1.1, viewport),
+    );
+  }, [map, onCameraChange, size.height, size.width, ui.camera, viewport]);
+
+  const handleZoomOut = React.useCallback(() => {
+    if (!map || !viewport) {
+      return;
+    }
+    const cx = size.width / 2;
+    const cy = size.height / 2;
+    onCameraChange(
+      zoomCameraAtScreenPoint(map, ui.camera, cx, cy, ui.camera.zoom / 1.1, viewport),
+    );
+  }, [map, onCameraChange, size.height, size.width, ui.camera, viewport]);
+
   const preventNativeDrag = React.useCallback((event: React.DragEvent<HTMLElement>) => {
     event.preventDefault();
   }, []);
@@ -222,10 +302,14 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       if (!map || !viewport || event.button !== 0) {
         return;
       }
+      const x = event.clientX;
+      const y = event.clientY;
       dragStateRef.current = {
         pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
+        startX: x,
+        startY: y,
+        lastX: x,
+        lastY: y,
         moved: false,
         startCamera: ui.camera,
       };
@@ -243,13 +327,23 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       if (!dragState || dragState.pointerId !== event.pointerId) {
         return;
       }
-      const deltaX = event.clientX - dragState.startX;
-      const deltaY = event.clientY - dragState.startY;
-      if (!dragState.moved && Math.hypot(deltaX, deltaY) > 4) {
-        dragState.moved = true;
+      const ddx = event.clientX - dragState.lastX;
+      const ddy = event.clientY - dragState.lastY;
+      if (ddx === 0 && ddy === 0) {
+        return;
       }
+      dragState.lastX = event.clientX;
+      dragState.lastY = event.clientY;
+      dragState.moved = true;
+      if (size.width <= 0 || size.height <= 0) {
+        return;
+      }
+      const vp = buildViewport(map, size.width, size.height, cameraRef.current);
+      const next = panCamera(map, cameraRef.current, ddx, ddy, vp);
+      cameraRef.current = next;
+      onCameraChange(next);
     },
-    [map, viewport],
+    [map, onCameraChange, size.height, size.width, viewport],
   );
 
   const handlePointerUp = React.useCallback(
@@ -265,10 +359,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       event.currentTarget.releasePointerCapture(event.pointerId);
 
       if (dragState.moved) {
-        return;
-      }
-
-      if (showViewModeToggle && mapViewMode === "3d") {
         return;
       }
 
@@ -292,7 +382,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       onSelectItem(null);
       onNavigate(worldX, worldY);
     },
-    [map, mapViewMode, onNavigate, onSelectItem, showViewModeToggle, viewport],
+    [map, onNavigate, onSelectItem, viewport],
   );
 
   const handlePointerCancel = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -306,6 +396,115 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     }
   }, []);
 
+  const showMapTopOverlay = Boolean(mapOverlayTopRight);
+  const useSplitChromeLayout = showMapTopOverlay || pinViewModeControlsBottom;
+
+  const mapToolbarMainButtons = showMapToolbar ? (
+    <>
+      <button
+        className="map-tool"
+        disabled={!robotPose}
+        onClick={onFocusRobot}
+        type="button"
+      >
+        Robot
+      </button>
+      <button
+        className="map-tool"
+        disabled={!ui.selected_item}
+        onClick={() => {
+          if (ui.selected_item) {
+            onFocusItem(ui.selected_item);
+          }
+        }}
+        type="button"
+      >
+        Selected
+      </button>
+      <button
+        className="map-tool"
+        disabled={!ui.selected_item && ui.highlighted_items.length === 0}
+        onClick={onClearFocus}
+        type="button"
+      >
+        Clear
+      </button>
+    </>
+  ) : null;
+
+  const floatingZoomFitControls = showFloatingZoomFit ? (
+    <div className="map-floating-controls">
+      <div aria-label="Zoom map" className="map-zoom-pill" role="group">
+        <button
+          aria-label="Zoom in"
+          className="map-zoom-pill-btn"
+          disabled={atMaxZoom}
+          onClick={handleZoomIn}
+          type="button"
+        >
+          <PlusIcon aria-hidden className="map-zoom-pill-icon" />
+        </button>
+        <div aria-hidden className="map-zoom-pill-divider" />
+        <button
+          aria-label="Zoom out"
+          className="map-zoom-pill-btn"
+          disabled={atMinZoom}
+          onClick={handleZoomOut}
+          type="button"
+        >
+          <MinusIcon aria-hidden className="map-zoom-pill-icon" />
+        </button>
+      </div>
+      <button
+        aria-label="Fit map to view"
+        className="map-fit-floating-btn"
+        onClick={onFocusMap}
+        title="Fit map"
+        type="button"
+      >
+        <ArrowsPointingInIcon aria-hidden className="map-fit-floating-icon" />
+      </button>
+    </div>
+  ) : null;
+
+  const hasMapChrome =
+    showMapToolbar || showMapTopOverlay || pinViewModeControlsBottom;
+
+  const mapChromeBlocks =
+    !hasMapChrome ? null : useSplitChromeLayout ? (
+      <>
+        {showMapTopOverlay ? (
+          <div className="map-chrome map-chrome--overlay-top-right" onPointerDown={stopEvent}>
+            <div className="map-overlay-top-actions">{mapOverlayTopRight}</div>
+          </div>
+        ) : null}
+        {showMapToolbar || pinViewModeControlsBottom ? (
+          <div className="map-chrome map-chrome--view-controls-bottom">
+            <div
+              className="map-toolbar map-toolbar--inset-bottom map-toolbar--with-floating-widgets"
+              onPointerDown={stopEvent}
+            >
+              {mapToolbarMainButtons}
+              {floatingZoomFitControls}
+            </div>
+          </div>
+        ) : null}
+      </>
+    ) : (
+      <>
+        <div className="map-chrome">
+          <div className="map-toolbar" onPointerDown={stopEvent}>
+            {mapToolbarMainButtons}
+          </div>
+        </div>
+        {floatingZoomFitControls ? (
+          <div className="map-chrome map-chrome--floating-map-widgets" onPointerDown={stopEvent}>
+            {floatingZoomFitControls}
+          </div>
+        ) : null}
+      </>
+    );
+
   return (
     <div
       className="map-surface"
@@ -316,83 +515,14 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       onPointerUp={handlePointerUp}
       ref={containerRef}
     >
+      {mapChromeBlocks}
       {!map || !viewport ? (
-        <div className="panel-empty">
+        <div className="panel-empty panel-empty--map-loading">
           <h3>Navigator map not ready</h3>
           <p>Start the Go2 stack and wait for the service to ingest raw costmap updates.</p>
         </div>
       ) : (
         <>
-          <div className="map-chrome">
-            <div className="map-toolbar" onPointerDown={stopEvent}>
-              <button className="map-tool" onClick={onFocusMap} type="button">
-                Fit
-              </button>
-              <button
-                className="map-tool"
-                disabled={!robotPose}
-                onClick={onFocusRobot}
-                type="button"
-              >
-                Robot
-              </button>
-              <button
-                className="map-tool"
-                disabled={!ui.selected_item}
-                onClick={() => {
-                  if (ui.selected_item) {
-                    onFocusItem(ui.selected_item);
-                  }
-                }}
-                type="button"
-              >
-                Selected
-              </button>
-              <button
-                className="map-tool"
-                disabled={!ui.selected_item && ui.highlighted_items.length === 0}
-                onClick={onClearFocus}
-                type="button"
-              >
-                Clear
-              </button>
-              {showViewModeToggle ? (
-                <div
-                  aria-label="Map view mode"
-                  className="map-view-mode-switch"
-                  role="group"
-                >
-                  <button
-                    className={mapViewMode === "2d" ? "is-active" : undefined}
-                    onClick={() => {
-                      setMapViewMode("2d");
-                    }}
-                    type="button"
-                  >
-                    2D
-                  </button>
-                  <button
-                    className={mapViewMode === "3d" ? "is-active" : undefined}
-                    onClick={() => {
-                      setMapViewMode("3d");
-                    }}
-                    type="button"
-                  >
-                    3D
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div
-            className={[
-              "map-visual-3d-wrap",
-              showViewModeToggle && mapViewMode === "3d" ? "map-visual-3d-wrap--active" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
             <img
                 alt="Navigator occupancy map"
                 className="map-image"
@@ -715,25 +845,24 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 );
               })}
           </div>
-          </div>
-          <div className="map-legend" onPointerDown={stopEvent}>
-            <span>
-              <i className="legend-swatch robot" />
-              Robot
-            </span>
-            <span>
-              <i className="legend-swatch path" />
-              Planned path
-            </span>
-            <span>
-              <i className="legend-swatch poi" />
-              VLM anchors
-            </span>
-            <span>
-              <i className="legend-swatch yolo" />
-              YOLO objects
-            </span>
-          </div>
+            <div className="map-legend" onPointerDown={stopEvent}>
+              <span>
+                <i className="legend-swatch robot" />
+                Robot
+              </span>
+              <span>
+                <i className="legend-swatch path" />
+                Planned path
+              </span>
+              <span>
+                <i className="legend-swatch poi" />
+                Point of Interest
+              </span>
+              <span>
+                <i className="legend-swatch yolo" />
+                YOLO objects
+              </span>
+            </div>
         </>
       )}
     </div>

@@ -387,8 +387,9 @@ class DisabledChatBackend:
         _ = messages, tools
         return ChatBackendResponse(
             content=(
-                "Operator chat is disabled: set OPENAI_API_KEY in your environment "
-                "(for example in a repo-root `.env` file) and restart dimos-slamass."
+                "Operator chat uses OpenAI when OPENAI_API_KEY is set. "
+                "Without a key, the rest of SLAMASS (map, POV, teleop) still runs; "
+                "add the key in repo-root `.env` and restart dimos-slamass to enable chat."
             ),
             tool_calls=[],
         )
@@ -436,11 +437,12 @@ class SlamassChatAgent:
     ) -> None:
         if backend is not None:
             self._backend = backend
-        elif os.getenv("OPENAI_API_KEY"):
+        elif os.getenv("OPENAI_API_KEY", "").strip():
             self._backend = OpenAIChatBackend(model_name=model_name)
         else:
-            logger.warning(
-                "OPENAI_API_KEY not set; SLAMASS operator chat is disabled until it is configured"
+            logger.info(
+                "OPENAI_API_KEY not set — SLAMASS is running without operator chat / OpenAI VLM "
+                "(map, POV, and teleop are still available)."
             )
             self._backend = DisabledChatBackend()
         self._tools = self._build_tools()

@@ -9,6 +9,7 @@ import { MapPane } from "./MapPane";
 import { defaultRobotOperatorHoverCard } from "./robotOperatorLabel";
 import { OperatorRail, SelectedSemanticPreview } from "./OperatorRail";
 import { PanelShell } from "./PanelShell";
+import { SaveMapGlyphs } from "./SaveMapGlyphs";
 import { SettingsCogGlyphs } from "./SettingsCogGlyphs";
 import {
   buildSemanticItems,
@@ -42,6 +43,9 @@ const LAYOUT_STORAGE_KEY = "slamass-layout-mode";
 const MAX_ACTIVITY_ENTRIES = 10;
 
 const emptyState: AppState = {
+  dimos_viewer_url: null,
+  dimos_rerun_web_viewer_url: null,
+  openai_configured: true,
   connected: false,
   robot_pose: null,
   path: [],
@@ -1149,6 +1153,14 @@ export default function App(): React.ReactElement {
             <span className="toolbar-chip tone-running">Inspecting</span>
           ) : null}
           {state.chat.running ? <span className="toolbar-chip tone-accent">Agent thinking</span> : null}
+          {!state.openai_configured ? (
+            <span
+              className="toolbar-chip tone-accent"
+              title="Set OPENAI_API_KEY (e.g. repo .env) for Inspect and agent chat"
+            >
+              OpenAI off
+            </span>
+          ) : null}
           {!state.yolo_runtime.inference_enabled ? (
             <span className="toolbar-chip tone-danger">YOLO off</span>
           ) : null}
@@ -1185,24 +1197,35 @@ export default function App(): React.ReactElement {
 
           <button
             className="action-button"
-            disabled={busyAction !== null || state.inspection.status === "running"}
+            disabled={
+              busyAction !== null ||
+              state.inspection.status === "running" ||
+              !state.openai_configured
+            }
             onClick={() => {
               void handleInspectNow();
             }}
+            title={
+              state.openai_configured
+                ? undefined
+                : "Inspect needs OPENAI_API_KEY (VLM)"
+            }
             type="button"
           >
             {state.inspection.status === "running" ? "Inspecting" : "Inspect"}
           </button>
 
           <button
-            className="action-button secondary"
+            aria-label="Save map"
+            className="action-button secondary settings-cog-button"
             disabled={busyAction !== null || state.map === null}
             onClick={() => {
               void handleSaveMap();
             }}
+            title="Save map"
             type="button"
           >
-            Save
+            <SaveMapGlyphs />
           </button>
 
           <button

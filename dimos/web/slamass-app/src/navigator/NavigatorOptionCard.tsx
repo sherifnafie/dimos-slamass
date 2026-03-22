@@ -1,7 +1,8 @@
 import React from "react";
 
 export type NavigatorOptionCardProps = {
-  kicker: string;
+  /** Small caps label above the title (optional). */
+  kicker?: string;
   title: string;
   description?: string;
   /** Chips or controls aligned to the right of the title row */
@@ -9,6 +10,8 @@ export type NavigatorOptionCardProps = {
   children: React.ReactNode;
   /** Taller scroll region for dense content (e.g. operator rail) */
   bodyVariant?: "default" | "scroll";
+  /** Extra classes on the body wrapper (e.g. layout tokens for embedded rails). */
+  bodyClassName?: string;
   className?: string;
 };
 
@@ -25,6 +28,7 @@ export function NavigatorOptionCard(
     headerAside,
     children,
     bodyVariant = "default",
+    bodyClassName,
     className,
   } = props;
 
@@ -34,7 +38,9 @@ export function NavigatorOptionCard(
     >
       <header className="polaris-nav-option-card-header">
         <div className="polaris-nav-option-card-head-main">
-          <p className="polaris-nav-option-card-kicker">{kicker}</p>
+          {kicker ? (
+            <p className="polaris-nav-option-card-kicker">{kicker}</p>
+          ) : null}
           <h2 className="polaris-nav-option-card-title">{title}</h2>
           {description ? (
             <p className="polaris-nav-option-card-desc">{description}</p>
@@ -45,11 +51,14 @@ export function NavigatorOptionCard(
         ) : null}
       </header>
       <div
-        className={
+        className={[
           bodyVariant === "scroll"
             ? "polaris-nav-option-card-body polaris-nav-option-card-body--scroll"
-            : "polaris-nav-option-card-body"
-        }
+            : "polaris-nav-option-card-body",
+          bodyClassName,
+        ]
+          .filter(Boolean)
+          .join(" ")}
       >
         {children}
       </div>
