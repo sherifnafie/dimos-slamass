@@ -21,6 +21,7 @@ import type {
   YoloObject,
 } from "../types";
 import { applyFitOverviewCameraToAppState, DEFAULT_MAP_ZOOM } from "../mapViewport";
+import { mergeUiPreferringLocalCamera } from "../uiStateMerge";
 import { fetchJson } from "./fetchJson";
 
 const LAYOUT_STORAGE_KEY = "slamass-layout-mode";
@@ -588,10 +589,28 @@ export function useNavigatorSlamassState(): {
         "accent",
       );
       try {
-        await issueUiCommand("/api/ui/select-item", {
-          method: "POST",
-          body: JSON.stringify({ kind: null, entity_id: null }),
-        });
+        try {
+          const nextUi = await fetchJson<UiState>("/api/ui/select-item", {
+            method: "POST",
+            body: JSON.stringify({ kind: null, entity_id: null }),
+          });
+          const preserveCamera =
+            pendingLocalCameraRef.current !== null ||
+            cameraSyncTimerRef.current !== null ||
+            cameraPutInFlightRef.current;
+          startTransition(() => {
+            setState((previous) => ({
+              ...previous,
+              ui: mergeUiPreferringLocalCamera(
+                previous.ui,
+                nextUi,
+                preserveCamera,
+              ),
+            }));
+          });
+        } catch (selectError) {
+          reportActionError("Clear map selection failed", selectError);
+        }
         await fetchJson("/api/navigate", {
           method: "POST",
           body: JSON.stringify({ x, y }),
@@ -600,7 +619,7 @@ export function useNavigatorSlamassState(): {
         reportActionError("Navigation request failed", error);
       }
     },
-    [appendActivity, issueUiCommand, reportActionError],
+    [appendActivity, reportActionError],
   );
 
   const handleGoToItem = useCallback(

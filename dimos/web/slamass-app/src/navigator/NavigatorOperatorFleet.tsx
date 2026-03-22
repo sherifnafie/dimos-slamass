@@ -5,11 +5,7 @@ import {
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { POLARIS_OPERATOR_FLEET } from "../polarisOperatorFleet";
-import type { InspectionState } from "../types";
 import { NavigatorOptionCard } from "./NavigatorOptionCard";
-
-/** Primary quadruped row that reflects live Navigator / slamass inspection state. */
-const INSPECTION_STATUS_OPERATOR_IDS = new Set<string>(["go2", "go2-platform"]);
 
 function statusLabel(active: "green" | "blue" | "grey"): string {
   if (active === "blue") {
@@ -21,15 +17,7 @@ function statusLabel(active: "green" | "blue" | "grey"): string {
   return "Active";
 }
 
-function NavigatorOperatorFleetList(props: {
-  inspection?: InspectionState;
-}): React.ReactElement {
-  const { inspection } = props;
-  const liveMission =
-    inspection?.status === "running" && inspection.message.trim() !== ""
-      ? inspection.message
-      : null;
-
+function NavigatorOperatorFleetList(): React.ReactElement {
   return (
     <ul
       aria-label="Operators"
@@ -116,19 +104,9 @@ function NavigatorOperatorFleetList(props: {
                 <span className="polaris-operator-card-meta-value">{op.location}</span>
               </p>
               <p className="polaris-operator-card-sub polaris-operator-card-meta">
-                <span className="polaris-operator-card-meta-label">Task</span>{" "}
+                <span className="polaris-operator-card-meta-label">Mission</span>{" "}
                 <span className="polaris-operator-card-meta-value">{op.task}</span>
               </p>
-              {liveMission && INSPECTION_STATUS_OPERATOR_IDS.has(op.id) ? (
-                <p
-                  aria-live="polite"
-                  className="polaris-operator-card-sub polaris-operator-card-meta polaris-nav-operators-embed-mission"
-                  data-testid="polaris-nav-operator-mission"
-                >
-                  <span className="polaris-operator-card-meta-label">Mission</span>{" "}
-                  <span className="polaris-operator-card-meta-value">{liveMission}</span>
-                </p>
-              ) : null}
             </div>
             <div className="polaris-operator-card-cta-column">
               <span className="polaris-operator-card-cta polaris-nav-operators-embed-cta-fake">
@@ -145,15 +123,10 @@ function NavigatorOperatorFleetList(props: {
   );
 }
 
-export type NavigatorOperatorFleetProps = {
-  inspection?: InspectionState;
-};
-
 /**
  * Fleet roster in the navigator “Operators” column — same card structure as `/polaris/operators`, scaled for the sidebar.
  */
-export function NavigatorOperatorFleet(props: NavigatorOperatorFleetProps): React.ReactElement {
-  const { inspection } = props;
+export function NavigatorOperatorFleet(): React.ReactElement {
   const [extended, setExtended] = useState(false);
   const titleId = useId();
   const collapseButtonRef = useRef<HTMLButtonElement>(null);
@@ -207,9 +180,6 @@ export function NavigatorOperatorFleet(props: NavigatorOperatorFleetProps): Reac
         className="polaris-nav-operators-fleet-card polaris-nav-option-card--polaris-heading"
         headerAside={
           <div className="polaris-nav-operators-header-aside">
-            <a className="polaris-nav-operators-view-all" href="/polaris/operators">
-              View all
-            </a>
             <button
               aria-expanded={extended}
               aria-label="Expand operators"
@@ -229,7 +199,7 @@ export function NavigatorOperatorFleet(props: NavigatorOperatorFleetProps): Reac
         }
         title="Operators"
       >
-        <NavigatorOperatorFleetList inspection={inspection} />
+        <NavigatorOperatorFleetList />
       </NavigatorOptionCard>
 
       {extended ? (
@@ -265,7 +235,7 @@ export function NavigatorOperatorFleet(props: NavigatorOperatorFleetProps): Reac
               </button>
             </header>
             <div className="polaris-nav-operators-extend-panel-body">
-              <NavigatorOperatorFleetList inspection={inspection} />
+              <NavigatorOperatorFleetList />
             </div>
           </div>
         </div>

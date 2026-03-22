@@ -24,6 +24,7 @@ import {
   teleopKeys,
 } from "./teleop";
 import { applyFitOverviewCameraToAppState, DEFAULT_MAP_ZOOM } from "./mapViewport";
+import { mergeUiPreferringLocalCamera } from "./uiStateMerge";
 import {
   AppState,
   ChatState,
@@ -874,10 +875,28 @@ export default function App(): React.ReactElement {
     async (x: number, y: number) => {
       appendActivity("operator", "Navigate", `${x.toFixed(2)}, ${y.toFixed(2)}`, "accent");
       try {
-        await issueUiCommand("/api/ui/select-item", {
-          method: "POST",
-          body: JSON.stringify({ kind: null, entity_id: null }),
-        });
+        try {
+          const nextUi = await fetchJson<UiState>("/api/ui/select-item", {
+            method: "POST",
+            body: JSON.stringify({ kind: null, entity_id: null }),
+          });
+          const preserveCamera =
+            pendingLocalCameraRef.current !== null ||
+            cameraSyncTimerRef.current !== null ||
+            cameraPutInFlightRef.current;
+          startTransition(() => {
+            setState((previous) => ({
+              ...previous,
+              ui: mergeUiPreferringLocalCamera(
+                previous.ui,
+                nextUi,
+                preserveCamera,
+              ),
+            }));
+          });
+        } catch (selectError) {
+          reportActionError("Clear map selection failed", selectError);
+        }
         await fetchJson("/api/navigate", {
           method: "POST",
           body: JSON.stringify({ x, y }),
@@ -886,7 +905,7 @@ export default function App(): React.ReactElement {
         reportActionError("Navigation request failed", error);
       }
     },
-    [appendActivity, issueUiCommand, reportActionError],
+    [appendActivity, reportActionError],
   );
 
   const handleGoToItem = React.useCallback(

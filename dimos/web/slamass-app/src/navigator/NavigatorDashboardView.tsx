@@ -13,10 +13,7 @@ import { MapPane } from "../MapPane";
 import { defaultRobotOperatorHoverCard } from "../robotOperatorLabel";
 import { OperatorRail, SelectedSemanticPreview } from "../OperatorRail";
 import { PanelShell } from "../PanelShell";
-import { SaveMapGlyphs } from "../SaveMapGlyphs";
 import { SettingsCogGlyphs } from "../SettingsCogGlyphs";
-import { StopStackGlyphs } from "../StopStackGlyphs";
-import { TeleopGlyphs } from "../TeleopGlyphs";
 import {
   buildSemanticItems,
   resolveSelectedPoi,
@@ -332,60 +329,6 @@ export function NavigatorDashboardView(
 
   const navigatorMapHeaderActions = (
     <div className="topbar-actions polaris-navigator-map-header-actions">
-      <button
-        aria-label={teleopEnabled ? "Teleop on — click to disarm" : "Teleop off — click to arm"}
-        className={`action-button settings-cog-button ${teleopEnabled ? "danger" : "success"}`}
-        disabled={busyAction === "system-stop"}
-        onClick={() => {
-          handleToggleTeleop();
-        }}
-        title={teleopEnabled ? "Teleop armed — click to disarm" : "Teleop disarmed — click to arm"}
-        type="button"
-      >
-        <TeleopGlyphs />
-        <span className="sr-only">
-          {teleopEnabled ? "Teleop on" : "Teleop off"}
-        </span>
-      </button>
-
-      <button
-        aria-busy={busyAction === "system-stop"}
-        aria-label={
-          busyAction === "system-stop"
-            ? "Stopping DimOS stack"
-            : "Stop DimOS stack"
-        }
-        className="action-button danger settings-cog-button navigator-toolbar-stop-icon"
-        disabled={busyAction === "system-stop"}
-        onClick={() => {
-          void handleStopDimos();
-        }}
-        title={
-          busyAction === "system-stop"
-            ? "Stopping…"
-            : "Stop DimOS stack (SIGTERM)"
-        }
-        type="button"
-      >
-        <StopStackGlyphs />
-        {busyAction === "system-stop" ? (
-          <span className="sr-only">Stopping</span>
-        ) : null}
-      </button>
-
-      <button
-        aria-label="Save map"
-        className="action-button secondary settings-cog-button"
-        disabled={busyAction !== null || state.map === null}
-        onClick={() => {
-          void handleSaveMap();
-        }}
-        title="Save map"
-        type="button"
-      >
-        <SaveMapGlyphs />
-      </button>
-
       <NavigatorMapControlsHover
         busyAction={busyAction}
         connected={state.connected}
@@ -585,7 +528,7 @@ export function NavigatorDashboardView(
         >
           <div className="polaris-navigator-operations-column polaris-navigator-map">
             <div className="polaris-navigator-operations-inner polaris-navigator-operations-body">
-              <NavigatorOperatorFleet inspection={state.inspection} />
+              <NavigatorOperatorFleet />
 
               <NavigatorOptionCard
                 bodyVariant="scroll"

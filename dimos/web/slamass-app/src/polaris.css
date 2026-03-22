@@ -2536,31 +2536,6 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
-.polaris-nav-operators-view-all {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: #475569;
-  text-decoration: none;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.polaris-nav-operators-view-all:hover {
-  color: #0f172a;
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-}
-
-.polaris-nav-operators-view-all:focus {
-  outline: none;
-}
-
-.polaris-nav-operators-view-all:focus-visible {
-  border-radius: 4px;
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #94a3b8;
-}
-
 .polaris-nav-operators-header-aside {
   display: flex;
   flex-wrap: wrap;
@@ -2753,14 +2728,6 @@
 .polaris-nav-operators-embed-cta-fake.polaris-operator-card-cta {
   pointer-events: none;
   cursor: default;
-}
-
-.polaris-nav-operators-embed-mission .polaris-operator-card-meta-value {
-  overflow: hidden;
-  font-weight: 600;
-  color: #2563eb;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .polaris-nav-layer-row {
@@ -3326,6 +3293,11 @@
   flex-shrink: 0;
   align-self: center;
   z-index: 6;
+}
+
+.polaris-navigator-root .polaris-navigator-map-header-actions .polaris-map-controls-dock__label {
+  font-weight: 400;
+  color: #64748b;
 }
 
 .polaris-navigator-root .polaris-navigator-map-header-actions .polaris-map-controls-dock__trigger {
