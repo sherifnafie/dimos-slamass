@@ -1693,3 +1693,54 @@ img {
     grid-template-columns: 1fr;
   }
 }
+
+/* Polaris `/polaris/navigator` — mirror main app layout with light tokens */
+.app-shell--light {
+  color-scheme: light;
+  --background: #f1f5f9;
+  --background-elevated: rgba(255, 255, 255, 0.96);
+  --panel: #ffffff;
+  --panel-soft: rgba(15, 23, 42, 0.04);
+  --panel-muted: rgba(15, 23, 42, 0.03);
+  --border: rgba(15, 23, 42, 0.1);
+  --border-strong: rgba(15, 23, 42, 0.14);
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-soft: #475569;
+  --accent: #f6ad55;
+  --accent-strong: #fb923c;
+  --success: #059669;
+  --danger: #dc2626;
+  --shadow: 0 14px 40px rgba(15, 23, 42, 0.1);
+  color: var(--text);
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+.app-shell--light .app-shell-noise {
+  opacity: 0.45;
+}
+
+.app-shell--light .toolbar-chip,
+.app-shell--light .status-pill,
+.app-shell--light .pose-pill,
+.app-shell--light .score-pill,
+.app-shell--light .mini-button,
+.app-shell--light .map-meta span,
+.app-shell--light .map-tool {
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--text-soft);
+}
+
+.app-shell--light .brand-mark {
+  color: #0f172a;
+}
+
+.topbar-operators-link {
+  font-weight: 600;
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+.topbar-operators-link:hover {
+  text-decoration: underline;
+}

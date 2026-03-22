@@ -22,6 +22,8 @@ from dimos.slamass.chat_agent import (
     ChatBackendResponse,
     ChatBackendToolCall,
     ChatMessage,
+    DisabledChatBackend,
+    OpenAIChatBackend,
     SlamassChatAgent,
 )
 
@@ -204,3 +206,16 @@ def test_chat_agent_tool_manifest_matches_scoped_surface() -> None:
     assert "relative_move" not in tool_names
     assert "wait" not in tool_names
     assert "execute_sport_command" not in tool_names
+
+
+def test_disabled_chat_backend_message_mentions_api_key() -> None:
+    response = DisabledChatBackend().complete([], [])
+    assert "OPENAI_API_KEY" in response.content
+    assert response.tool_calls == []
+
+
+def test_slamass_chat_agent_falls_back_without_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    agent = SlamassChatAgent(model_name="gpt-5.4")
+    assert type(agent._backend) is not OpenAIChatBackend
+    assert isinstance(agent._backend, DisabledChatBackend)

@@ -80,7 +80,7 @@ export default function PolarisCreateOperatorPage(): React.ReactElement {
       <main className="polaris-operators-main polaris-create-main min-h-[calc(100vh-7rem)] bg-white px-4 py-8 sm:px-8 sm:py-10">
         <div className="polaris-operators-inner polaris-fade-stagger polaris-fade-stagger--create mx-auto w-full max-w-3xl">
           <a
-            className="polaris-configurator-back polaris-create-back"
+            className="polaris-navigator-back polaris-create-back"
             data-testid="polaris-create-back"
             href="/polaris/operators"
           >

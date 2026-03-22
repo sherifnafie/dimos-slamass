@@ -2,7 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 
 import App from "./App";
-import PolarisConfiguratorPage from "./PolarisConfiguratorPage";
+import PolarisNavigatorPage from "./PolarisNavigatorPage";
 import PolarisCreateOperatorPage from "./PolarisCreateOperatorPage";
 import PolarisLanderPage from "./PolarisLanderPage";
 import PolarisPage from "./PolarisPage";
@@ -17,15 +17,15 @@ function normalizePathname(): string {
   return window.location.pathname.replace(/\/+$/, "") || "/";
 }
 
-type PolarisEntry = "none" | "lander" | "operators" | "configurator" | "create";
+type PolarisEntry = "none" | "lander" | "operators" | "navigator" | "create";
 
 function getPolarisEntry(): PolarisEntry {
   const path = normalizePathname();
   if (path === "/polaris/operators" || path === "/operators") {
     return "operators";
   }
-  if (path === "/polaris/configurator") {
-    return "configurator";
+  if (path === "/polaris/navigator" || path === "/polaris/configurator") {
+    return "navigator";
   }
   if (path === "/polaris/create" || path === "/create") {
     return "create";
@@ -42,8 +42,8 @@ createRoot(container).render(
   <React.StrictMode>
     {polarisEntry === "operators" ? (
       <PolarisPage />
-    ) : polarisEntry === "configurator" ? (
-      <PolarisConfiguratorPage />
+    ) : polarisEntry === "navigator" ? (
+      <PolarisNavigatorPage />
     ) : polarisEntry === "create" ? (
       <PolarisCreateOperatorPage />
     ) : polarisEntry === "lander" ? (

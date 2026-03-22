@@ -26,7 +26,7 @@ type OperatorCard = {
   active?: "green" | "blue" | "grey";
   /** Shown in the image well when there is no photo (defaults to “Preview”). */
   emptyVisualLabel?: string;
-  /** Mount thumbnail under Configurator; `null` = empty slot (no image). */
+  /** Mount thumbnail under Navigator; `null` = empty slot (no image). */
   mountThumbUrl: string | null;
   /** Value next to “Mount” in meta when `mountThumbUrl` is set (default `Z1`). */
   mountValue?: string;
@@ -258,8 +258,8 @@ export default function PolarisPage(): React.ReactElement {
                     </p>
                   </div>
                   <div className="polaris-operator-card-cta-column">
-                    <a className="polaris-operator-card-cta" href="/polaris/configurator">
-                      <span className="polaris-operator-card-cta-label">Configurator</span>
+                    <a className="polaris-operator-card-cta" href="/polaris/navigator">
+                      <span className="polaris-operator-card-cta-label">Navigator</span>
                       <span aria-hidden className="polaris-operator-card-cta-icon">
                         ↗
                       </span>

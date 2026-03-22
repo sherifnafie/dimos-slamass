@@ -22,6 +22,9 @@ from typing import Any, Protocol
 
 from openai import OpenAI
 
+from dimos.utils.logging_config import setup_logger
+
+logger = setup_logger()
 
 SYSTEM_PROMPT = """You are the SLAMASS operator agent for a live robotics demo.
 
@@ -373,6 +376,24 @@ class ChatBackend(Protocol):
     ) -> ChatBackendResponse: ...
 
 
+class DisabledChatBackend:
+    """Used when ``OPENAI_API_KEY`` is unset so the SLAMASS HTTP service can still run (map, POV, etc.)."""
+
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> ChatBackendResponse:
+        _ = messages, tools
+        return ChatBackendResponse(
+            content=(
+                "Operator chat is disabled: set OPENAI_API_KEY in your environment "
+                "(for example in a repo-root `.env` file) and restart dimos-slamass."
+            ),
+            tool_calls=[],
+        )
+
+
 class OpenAIChatBackend:
     def __init__(self, model_name: str = "gpt-5.4") -> None:
         api_key = os.getenv("OPENAI_API_KEY")
@@ -413,7 +434,15 @@ class SlamassChatAgent:
         backend: ChatBackend | None = None,
         model_name: str = "gpt-5.4",
     ) -> None:
-        self._backend = backend or OpenAIChatBackend(model_name=model_name)
+        if backend is not None:
+            self._backend = backend
+        elif os.getenv("OPENAI_API_KEY"):
+            self._backend = OpenAIChatBackend(model_name=model_name)
+        else:
+            logger.warning(
+                "OPENAI_API_KEY not set; SLAMASS operator chat is disabled until it is configured"
+            )
+            self._backend = DisabledChatBackend()
         self._tools = self._build_tools()
 
     async def run_turn(
@@ -439,7 +468,7 @@ class SlamassChatAgent:
         tools_used: list[str] = []
 
         for _ in range(MAX_TOOL_ROUNDS):
-            if isinstance(self._backend, OpenAIChatBackend):
+            if type(self._backend) is OpenAIChatBackend:
                 backend_response = await asyncio.to_thread(
                     self._backend.complete,
                     messages,
@@ -610,6 +639,7 @@ __all__ = [
     "ChatMessage",
     "ChatRuntime",
     "ChatTurnResult",
+    "DisabledChatBackend",
     "OpenAIChatBackend",
     "SlamassChatAgent",
 ]

@@ -171,22 +171,21 @@ test.describe("/polaris/operators", () => {
     );
   });
 
-  test("configurator link navigates to general view", async ({ page }) => {
+  test("navigator link navigates to general view", async ({ page }) => {
     await page.goto("/polaris/operators");
-    const configurator = page
+    const navigatorLink = page
       .getByTestId("polaris-robot-slot")
       .first()
-      .getByRole("link", { name: /configurator/i });
-    await expect(configurator).toHaveAttribute("href", "/polaris/configurator");
-    await configurator.click();
-    await expect(page).toHaveURL(/\/polaris\/configurator/);
-    await expect(page.getByTestId("polaris-configurator-heading")).toHaveText("Configurator");
-    await expect(page.getByTestId("polaris-configurator-back")).toHaveAttribute(
+      .getByRole("link", { name: /navigator/i });
+    await expect(navigatorLink).toHaveAttribute("href", "/polaris/navigator");
+    await navigatorLink.click();
+    await expect(page).toHaveURL(/\/polaris\/navigator/);
+    await expect(page.getByTestId("polaris-navigator-heading")).toHaveText("SLAMASS");
+    await expect(page.getByTestId("polaris-navigator-back")).toHaveAttribute(
       "href",
       "/polaris/operators",
     );
-    await expect(page.getByRole("region", { name: "Robot capture history" })).toBeVisible();
-    await expect(page.getByRole("region", { name: "Spatial map" })).toBeVisible();
+    await expect(page.locator("main.workspace")).toBeVisible();
   });
 });
 

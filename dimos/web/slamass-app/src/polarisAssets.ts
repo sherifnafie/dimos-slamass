@@ -1,4 +1,4 @@
-/** Small Unitree tile under Configurator (first Go2 row — Go2 X). */
+/** Small Unitree tile under Navigator (first Go2 row — Go2 X). */
 export const POLARIS_OPERATOR_SELECT_THUMB_URL =
   "https://www.unitree.com/images/1c8386110a2647b8aa7dfe2a2f071648_400x400.png";
 
