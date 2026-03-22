@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import base64
 from pathlib import Path
 
 import cv2
@@ -22,6 +23,7 @@ import pytest
 from dimos.slamass.map_memory import RawCostmap
 from dimos.slamass.chat_agent import ChatTurnResult
 from dimos.slamass.service import (
+    decode_pov_frame_message,
     InspectionAnalysis,
     OpenAIInspectionAnalyzer,
     RobotPose,
@@ -33,10 +35,12 @@ from dimos.slamass.storage import SlamassStorage
 class FakeMcpClient:
     def __init__(self, image_bytes: bytes) -> None:
         self._image_bytes = image_bytes
+        self.observe_calls = 0
         self.relative_move_calls: list[tuple[float, float, float]] = []
         self.set_yolo_inference_calls: list[bool] = []
 
     def observe_jpeg(self) -> bytes:
+        self.observe_calls += 1
         return self._image_bytes
 
     async def relative_move(
@@ -136,6 +140,18 @@ def make_test_jpeg() -> bytes:
     return encoded.tobytes()
 
 
+def test_decode_pov_frame_message_roundtrips_jpeg_bytes() -> None:
+    image_bytes = make_test_jpeg()
+
+    decoded = decode_pov_frame_message(
+        {
+            "image_base64": base64.b64encode(image_bytes).decode("ascii"),
+        }
+    )
+
+    assert decoded == image_bytes
+
+
 def test_openai_inspection_analyzer_uses_slamass_default_model() -> None:
     analyzer = OpenAIInspectionAnalyzer()
 
@@ -162,6 +178,28 @@ async def test_service_inspect_now_creates_and_dedupes_poi(tmp_path: Path) -> No
     assert result_two["status"] == "accepted"
     assert len(storage.list_pois()) == 1
     assert len(service.pois) == 1
+
+
+@pytest.mark.asyncio
+async def test_service_prefers_live_socket_pov_over_observe_polling(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_mcp = FakeMcpClient(make_test_jpeg())
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=fake_mcp,
+        analyzer=FakeAnalyzer(),
+    )
+    live_frame = make_test_jpeg()
+
+    await service._handle_live_pov_frame(live_frame)
+
+    assert service.latest_pov_jpeg == live_frame
+    assert service.pov_seq == 1
+    assert service._socket_pov_is_fresh() is True
+    assert fake_mcp.observe_calls == 0
 
 
 @pytest.mark.asyncio

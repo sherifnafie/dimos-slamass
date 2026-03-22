@@ -74,6 +74,7 @@ DEFAULT_POV_POLL_INTERVAL_SECONDS = 0.25
 MIN_POV_POLL_INTERVAL_SECONDS = 0.05
 DEFAULT_POV_MAX_WIDTH = 1024
 DEFAULT_POV_JPEG_QUALITY = 76
+MAP_SOCKET_POV_STALE_AFTER_SECONDS = 0.75
 INSPECTION_MODE_AI_GATE = "ai_gate"
 INSPECTION_MODE_ALWAYS_CREATE = "always_create"
 SEMANTIC_KIND_POI = "vlm_poi"
@@ -543,6 +544,16 @@ def decode_raw_costmap_message(payload: dict[str, Any]) -> RawCostmap:
     )
 
 
+def decode_pov_frame_message(payload: dict[str, Any]) -> bytes | None:
+    encoded = payload.get("image_base64")
+    if not isinstance(encoded, str) or not encoded:
+        return None
+    try:
+        return base64.b64decode(encoded)
+    except Exception:
+        return None
+
+
 def np_frombuffer_int8(data: bytes, rows: int, cols: int) -> Any:
     import numpy as np
 
@@ -641,6 +652,7 @@ class MapSocketClient:
         on_pose: Any,
         on_path: Any,
         on_raw_costmap: Any,
+        on_pov_frame: Any,
         on_yolo_detections: Any,
     ) -> None:
         self.url = url
@@ -648,6 +660,7 @@ class MapSocketClient:
         self._on_pose = on_pose
         self._on_path = on_path
         self._on_raw_costmap = on_raw_costmap
+        self._on_pov_frame = on_pov_frame
         self._on_yolo_detections = on_yolo_detections
         self._client = socketio.AsyncClient(reconnection=True)
         self._stopped = False
@@ -743,6 +756,13 @@ class MapSocketClient:
         async def on_raw_costmap(data: dict[str, Any]) -> None:
             await self._on_raw_costmap(decode_raw_costmap_message(data))
 
+        @self._client.on("pov_frame")
+        async def on_pov_frame(data: dict[str, Any]) -> None:
+            frame_bytes = decode_pov_frame_message(data)
+            if frame_bytes is None:
+                return
+            await self._on_pov_frame(frame_bytes)
+
         @self._client.on("yolo_detections")
         async def on_yolo_detections(data: dict[str, Any]) -> None:
             await self._on_yolo_detections(data)
@@ -755,6 +775,8 @@ class MapSocketClient:
                 await on_path(data["path"])
             if "raw_costmap" in data:
                 await on_raw_costmap(data["raw_costmap"])
+            if "pov_frame" in data:
+                await on_pov_frame(data["pov_frame"])
             if "yolo_detections" in data:
                 await on_yolo_detections(data["yolo_detections"])
 
@@ -813,6 +835,7 @@ class SlamassService:
             on_pose=self._handle_pose,
             on_path=self._handle_path,
             on_raw_costmap=self._handle_raw_costmap,
+            on_pov_frame=self._handle_live_pov_frame,
             on_yolo_detections=self._handle_yolo_detections,
         )
         self._tasks: list[asyncio.Task[None]] = []
@@ -833,6 +856,7 @@ class SlamassService:
         )
         self._pov_max_width = max(1, pov_max_width) if pov_max_width is not None and pov_max_width > 0 else None
         self._pov_jpeg_quality = max(1, min(100, pov_jpeg_quality))
+        self._last_socket_pov_monotonic = 0.0
 
         self.robot_pose: RobotPose | None = None
         self.path: list[list[float]] = []
@@ -1869,9 +1893,34 @@ class SlamassService:
         for object_payload in published_objects:
             await self.publish_event("yolo_object_upserted", object_payload)
 
+    async def _handle_live_pov_frame(self, image_bytes: bytes) -> None:
+        async with self._state_lock:
+            self._last_socket_pov_monotonic = time.monotonic()
+            self.latest_pov_jpeg = image_bytes
+            self.pov_seq += 1
+            self.pov_updated_at = utc_now_iso()
+        await self.publish_event("state_updated", await self._state_delta())
+
+    def _socket_pov_is_fresh(self) -> bool:
+        if self._last_socket_pov_monotonic <= 0.0:
+            return False
+        return (
+            time.monotonic() - self._last_socket_pov_monotonic
+            <= MAP_SOCKET_POV_STALE_AFTER_SECONDS
+        )
+
     async def _pov_loop(self) -> None:
         next_poll_at = time.monotonic()
         while not self._stopped:
+            if self._socket_pov_is_fresh():
+                next_poll_at += self._pov_poll_interval_seconds
+                sleep_for = next_poll_at - time.monotonic()
+                if sleep_for > 0:
+                    await asyncio.sleep(sleep_for)
+                else:
+                    next_poll_at = time.monotonic()
+                    await asyncio.sleep(0)
+                continue
             try:
                 image_bytes = await self._observe_jpeg()
                 if image_bytes is not None:
