@@ -1498,6 +1498,13 @@ class SlamassService:
         answer = await asyncio.to_thread(self._chat_vlm.query, dimos_image, prompt)
         return {"ok": True, "answer": answer}
 
+    async def chat_speak_text(self, *, text: str) -> dict[str, Any]:
+        message = text.strip()
+        if not message:
+            return {"ok": False, "error": "Text must not be empty"}
+        result = await self.mcp_client.call_tool_text("speak", {"text": message})
+        return {"ok": True, "result": result}
+
     async def chat_relative_move(
         self,
         *,

@@ -38,6 +38,7 @@ Operating rules:
 - Prefer go_to_semantic_item for meaningful destinations.
 - Use inspect_now when the user asks to inspect, refresh, or capture the current place.
 - Use look_current_view when the question is about what the robot sees right now or when the saved map memory is insufficient.
+- Use speak_text when the robot should say something out loud through its speaker.
 - Use set_yolo_runtime only when the user asks to pause or resume live YOLO labeling.
 - Use save_map only when the user explicitly asks to save or checkpoint the current SLAMASS map.
 - If the result is ambiguous, highlight the best candidates and ask one short clarification question.
@@ -296,6 +297,24 @@ EXPOSED_FUNCTION_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "speak_text",
+            "description": "Speak a short sentence out loud through the robot speaker.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "What the robot should say out loud. Keep it short and presenter-friendly.",
+                    },
+                },
+                "required": ["text"],
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
 
 
@@ -349,6 +368,8 @@ class ChatRuntime(Protocol):
     async def chat_inspect_now(self) -> dict[str, Any]: ...
 
     async def chat_look_current_view(self, *, query: str) -> dict[str, Any]: ...
+
+    async def chat_speak_text(self, *, text: str) -> dict[str, Any]: ...
 
     async def chat_relative_move(
         self,
@@ -556,6 +577,8 @@ class SlamassChatAgent:
                 return await runtime.chat_inspect_now()
             if tool_call.name == "look_current_view":
                 return await runtime.chat_look_current_view(query=str(arguments.get("query", "")))
+            if tool_call.name == "speak_text":
+                return await runtime.chat_speak_text(text=str(arguments.get("text", "")))
         except Exception as exc:
             return {"ok": False, "error": str(exc), "tool": tool_call.name}
 

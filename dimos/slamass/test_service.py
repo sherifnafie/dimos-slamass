@@ -38,6 +38,7 @@ class FakeMcpClient:
         self.observe_calls = 0
         self.relative_move_calls: list[tuple[float, float, float]] = []
         self.cancel_navigation_goal_calls = 0
+        self.tool_text_calls: list[tuple[str, dict[str, object]]] = []
         self.set_yolo_inference_calls: list[bool] = []
 
     def observe_jpeg(self) -> bytes | None:
@@ -57,6 +58,23 @@ class FakeMcpClient:
     async def set_yolo_inference(self, *, enabled: bool) -> str:
         self.set_yolo_inference_calls.append(enabled)
         return f"YOLO inference {'enabled' if enabled else 'disabled'}."
+
+    async def call_tool_text(
+        self,
+        name: str,
+        arguments: dict[str, object] | None = None,
+        *,
+        request_id: str | None = None,
+    ) -> str:
+        payload = arguments or {}
+        self.tool_text_calls.append((name, payload))
+        if name == "speak":
+            return f"Spoke: {payload.get('text', '')}"
+        if name == "set_yolo_inference":
+            enabled = bool(payload.get("enabled"))
+            self.set_yolo_inference_calls.append(enabled)
+            return f"YOLO inference {'enabled' if enabled else 'disabled'}."
+        return f"Called {name}"
 
 
 class FakeMapClient:
@@ -130,6 +148,11 @@ class FakeChatAgent:
             {
                 "name": "look_current_view",
                 "description": "Inspect the current view.",
+                "parameters": [],
+            },
+            {
+                "name": "speak_text",
+                "description": "Speak through the robot speaker.",
                 "parameters": [],
             },
         ]
@@ -869,7 +892,28 @@ async def test_service_chat_tools_manifest_reflects_exposed_agent_tools(tmp_path
     assert "search_semantic_memory" in tool_names
     assert "go_to_semantic_item" in tool_names
     assert "look_current_view" in tool_names
+    assert "speak_text" in tool_names
     assert "relative_move" not in tool_names
+
+
+@pytest.mark.asyncio
+async def test_service_chat_speak_text_calls_mcp_speak(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_mcp = FakeMcpClient(make_test_jpeg())
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=fake_mcp,
+        analyzer=FakeAnalyzer(),
+        chat_agent=FakeChatAgent(),
+    )
+
+    result = await service.chat_speak_text(text="Hello operators.")
+
+    assert result == {"ok": True, "result": "Spoke: Hello operators."}
+    assert fake_mcp.tool_text_calls[-1] == ("speak", {"text": "Hello operators."})
 
 
 @pytest.mark.asyncio

@@ -102,6 +102,10 @@ class FakeRuntime:
     async def chat_look_current_view(self, *, query: str) -> dict[str, Any]:
         raise NotImplementedError
 
+    async def chat_speak_text(self, *, text: str) -> dict[str, Any]:
+        self.calls.append(("speak_text", {"text": text}))
+        return {"ok": True, "result": f"Spoke: {text}"}
+
     async def chat_relative_move(
         self,
         *,
@@ -155,6 +159,30 @@ class SequentialBackend:
         return ChatBackendResponse(content="Updated the map view and saved the map.", tool_calls=[])
 
 
+class SpeakBackend:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> ChatBackendResponse:
+        self.calls += 1
+        if self.calls == 1:
+            return ChatBackendResponse(
+                content="",
+                tool_calls=[
+                    ChatBackendToolCall(
+                        call_id="call_speak",
+                        name="speak_text",
+                        arguments_json='{"text": "Hello from SLAMASS."}',
+                    )
+                ],
+            )
+        return ChatBackendResponse(content="I announced it over the speaker.", tool_calls=[])
+
+
 @pytest.mark.asyncio
 async def test_chat_agent_dispatches_layer_and_save_tools() -> None:
     agent = SlamassChatAgent(backend=SequentialBackend())
@@ -182,6 +210,22 @@ async def test_chat_agent_dispatches_layer_and_save_tools() -> None:
     ]
 
 
+@pytest.mark.asyncio
+async def test_chat_agent_dispatches_speak_tool() -> None:
+    agent = SlamassChatAgent(backend=SpeakBackend())
+    runtime = FakeRuntime()
+
+    result = await agent.run_turn(
+        runtime,
+        history=[],
+        user_message="Ask the robot to greet the room.",
+    )
+
+    assert result.content == "I announced it over the speaker."
+    assert result.tools_used == ["speak_text"]
+    assert runtime.calls == [("speak_text", {"text": "Hello from SLAMASS."})]
+
+
 def test_chat_agent_tool_manifest_matches_scoped_surface() -> None:
     agent = SlamassChatAgent(backend=SequentialBackend())
 
@@ -200,6 +244,7 @@ def test_chat_agent_tool_manifest_matches_scoped_surface() -> None:
         "go_to_semantic_item",
         "inspect_now",
         "look_current_view",
+        "speak_text",
     ]
     assert "relative_move" not in tool_names
     assert "wait" not in tool_names
