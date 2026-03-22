@@ -43,7 +43,21 @@ export interface UiState {
   revision: number;
   camera: UiCameraState;
   selected_item: SemanticItemRef | null;
-  highlighted_items: SemanticItemRef[];
+}
+
+export interface ActiveActionState {
+  action_id: string;
+  type: string;
+  status: string;
+  kind: SemanticKind;
+  entity_id: string;
+  started_at: string;
+  target_pose: {
+    x: number;
+    y: number;
+    yaw: number;
+  };
+  last_error: string | null;
 }
 
 export interface Poi {
@@ -165,4 +179,5 @@ export interface AppState {
   layers: LayerVisibility;
   ui: UiState;
   chat: ChatState;
+  current_action: ActiveActionState | null;
 }

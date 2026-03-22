@@ -7,6 +7,7 @@ import { OperatorRail, SelectedSemanticPreview } from "./OperatorRail";
 import { PanelShell } from "./PanelShell";
 import {
   buildSemanticItems,
+  isSameSemanticRef,
   mergePoi,
   mergeYoloObject,
   resolveSelectedPoi,
@@ -32,6 +33,7 @@ import {
   YoloObject,
   YoloRuntimeMode,
 } from "./types";
+import { ToastEntry, ToastStack } from "./ToastStack";
 
 const LAYOUT_STORAGE_KEY = "slamass-layout-mode";
 const MAX_ACTIVITY_ENTRIES = 10;
@@ -73,12 +75,12 @@ const emptyState: AppState = {
       zoom: 1,
     },
     selected_item: null,
-    highlighted_items: [],
   },
   chat: {
     running: false,
     messages: [],
   },
+  current_action: null,
 };
 
 type LayoutMode = "duo" | "trio";
@@ -92,6 +94,8 @@ type ActivityEntry = {
   detail: string;
   timestamp: string;
 };
+const MAX_TOASTS = 4;
+const TOAST_TTL_MS = 4200;
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -179,8 +183,74 @@ function toneForInspection(status: string): ActivityTone {
   return "neutral";
 }
 
-function describeSemanticItem(item: SemanticItemRef): string {
-  return item.kind === "vlm_poi" ? "POI" : "YOLO object";
+function resolveSemanticLabel(state: AppState, item: SemanticItemRef): string {
+  if (item.kind === "vlm_poi") {
+    return state.pois.find((poi) => poi.poi_id === item.entity_id)?.title ?? "saved POI";
+  }
+  return state.yolo_objects.find((object) => object.object_id === item.entity_id)?.label ?? "YOLO object";
+}
+
+function describeCurrentActionToast(
+  state: AppState,
+  action: AppState["current_action"],
+): { title: string; detail: string; tone: ActivityTone } | null {
+  if (!action) {
+    return null;
+  }
+
+  const item = { kind: action.kind, entity_id: action.entity_id } satisfies SemanticItemRef;
+  const label = resolveSemanticLabel(state, item);
+
+  if (action.status === "running") {
+    return {
+      title: `Now navigating to ${label}`,
+      detail: "Moving to the saved viewpoint pose.",
+      tone: "accent",
+    };
+  }
+  if (action.status === "arrived") {
+    return {
+      title: `Arrived at ${label}`,
+      detail: "Navigation finished and the saved viewpoint is restored.",
+      tone: "success",
+    };
+  }
+  if (action.status === "cancelled") {
+    return {
+      title: `Navigation cancelled for ${label}`,
+      detail: action.last_error ?? "The active navigation was cancelled.",
+      tone: "accent",
+    };
+  }
+  if (action.status === "timed_out") {
+    return {
+      title: `Navigation timed out for ${label}`,
+      detail: action.last_error ?? "The robot did not reach the saved viewpoint in time.",
+      tone: "danger",
+    };
+  }
+  if (action.status === "failed") {
+    return {
+      title: `Navigation failed for ${label}`,
+      detail: action.last_error ?? "The navigation request failed.",
+      tone: "danger",
+    };
+  }
+  return null;
+}
+
+function currentActionSignature(action: AppState["current_action"]): string {
+  if (!action) {
+    return "none";
+  }
+  return [
+    action.action_id,
+    action.status,
+    action.last_error ?? "",
+    action.target_pose.x,
+    action.target_pose.y,
+    action.target_pose.yaw,
+  ].join("|");
 }
 
 export default function App(): React.ReactElement {
@@ -193,6 +263,7 @@ export default function App(): React.ReactElement {
   const [agentToolsLoading, setAgentToolsLoading] = React.useState(false);
   const [agentToolsError, setAgentToolsError] = React.useState<string | null>(null);
   const [agentTools, setAgentTools] = React.useState<ChatToolDefinition[] | null>(null);
+  const [toasts, setToasts] = React.useState<ToastEntry[]>([]);
   const [activityEntries, setActivityEntries] = React.useState<ActivityEntry[]>(() => [
     {
       id: "boot",
@@ -211,9 +282,12 @@ export default function App(): React.ReactElement {
   const teleopErrorMessageRef = React.useRef<string | null>(null);
   const controlsMenuRef = React.useRef<HTMLDivElement>(null);
   const activityCounterRef = React.useRef(1);
+  const toastCounterRef = React.useRef(1);
+  const toastTimersRef = React.useRef<Map<string, number>>(new Map());
   const stateRef = React.useRef<AppState>(emptyState);
   const lastConnectedRef = React.useRef<boolean | null>(null);
   const lastInspectionRef = React.useRef<string>("");
+  const lastCurrentActionSignatureRef = React.useRef<string>("");
   const mapReadyRef = React.useRef(false);
   const didLogInitialSnapshotRef = React.useRef(false);
 
@@ -270,17 +344,67 @@ export default function App(): React.ReactElement {
     [],
   );
 
+  const dismissToast = React.useCallback((toastId: string) => {
+    const timerId = toastTimersRef.current.get(toastId);
+    if (timerId !== undefined) {
+      window.clearTimeout(timerId);
+      toastTimersRef.current.delete(toastId);
+    }
+    setToasts((previous) => previous.filter((toast) => toast.id !== toastId));
+  }, []);
+
+  const pushToast = React.useCallback(
+    (title: string, detail: string, tone: ActivityTone = "neutral") => {
+      const toastId = `toast-${toastCounterRef.current}`;
+      toastCounterRef.current += 1;
+      setToasts((previous) => {
+        const next = [...previous, { id: toastId, title, detail, tone }];
+        if (next.length <= MAX_TOASTS) {
+          return next;
+        }
+        const dropped = next[0];
+        const timerIdToClear = toastTimersRef.current.get(dropped.id);
+        if (timerIdToClear !== undefined) {
+          window.clearTimeout(timerIdToClear);
+          toastTimersRef.current.delete(dropped.id);
+        }
+        return next.slice(-MAX_TOASTS);
+      });
+      const timerId = window.setTimeout(() => {
+        toastTimersRef.current.delete(toastId);
+        setToasts((previous) => previous.filter((toast) => toast.id !== toastId));
+      }, TOAST_TTL_MS);
+      toastTimersRef.current.set(toastId, timerId);
+    },
+    [],
+  );
+
   const reportActionError = React.useCallback(
     (title: string, error: unknown) => {
       const message = error instanceof Error ? error.message : "Request failed";
       appendActivity("system", title, message, "danger");
+      pushToast(title, message, "danger");
     },
-    [appendActivity],
+    [appendActivity, pushToast],
   );
 
   React.useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  React.useEffect(() => {
+    const signature = currentActionSignature(state.current_action);
+    if (signature === lastCurrentActionSignatureRef.current) {
+      return;
+    }
+    lastCurrentActionSignatureRef.current = signature;
+    const announcement = describeCurrentActionToast(state, state.current_action);
+    if (!announcement) {
+      return;
+    }
+    appendActivity("system", announcement.title, announcement.detail, announcement.tone);
+    pushToast(announcement.title, announcement.detail, announcement.tone);
+  }, [appendActivity, pushToast, state, state.current_action]);
 
   React.useEffect(() => {
     return () => {
@@ -290,6 +414,10 @@ export default function App(): React.ReactElement {
       if (teleopIntervalRef.current !== null) {
         window.clearInterval(teleopIntervalRef.current);
       }
+      for (const timerId of toastTimersRef.current.values()) {
+        window.clearTimeout(timerId);
+      }
+      toastTimersRef.current.clear();
     };
   }, []);
 
@@ -383,6 +511,7 @@ export default function App(): React.ReactElement {
 
         lastConnectedRef.current = data.connected;
         lastInspectionRef.current = inspectionSignature(data.inspection);
+        lastCurrentActionSignatureRef.current = currentActionSignature(data.current_action);
         mapReadyRef.current = data.map !== null;
 
         if (!didLogInitialSnapshotRef.current) {
@@ -514,12 +643,16 @@ export default function App(): React.ReactElement {
       const signature = inspectionSignature(payload);
       if (signature !== lastInspectionRef.current) {
         lastInspectionRef.current = signature;
+        const inspectionTone = toneForInspection(payload.status);
         appendActivity(
           "system",
           `Inspection ${payload.status}`,
           payload.message || "Inspection state changed.",
-          toneForInspection(payload.status),
+          inspectionTone,
         );
+        if (payload.message) {
+          pushToast(`Inspection ${payload.status}`, payload.message, inspectionTone);
+        }
       }
       startTransition(() => {
         setState((previous) => ({ ...previous, inspection: payload }));
@@ -542,7 +675,7 @@ export default function App(): React.ReactElement {
       cancelled = true;
       source.close();
     };
-  }, [appendActivity, mergeUiState, reportActionError]);
+  }, [appendActivity, mergeUiState, pushToast, reportActionError]);
 
   const handleInspectNow = React.useCallback(async () => {
     appendActivity("operator", "Inspect", "Manual semantic inspection started.", "accent");
@@ -562,12 +695,13 @@ export default function App(): React.ReactElement {
     try {
       await fetchJson("/api/map/save", { method: "POST" });
       appendActivity("system", "Map saved", "Checkpoint written.", "success");
+      pushToast("Map saved", "Checkpoint written to persistent storage.", "success");
     } catch (error) {
       reportActionError("Save map failed", error);
     } finally {
       setBusyAction(null);
     }
-  }, [appendActivity, reportActionError]);
+  }, [appendActivity, pushToast, reportActionError]);
 
   const handleClearLowLevelMapMemory = React.useCallback(async () => {
     const confirmed = window.confirm(
@@ -629,12 +763,12 @@ export default function App(): React.ReactElement {
           ui: {
             ...previous.ui,
             selected_item: null,
-            highlighted_items: [],
           },
           chat: {
             running: false,
             messages: [],
           },
+          current_action: null,
         }));
       });
       appendActivity(
@@ -768,7 +902,8 @@ export default function App(): React.ReactElement {
   const handleGoToItem = React.useCallback(
     async (item: SemanticItemRef) => {
       const actionKey = `go-${item.kind}-${item.entity_id}`;
-      appendActivity("operator", "Go to item", describeSemanticItem(item), "accent");
+      const label = resolveSemanticLabel(stateRef.current, item);
+      appendActivity("operator", "Go to item", label, "accent");
       setBusyAction(actionKey);
       try {
         if (item.kind === "vlm_poi") {
@@ -810,6 +945,9 @@ export default function App(): React.ReactElement {
 
   const handleSelectItem = React.useCallback(
     async (item: SemanticItemRef | null) => {
+      if (isSameSemanticRef(stateRef.current.ui.selected_item, item)) {
+        return;
+      }
       startTransition(() => {
         setState((previous) => ({
           ...previous,
@@ -833,70 +971,6 @@ export default function App(): React.ReactElement {
     },
     [issueUiCommand, reportActionError],
   );
-
-  const handleFocusItem = React.useCallback(
-    async (item: SemanticItemRef) => {
-      try {
-        await issueUiCommand(`/api/ui/focus-item/${item.kind}/${item.entity_id}`, {
-          method: "POST",
-          body: JSON.stringify({}),
-        });
-      } catch (error) {
-        reportActionError("Focus item failed", error);
-      }
-    },
-    [issueUiCommand, reportActionError],
-  );
-
-  const handleHighlightItem = React.useCallback(
-    async (item: SemanticItemRef) => {
-      try {
-        await issueUiCommand("/api/ui/highlight-items", {
-          method: "POST",
-          body: JSON.stringify({
-            items: [item],
-            selected_item: item,
-          }),
-        });
-      } catch (error) {
-        reportActionError("Highlight item failed", error);
-      }
-    },
-    [issueUiCommand, reportActionError],
-  );
-
-  const handleFocusMap = React.useCallback(async () => {
-    try {
-      await issueUiCommand("/api/ui/focus-map", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-    } catch (error) {
-      reportActionError("Fit map failed", error);
-    }
-  }, [issueUiCommand, reportActionError]);
-
-  const handleFocusRobot = React.useCallback(async () => {
-    try {
-      await issueUiCommand("/api/ui/focus-robot", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-    } catch (error) {
-      reportActionError("Focus robot failed", error);
-    }
-  }, [issueUiCommand, reportActionError]);
-
-  const handleClearFocus = React.useCallback(async () => {
-    try {
-      await issueUiCommand("/api/ui/clear-focus", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-    } catch (error) {
-      reportActionError("Clear focus failed", error);
-    }
-  }, [issueUiCommand, reportActionError]);
 
   const handleToggleTeleop = React.useCallback(() => {
     teleopKeysRef.current.clear();
@@ -1295,18 +1369,6 @@ export default function App(): React.ReactElement {
             layers={state.layers}
             map={state.map}
             onCameraChange={queueCameraSync}
-            onClearFocus={() => {
-              void handleClearFocus();
-            }}
-            onFocusItem={(item) => {
-              void handleFocusItem(item);
-            }}
-            onFocusMap={() => {
-              void handleFocusMap();
-            }}
-            onFocusRobot={() => {
-              void handleFocusRobot();
-            }}
             onNavigate={(x, y) => {
               void handleNavigate(x, y);
             }}
@@ -1330,17 +1392,8 @@ export default function App(): React.ReactElement {
             onResetChat={() => {
               void handleResetChat();
             }}
-            onClearFocus={() => {
-              void handleClearFocus();
-            }}
-            onFocusItem={(item) => {
-              void handleFocusItem(item);
-            }}
             onGoToItem={(item) => {
               void handleGoToItem(item);
-            }}
-            onHighlightItem={(item) => {
-              void handleHighlightItem(item);
             }}
             onSelectItem={(item) => {
               void handleSelectItem(item);
@@ -1353,6 +1406,11 @@ export default function App(): React.ReactElement {
           />
         ) : null}
       </main>
+
+      <ToastStack
+        onDismiss={dismissToast}
+        toasts={toasts}
+      />
 
       {selectedPoi || selectedYoloObject ? (
         <div
@@ -1409,24 +1467,6 @@ export default function App(): React.ReactElement {
                   ) : null}
 
                   <div className="poi-actions">
-                    <button
-                      className="action-button secondary"
-                      onClick={() => {
-                        void handleHighlightItem({ kind: "vlm_poi", entity_id: selectedPoi.poi_id });
-                      }}
-                      type="button"
-                    >
-                      Highlight
-                    </button>
-                    <button
-                      className="action-button secondary"
-                      onClick={() => {
-                        void handleFocusItem({ kind: "vlm_poi", entity_id: selectedPoi.poi_id });
-                      }}
-                      type="button"
-                    >
-                      Focus
-                    </button>
                     <button
                       className="action-button"
                       disabled={busyAction === `go-vlm_poi-${selectedPoi.poi_id}`}
@@ -1502,30 +1542,6 @@ export default function App(): React.ReactElement {
                   </div>
 
                   <div className="poi-actions">
-                    <button
-                      className="action-button secondary"
-                      onClick={() => {
-                        void handleHighlightItem({
-                          kind: "yolo_object",
-                          entity_id: selectedYoloObject.object_id,
-                        });
-                      }}
-                      type="button"
-                    >
-                      Highlight
-                    </button>
-                    <button
-                      className="action-button secondary"
-                      onClick={() => {
-                        void handleFocusItem({
-                          kind: "yolo_object",
-                          entity_id: selectedYoloObject.object_id,
-                        });
-                      }}
-                      type="button"
-                    >
-                      Focus
-                    </button>
                     <button
                       className="action-button"
                       disabled={busyAction === `go-yolo_object-${selectedYoloObject.object_id}`}

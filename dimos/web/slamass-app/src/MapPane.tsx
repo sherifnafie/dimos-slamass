@@ -58,19 +58,6 @@ function isInsideMapFrame(
   );
 }
 
-function describeHighlightState(ui: UiState): string {
-  if (ui.selected_item) {
-    return "Selected";
-  }
-  if (ui.highlighted_items.length > 1) {
-    return `${ui.highlighted_items.length} highlights`;
-  }
-  if (ui.highlighted_items.length === 1) {
-    return "1 highlight";
-  }
-  return "No highlights";
-}
-
 function yoloLabelVisibility(zoom: number): "none" | "priority" | "all" {
   if (zoom < 1.25) {
     return "none";
@@ -92,10 +79,6 @@ type MapPaneProps = {
   onCameraChange: (camera: UiCameraState) => void;
   onNavigate: (x: number, y: number) => void;
   onSelectItem: (item: SemanticItemRef | null) => void;
-  onFocusItem: (item: SemanticItemRef) => void;
-  onFocusMap: () => void;
-  onFocusRobot: () => void;
-  onClearFocus: () => void;
 };
 
 type DragState = {
@@ -120,10 +103,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     onCameraChange,
     onNavigate,
     onSelectItem,
-    onFocusItem,
-    onFocusMap,
-    onFocusRobot,
-    onClearFocus,
   } = props;
   const [containerRef, size] = useSize<HTMLDivElement>();
   const dragStateRef = React.useRef<DragState | null>(null);
@@ -137,11 +116,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
   }, [map, size.height, size.width, ui.camera]);
 
   const selectedKey = semanticKey(ui.selected_item);
-  const highlightedKeys = React.useMemo(
-    () => new Set(ui.highlighted_items.map((item) => semanticKey(item))),
-    [ui.highlighted_items],
-  );
-  const hasHighlights = highlightedKeys.size > 0;
 
   const activePois = React.useMemo(
     () => pois.filter((poi) => poi.status !== "deleted"),
@@ -288,46 +262,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
         </div>
       ) : (
         <>
-          <div className="map-chrome">
-            <div className="map-meta">
-              <span>Pan map</span>
-              <span>{describeHighlightState(ui)}</span>
-            </div>
-            <div className="map-toolbar" onPointerDown={stopEvent}>
-              <button className="map-tool" onClick={onFocusMap} type="button">
-                Fit
-              </button>
-              <button
-                className="map-tool"
-                disabled={!robotPose}
-                onClick={onFocusRobot}
-                type="button"
-              >
-                Robot
-              </button>
-              <button
-                className="map-tool"
-                disabled={!ui.selected_item}
-                onClick={() => {
-                  if (ui.selected_item) {
-                    onFocusItem(ui.selected_item);
-                  }
-                }}
-                type="button"
-              >
-                Selected
-              </button>
-              <button
-                className="map-tool"
-                disabled={!ui.selected_item && ui.highlighted_items.length === 0}
-                onClick={onClearFocus}
-                type="button"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-
           <img
             alt="SLAMASS occupancy map"
             className="map-image"
@@ -371,14 +305,13 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const itemRef = refFromPoi(poi.poi_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
-                const isHighlighted = highlightedKeys.has(itemKey);
-                const coneLength = isSelected ? 58 : isHighlighted ? 46 : 0;
-                const coneSpread = isSelected ? 0.34 : 0.24;
+                const coneLength = isSelected ? 58 : 0;
+                const coneSpread = 0.34;
                 return (
                   <g key={`${poi.poi_id}-overlay`}>
                     {coneLength > 0 && (
                       <path
-                        className={`poi-view-cone ${isSelected ? "is-selected" : "is-highlighted"}`}
+                        className="poi-view-cone is-selected"
                         d={[
                           `M ${anchorX} ${anchorY}`,
                           `L ${anchorX + Math.cos(poi.anchor_yaw - coneSpread) * coneLength} ${
@@ -400,12 +333,12 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                       x2={anchorX + Math.cos(poi.anchor_yaw) * 16}
                       y2={anchorY - Math.sin(poi.anchor_yaw) * 16}
                     />
-                    {(isSelected || isHighlighted) && (
+                    {isSelected && (
                       <circle
-                        className={`poi-anchor-halo ${isSelected ? "is-selected" : "is-highlighted"}`}
+                        className="poi-anchor-halo is-selected"
                         cx={anchorX}
                         cy={anchorY}
-                        r={isSelected ? 10 : 8}
+                        r={10}
                       />
                     )}
                   </g>
@@ -417,25 +350,24 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const itemRef = refFromYoloObject(object.object_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
-                const isHighlighted = highlightedKeys.has(itemKey);
                 return (
                   <g key={`${object.object_id}-marker`}>
                     <circle
-                      className={`yolo-ring ${isSelected ? "is-selected" : isHighlighted ? "is-highlighted" : ""}`}
+                      className={`yolo-ring ${isSelected ? "is-selected" : ""}`}
                       cx={x}
                       cy={y}
                       r={isSelected ? 11 : 9}
                     />
-                    {(isSelected || isHighlighted) && (
+                    {isSelected && (
                       <circle
-                        className={`yolo-halo ${isSelected ? "is-selected" : "is-highlighted"}`}
+                        className="yolo-halo is-selected"
                         cx={x}
                         cy={y}
-                        r={isSelected ? 14 : 12}
+                        r={14}
                       />
                     )}
                     <circle
-                      className={`yolo-dot ${isSelected ? "is-selected" : isHighlighted ? "is-highlighted" : ""}`}
+                      className={`yolo-dot ${isSelected ? "is-selected" : ""}`}
                       cx={x}
                       cy={y}
                       r={isSelected ? 6.5 : 5}
@@ -487,15 +419,11 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const itemRef = refFromPoi(poi.poi_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
-                const isHighlighted = highlightedKeys.has(itemKey);
-                const isMuted = hasHighlights && !isHighlighted && !isSelected;
                 return (
                   <button
                     className={[
                       "poi-pin",
                       isSelected ? "is-selected" : "",
-                      isHighlighted ? "is-highlighted" : "",
-                      isMuted ? "is-muted" : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}
@@ -527,17 +455,13 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const itemRef = refFromYoloObject(object.object_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
-                const isHighlighted = highlightedKeys.has(itemKey);
-                const isMuted = hasHighlights && !isHighlighted && !isSelected;
-                const showLabel = isSelected || isHighlighted || labeledYoloIds.has(object.object_id);
+                const showLabel = isSelected || labeledYoloIds.has(object.object_id);
                 return (
                   <button
                     className={[
                       "yolo-chip",
                       showLabel ? "has-label" : "dot-only",
                       isSelected ? "is-selected" : "",
-                      isHighlighted ? "is-highlighted" : "",
-                      isMuted ? "is-muted" : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}

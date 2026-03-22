@@ -32,10 +32,7 @@ type OperatorRailProps = {
   selectedItem: SemanticItemRef | null;
   selectedPreview: SelectedSemanticPreview | null;
   onSelectItem: (item: SemanticItemRef | null) => void;
-  onHighlightItem: (item: SemanticItemRef) => void;
-  onFocusItem: (item: SemanticItemRef) => void;
   onGoToItem: (item: SemanticItemRef) => void;
-  onClearFocus: () => void;
   onResetChat: () => void;
   onSubmitChatMessage: (message: string) => void;
 };
@@ -53,10 +50,7 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
     selectedItem,
     selectedPreview,
     onSelectItem,
-    onHighlightItem,
-    onFocusItem,
     onGoToItem,
-    onClearFocus,
     onResetChat,
     onSubmitChatMessage,
   } = props;
@@ -113,22 +107,6 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
             </div>
             <div className="rail-selected-actions">
               <button
-                className="mini-button"
-                onClick={() => onFocusItem({ kind: selectedPreview.kind, entity_id: selectedPreview.entity_id })}
-                type="button"
-              >
-                Focus
-              </button>
-              <button
-                className="mini-button"
-                onClick={() =>
-                  onHighlightItem({ kind: selectedPreview.kind, entity_id: selectedPreview.entity_id })
-                }
-                type="button"
-              >
-                Highlight
-              </button>
-              <button
                 className="mini-button mini-button-primary"
                 disabled={busyAction === `go-${selectedPreview.kind}-${selectedPreview.entity_id}`}
                 onClick={() =>
@@ -138,8 +116,8 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
               >
                 Go
               </button>
-              <button className="mini-button" onClick={() => onClearFocus()} type="button">
-                Clear
+              <button className="mini-button" onClick={() => onSelectItem(null)} type="button">
+                Close
               </button>
             </div>
           </section>

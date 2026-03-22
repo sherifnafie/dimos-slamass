@@ -2,6 +2,8 @@ import React from "react";
 
 import { ChatState } from "./types";
 
+const MAX_VISIBLE_TOOL_CHIPS = 2;
+
 type ChatPanelProps = {
   chat: ChatState;
   onResetChat: () => void;
@@ -17,6 +19,54 @@ function formatTime(value: string): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+type ChatToolSummaryProps = {
+  messageId: string;
+  toolsUsed: string[];
+};
+
+function ChatToolSummary(props: ChatToolSummaryProps): React.ReactElement {
+  const { messageId, toolsUsed } = props;
+  const [expanded, setExpanded] = React.useState(false);
+
+  if (toolsUsed.length === 0) {
+    return <></>;
+  }
+
+  const visibleTools = toolsUsed.slice(0, MAX_VISIBLE_TOOL_CHIPS);
+  const hiddenCount = Math.max(0, toolsUsed.length - MAX_VISIBLE_TOOL_CHIPS);
+  const tooltip = toolsUsed.join("\n");
+
+  return (
+    <div className="chat-tool-stack">
+      <div className="chat-tool-row">
+        {visibleTools.map((toolName) => (
+          <span key={`${messageId}-${toolName}`}>{toolName}</span>
+        ))}
+        {hiddenCount > 0 ? (
+          <button
+            aria-expanded={expanded}
+            className="chat-tool-more"
+            onClick={() => {
+              setExpanded((current) => !current);
+            }}
+            title={tooltip}
+            type="button"
+          >
+            {expanded ? "Hide tools" : `… +${hiddenCount} more`}
+          </button>
+        ) : null}
+      </div>
+      {expanded ? (
+        <div className="chat-tool-expanded" title={tooltip}>
+          {toolsUsed.map((toolName, index) => (
+            <span key={`${messageId}-${toolName}-${index}`}>{toolName}</span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function ChatPanel(props: ChatPanelProps): React.ReactElement {
@@ -47,17 +97,16 @@ export function ChatPanel(props: ChatPanelProps): React.ReactElement {
               </div>
               <p>{message.content || (message.status === "running" ? "Working..." : "No content")}</p>
               {message.tools_used.length > 0 ? (
-                <div className="chat-tool-row">
-                  {message.tools_used.map((toolName) => (
-                    <span key={`${message.message_id}-${toolName}`}>{toolName}</span>
-                  ))}
-                </div>
+                <ChatToolSummary
+                  messageId={message.message_id}
+                  toolsUsed={message.tools_used}
+                />
               ) : null}
             </article>
           ))
         ) : (
           <div className="thread-empty">
-            Ask about POIs, YOLO objects, current view, navigation, or map focus.
+            Ask about POIs, YOLO objects, the current view, or robot navigation.
           </div>
         )}
       </div>
