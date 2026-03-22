@@ -32,7 +32,7 @@ type OperatorCard = {
   mountValue?: string;
   /** If set, mount thumbnail opens this URL in a new tab. */
   mountThumbHref?: string;
-  /** When true, hovering the card shows the SLAMASS live POV in the image well. */
+  /** When true, hovering the card shows the Navigator live POV in the image well. */
   slamassPovOnHover?: boolean;
 };
 

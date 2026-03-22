@@ -19,12 +19,18 @@ function normalizePathname(): string {
 
 type PolarisEntry = "none" | "lander" | "operators" | "navigator" | "create";
 
+/** Pathnames that mount Polaris shells (short aliases mirror `/operators`, `/create`). */
 function getPolarisEntry(): PolarisEntry {
   const path = normalizePathname();
   if (path === "/polaris/operators" || path === "/operators") {
     return "operators";
   }
-  if (path === "/polaris/navigator" || path === "/polaris/configurator") {
+  if (
+    path === "/polaris/navigator" ||
+    path === "/polaris/configurator" ||
+    path === "/navigator" ||
+    path === "/configurator"
+  ) {
     return "navigator";
   }
   if (path === "/polaris/create" || path === "/create") {

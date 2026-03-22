@@ -1,7 +1,7 @@
 import type { AppState } from "./types";
 
 /**
- * SLAMASS API origin in dev. Vite serves the UI on :3001 while `dimos-slamass` listens on
+ * Navigator API origin in dev. Vite serves the UI on :3001 while `dimos-slamass` listens on
  * :7780; same-origin relative `/api` + EventSource would hit the Vite dev server, where SSE
  * proxying is unreliable. Override with `VITE_SLAMASS_API` if your API is elsewhere.
  */
@@ -25,7 +25,7 @@ function fixDevAssetUrl(url: string): string {
   return apiUrl(url);
 }
 
-/** Rewrite `/api/...` asset URLs so images load from the SLAMASS origin in dev. */
+/** Rewrite `/api/...` asset URLs so images load from the Navigator API origin in dev. */
 export function normalizeAppStateForDev(state: AppState): AppState {
   if (!import.meta.env.DEV) {
     return state;

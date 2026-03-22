@@ -15,6 +15,7 @@
   box-sizing: border-box;
   height: 100%;
   max-height: 100%;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -36,56 +37,56 @@
 /* Stagger direct children (e.g. lander hero) — operators / bento / create use modifiers */
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-) > * {
+):not(.polaris-fade-stagger--navigator) > * {
   opacity: 0;
   animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-) > *:nth-child(1) {
+):not(.polaris-fade-stagger--navigator) > *:nth-child(1) {
   animation-delay: 0.05s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-) > *:nth-child(2) {
+):not(.polaris-fade-stagger--navigator) > *:nth-child(2) {
   animation-delay: 0.11s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-) > *:nth-child(3) {
+):not(.polaris-fade-stagger--navigator) > *:nth-child(3) {
   animation-delay: 0.17s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-) > *:nth-child(4) {
+):not(.polaris-fade-stagger--navigator) > *:nth-child(4) {
   animation-delay: 0.23s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-) > *:nth-child(5) {
+):not(.polaris-fade-stagger--navigator) > *:nth-child(5) {
   animation-delay: 0.29s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-) > *:nth-child(6) {
+):not(.polaris-fade-stagger--navigator) > *:nth-child(6) {
   animation-delay: 0.35s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-) > *:nth-child(7) {
+):not(.polaris-fade-stagger--navigator) > *:nth-child(7) {
   animation-delay: 0.41s;
 }
 
 .polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
   .polaris-fade-stagger--create
-) > *:nth-child(8) {
+):not(.polaris-fade-stagger--navigator) > *:nth-child(8) {
   animation-delay: 0.47s;
 }
 
@@ -181,6 +182,25 @@
   animation-delay: 0.47s;
 }
 
+/* `/polaris/navigator` — back, title, lede (same cadence as create) */
+.polaris-fade-stagger--navigator > .polaris-navigator-back {
+  opacity: 0;
+  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.05s;
+}
+
+.polaris-fade-stagger--navigator > .polaris-operators-page-head.polaris-navigator-page-head {
+  opacity: 0;
+  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.11s;
+}
+
+.polaris-fade-stagger--navigator > .polaris-operator-card-sub.polaris-navigator-lede {
+  opacity: 0;
+  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.17s;
+}
+
 /* `/polaris` bento — section head then cards */
 .polaris-fade-stagger--bento > .polaris-lander-bento-head {
   opacity: 0;
@@ -227,6 +247,9 @@
   .polaris-fade-stagger--create > .polaris-create-rule,
   .polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-pick-grid > .polaris-create-pick-cell,
   .polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-progress-line,
+  .polaris-fade-stagger--navigator > .polaris-navigator-back,
+  .polaris-fade-stagger--navigator > .polaris-operators-page-head.polaris-navigator-page-head,
+  .polaris-fade-stagger--navigator > .polaris-operator-card-sub.polaris-navigator-lede,
   .polaris-fade-stagger--bento > .polaris-lander-bento-head,
   .polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card {
     animation: none !important;
@@ -296,6 +319,17 @@
   flex-shrink: 0;
 }
 
+.polaris-root .polaris-header .polaris-menu-button .polaris-menu-star {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  font-size: 1.35rem;
+  font-weight: 300;
+  line-height: 1;
+  color: #334155;
+}
+
 .polaris-root .polaris-header .polaris-menu-button .polaris-menu-bar {
   display: block !important;
   box-sizing: border-box !important;
@@ -313,6 +347,10 @@
 
 .polaris-root .polaris-header .polaris-menu-button:hover .polaris-menu-bar {
   background-color: #0f172a !important;
+}
+
+.polaris-root .polaris-header .polaris-menu-button:hover .polaris-menu-star {
+  color: #0f172a;
 }
 
 /* Primary nav title (header) — links to `/polaris`. */
@@ -484,27 +522,14 @@
 }
 
 .polaris-lander-arc-apex-glyph {
-  display: block;
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 50%;
-  background: conic-gradient(
-    #94a3b8 0deg 28deg,
-    transparent 28deg 52deg,
-    #cbd5e1 52deg 80deg,
-    transparent 80deg 104deg,
-    #94a3b8 104deg 132deg,
-    transparent 132deg 156deg,
-    #cbd5e1 156deg 184deg,
-    transparent 184deg 208deg,
-    #94a3b8 208deg 236deg,
-    transparent 236deg 260deg,
-    #cbd5e1 260deg 288deg,
-    transparent 288deg 312deg,
-    #94a3b8 312deg 340deg,
-    transparent 340deg 360deg
-  );
-  opacity: 0.72;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  font-weight: 300;
+  line-height: 1;
+  color: #64748b;
+  opacity: 0.88;
 }
 
 /* `/polaris` lander hero — match header `.polaris-title` weight / tracking / tone */
@@ -539,40 +564,6 @@
     font-size: 1rem;
     max-width: 40rem;
   }
-}
-
-.polaris-lander-cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.55rem 1.15rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  background: #fff;
-  font-size: 0.875rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: #0f172a;
-  text-decoration: none;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.polaris-lander-cta:hover {
-  border-color: rgba(15, 23, 42, 0.2);
-  background: #f8fafc;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
-}
-
-.polaris-lander-cta:focus {
-  outline: none;
-}
-
-.polaris-lander-cta:focus-visible {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #a3a3a3;
 }
 
 /*
@@ -1636,9 +1627,13 @@
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
 
-.polaris-sidebar-close svg {
-  width: 1.25rem;
-  height: 1.25rem;
+.polaris-sidebar-close .polaris-sidebar-close-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 300;
+  line-height: 1;
 }
 
 .polaris-sidebar-panel {
@@ -1655,30 +1650,20 @@
   -webkit-font-smoothing: antialiased;
 }
 
-.polaris-sidebar-panel--glass {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
+/* Flat white panel — typography + control chrome aligned with `/polaris/operators`. */
+.polaris-sidebar-panel--operators-nav {
   gap: 0;
-  overflow: hidden;
-  border-radius: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.65);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.82) 0%,
-    rgba(248, 250, 252, 0.74) 100%
-  );
-  padding: 1.25rem 1rem 1rem;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset;
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  overflow-y: auto;
+  border-right: 1px solid #e8e8e8;
+  background: #fff !important;
+  padding: 1.25rem 1rem 1.5rem;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
-/* Single-column glass sidebar (rectangular panel; Team dropdown + nested pills) */
-.polaris-sidebar-glass-nav {
+.polaris-sidebar-nav {
   display: flex;
-  height: 100%;
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
@@ -1686,178 +1671,439 @@
   -webkit-font-smoothing: antialiased;
 }
 
-.polaris-sidebar-glass-brand {
-  flex-shrink: 0;
-  margin-bottom: 1.1rem;
+/* Match `.polaris-root .polaris-operators-page-title` */
+.polaris-sidebar-nav-brand {
+  margin: 0 0 1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  font-size: 1.125rem;
-  font-weight: 200;
+  border-bottom: 1px solid #e8e8e8;
+  font-size: 18px;
+  font-weight: 300 !important;
   letter-spacing: -0.02em;
-  color: #64748b;
+  line-height: 1.25;
+  color: #475569 !important;
 }
 
-.polaris-sidebar-glass-list {
-  flex: 1 1 auto;
-  min-height: 0;
+@media (min-width: 768px) {
+  .polaris-sidebar-nav-brand {
+    font-size: 22px;
+  }
+}
+
+.polaris-sidebar-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   list-style: none;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
 }
 
-.polaris-sidebar-glass-list > li + li {
-  margin-top: 0.2rem;
-}
-
-.polaris-sidebar-glass-row {
+/* Match `.polaris-operators-add-button` */
+.polaris-sidebar-nav-link {
   display: flex;
-  width: 100%;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.45rem;
-  border: none;
-  border-radius: 9999px;
-  background: transparent;
-  font: inherit;
-  font-size: 0.9375rem;
-  font-weight: 400;
-  color: #334155;
-  text-align: left;
+  padding: 0.45rem 0.95rem;
+  border: 1px solid #ececec;
+  border-radius: 0.25rem;
+  background: #fefefe;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: #404040;
   text-decoration: none;
   cursor: pointer;
   transition:
-    background-color 0.12s ease,
-    color 0.12s ease;
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.polaris-sidebar-glass-row:hover {
-  background: rgba(255, 255, 255, 0.55);
-  color: #0f172a;
+.polaris-sidebar-nav-link:hover {
+  background: #f7f7f7;
+  border-color: #e2e2e2;
+  color: #262626;
 }
 
-.polaris-sidebar-glass-row--invert {
-  background: #0f172a;
-  color: #f8fafc;
+.polaris-sidebar-nav-link:focus {
+  outline: none;
 }
 
-.polaris-sidebar-glass-row--invert:hover {
-  background: #020617;
-  color: #fff;
+.polaris-sidebar-nav-link:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #a3a3a3;
 }
 
-.polaris-sidebar-glass-row--invert .polaris-sidebar-glass-icon {
-  color: #e2e8f0;
+.polaris-sidebar-nav-link--active {
+  background: #f7f7f7;
+  border-color: #d4d4d4;
+  color: #262626;
+  font-weight: 600;
 }
 
-.polaris-sidebar-glass-row--invert .polaris-sidebar-glass-chevron {
-  color: #cbd5e1;
-}
-
-.polaris-sidebar-glass-icon {
+.polaris-sidebar-nav-icon {
   flex-shrink: 0;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.125rem;
+  height: 1.125rem;
   color: #64748b;
 }
 
-.polaris-sidebar-glass-label {
+.polaris-sidebar-nav-link--active .polaris-sidebar-nav-icon {
+  color: #475569;
+}
+
+/* Operators — larger tile, title left, product art right */
+.polaris-sidebar-nav-link--operators {
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 4.5rem;
+  padding: 0.65rem 0.85rem;
+}
+
+/* Same typographic format as `.polaris-operators-page-title`, stepped down */
+.polaris-sidebar-nav-link--operators .polaris-sidebar-nav-link-text {
+  align-self: center;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 300 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: #475569 !important;
+}
+
+@media (min-width: 768px) {
+  .polaris-sidebar-nav-link--operators .polaris-sidebar-nav-link-text {
+    font-size: 17px;
+  }
+}
+
+.polaris-sidebar-nav-link--operators:hover .polaris-sidebar-nav-link-text {
+  color: #334155 !important;
+}
+
+.polaris-sidebar-nav-link--operators.polaris-sidebar-nav-link--active .polaris-sidebar-nav-link-text {
+  color: #334155 !important;
+  font-weight: 300 !important;
+}
+
+.polaris-sidebar-nav-operators-img {
+  flex-shrink: 0;
+  width: 4.25rem;
+  height: 4.25rem;
+  object-fit: contain;
+  object-position: center;
+}
+
+/* Navigator (Polaris shell + map / POV feed) */
+.polaris-navigator-root.app-shell--light {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  background: #fff;
+  --shadow: none;
+}
+
+/* Flat chrome — no box / drop shadows on navigator */
+.polaris-navigator-root .panel-shell {
+  box-shadow: none;
+}
+
+.polaris-navigator-root .menu-popover {
+  box-shadow: none;
+}
+
+.polaris-navigator-root .poi-modal {
+  box-shadow: none;
+}
+
+.polaris-navigator-root .dialog-sheet {
+  box-shadow: none;
+}
+
+.polaris-navigator-root .map-image {
+  filter: none;
+}
+
+.polaris-navigator-root .robot-marker-image {
+  filter: none;
+}
+
+.polaris-navigator-toolbar--actions {
+  align-items: center;
+}
+
+/* Tighter hero than `/operators` so the map stack sits higher in the viewport */
+.polaris-navigator-root .polaris-operators-page-head.polaris-navigator-page-head {
+  margin: 0.35rem 0 0.2rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-navigator-root .polaris-operators-page-head.polaris-navigator-page-head {
+    margin: 0.45rem 0 0.25rem;
+  }
+}
+
+.polaris-navigator-root .polaris-operator-card-sub.polaris-navigator-lede {
+  margin: 0 0 0.35rem;
+}
+
+.polaris-navigator-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 1rem 1rem;
+}
+
+@media (min-width: 640px) {
+  .polaris-navigator-workspace {
+    padding: 0 2rem 1.25rem;
+  }
+}
+
+/* Sidebar 1/3 + map 2/3 (refined option cards) */
+.polaris-navigator-main-split {
+  display: grid;
+  align-items: stretch;
+  gap: 1rem 1.25rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 960px) {
+  .polaris-navigator-main-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    /* Grow with flex parent so map + Operations fill remaining dvh */
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+}
+
+.polaris-navigator-sidebar {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+@media (min-width: 960px) {
+  .polaris-navigator-sidebar {
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: visible;
+    padding-right: 0.25rem;
+  }
+}
+
+/* Left column: same shell as Spatial map (PanelShell + map-panel + polaris-navigator-map tokens) */
+.polaris-navigator-operations-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  min-height: min(62vh, 540px);
+}
+
+@media (min-width: 960px) {
+  .polaris-navigator-operations-column {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .polaris-navigator-operations-column .map-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+.polaris-navigator-map .polaris-navigator-operations-body {
+  display: flex;
+  overflow-x: hidden;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.polaris-nav-option-card {
+  display: flex;
+  min-width: 0;
+  flex-shrink: 0;
+  flex-direction: column;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.polaris-nav-option-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 1rem 1.125rem 0.875rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.polaris-nav-option-card-head-main {
   flex: 1 1 auto;
   min-width: 0;
-  letter-spacing: -0.02em;
 }
 
-.polaris-sidebar-glass-suffix {
-  flex-shrink: 0;
-  width: 0.9rem;
-  height: 0.9rem;
-  color: #94a3b8;
-}
-
-.polaris-sidebar-glass-chevron {
-  flex-shrink: 0;
-  width: 0.9rem;
-  height: 0.9rem;
-  color: #94a3b8;
-  transition: transform 0.2s ease;
-}
-
-.polaris-sidebar-glass-chevron--open {
-  transform: rotate(-180deg);
-}
-
-.polaris-sidebar-glass-nested {
-  margin: 0.35rem 0 0.15rem 0.85rem;
-  padding: 0 0 0 0.65rem;
-  list-style: none;
-  border-left: 1px solid rgba(15, 23, 42, 0.12);
-}
-
-.polaris-sidebar-glass-nested li + li {
-  margin-top: 0.15rem;
-}
-
-.polaris-sidebar-glass-nested-link {
-  display: block;
-  padding: 0.32rem 0.55rem;
-  border-radius: 9999px;
-  font-size: 0.8125rem;
-  color: #475569;
-  text-decoration: none;
-  letter-spacing: -0.01em;
-  transition:
-    background-color 0.12s ease,
-    color 0.12s ease;
-}
-
-.polaris-sidebar-glass-nested-link:hover {
-  background: rgba(255, 255, 255, 0.55);
-  color: #0f172a;
-}
-
-.polaris-sidebar-glass-nested-link--active {
-  background: #fff;
-  color: #0f172a;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-}
-
-.polaris-sidebar-glass-profile {
-  flex-shrink: 0;
-  margin-top: auto;
-  padding-top: 0.85rem;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.polaris-sidebar-glass-profile-link {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  font-size: 0.9375rem;
-  font-weight: 400;
-  color: #475569;
-  text-decoration: none;
-}
-
-.polaris-sidebar-glass-profile-link:hover {
-  color: #0f172a;
-}
-
-.polaris-sidebar-glass-profile-avatar {
-  display: flex;
-  width: 2rem;
-  height: 2rem;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.9);
-  font-size: 0.625rem;
+.polaris-nav-option-card-kicker {
+  margin: 0 0 0.2rem;
+  font-size: 0.65rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: #64748b;
 }
 
-/* Navigator (Polaris shell + SLAMASS map / POV feed) */
+.polaris-nav-option-card-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.polaris-nav-option-card-desc {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.polaris-nav-option-card-head-aside {
+  max-width: 52%;
+  flex-shrink: 0;
+}
+
+.polaris-nav-option-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.polaris-nav-option-card-body {
+  min-height: 0;
+  padding: 0.75rem 1rem 1rem;
+}
+
+.polaris-nav-option-card-body--scroll {
+  flex: 1 1 auto;
+  min-height: 14rem;
+  max-height: min(62vh, 560px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+@media (min-width: 960px) {
+  .polaris-nav-option-card--grow {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .polaris-nav-option-card--grow .polaris-nav-option-card-body--scroll {
+    display: flex;
+    flex: 1 1 auto;
+    max-height: none;
+    flex-direction: column;
+  }
+
+  .polaris-nav-option-card--grow .operator-rail-embedded {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+  }
+}
+
+.polaris-nav-pov-stage {
+  min-height: 260px;
+  max-height: 380px;
+  border-radius: 10px;
+}
+
+.polaris-nav-layer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Match `/operators` `.polaris-operators-add-button` (rectangular toggle). */
+.polaris-nav-layer-pill {
+  cursor: pointer;
+  border-radius: 0.25rem;
+  border: 1px solid #ececec;
+  background: #fefefe;
+  padding: 0.45rem 0.95rem;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: #404040;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.polaris-nav-layer-pill:hover {
+  background: #f7f7f7;
+  border-color: #e2e2e2;
+  color: #262626;
+}
+
+.polaris-nav-layer-pill:focus {
+  outline: none;
+}
+
+.polaris-nav-layer-pill:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #a3a3a3;
+}
+
+.polaris-nav-layer-pill.is-on {
+  border-color: #d4d4d4;
+  background: #f7f7f7;
+  color: #262626;
+}
+
+.polaris-navigator-map-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  min-height: min(62vh, 540px);
+}
+
+@media (min-width: 960px) {
+  .polaris-navigator-map-column {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .polaris-navigator-map-column .map-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+.operator-rail-embedded {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.operator-rail-embedded-tabs .rail-tabs {
+  flex-wrap: wrap;
+}
+
 .polaris-navigator-main {
   display: flex;
   min-height: calc(100vh - 7rem);
@@ -1878,6 +2124,221 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.75rem 1.25rem;
+}
+
+/* Toolbar + modals — same control chrome as `/operators` `.polaris-operators-add-button`. */
+.polaris-navigator-root .action-button,
+.polaris-navigator-root .close-button {
+  height: auto;
+  min-height: unset;
+  padding: 0.45rem 0.95rem;
+  border-radius: 0.25rem;
+  border: 1px solid #ececec;
+  background: #fefefe;
+  background-image: none;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: #404040;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  transform: none;
+}
+
+.polaris-navigator-root .action-button:hover:not(:disabled),
+.polaris-navigator-root .close-button:hover:not(:disabled) {
+  transform: none;
+  background: #f7f7f7;
+  border-color: #e2e2e2;
+  color: #262626;
+}
+
+.polaris-navigator-root .action-button.secondary,
+.polaris-navigator-root .close-button {
+  /* same as primary — operators list uses one neutral CTA style */
+  background: #fefefe;
+  color: #404040;
+}
+
+.polaris-navigator-root .action-button.secondary.is-off {
+  color: #a3a3a3;
+  opacity: 1;
+}
+
+.polaris-navigator-root .action-button.danger {
+  background: #fff5f5;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.polaris-navigator-root .action-button.danger:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #7f1d1d;
+}
+
+.polaris-navigator-root .action-button.success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.polaris-navigator-root .action-button.success:hover:not(:disabled) {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #14532d;
+}
+
+.polaris-navigator-root .action-button:focus,
+.polaris-navigator-root .close-button:focus {
+  outline: none;
+}
+
+.polaris-navigator-root .action-button:focus-visible,
+.polaris-navigator-root .close-button:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #a3a3a3;
+}
+
+.polaris-navigator-root .action-button:disabled,
+.polaris-navigator-root .close-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+.polaris-navigator-root .menu-popover {
+  border: 1px solid #ececec;
+  border-radius: 0.25rem;
+  background: #fff;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08);
+  backdrop-filter: none;
+}
+
+.polaris-navigator-root .menu-popover::before {
+  display: none;
+}
+
+.polaris-navigator-root .menu-item {
+  border-radius: 0.25rem;
+  color: #404040;
+}
+
+.polaris-navigator-root .menu-item:hover:not(:disabled) {
+  background: #f7f7f7;
+  color: #262626;
+}
+
+.polaris-navigator-root .menu-item-danger {
+  color: #b91c1c;
+}
+
+.polaris-navigator-root .menu-item-danger:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.polaris-navigator-root .menu-divider {
+  background: #ececec;
+}
+
+.polaris-navigator-root .menu-section-label {
+  color: #64748b;
+}
+
+.polaris-navigator-root .menu-field {
+  border: 1px solid #ececec;
+  border-radius: 0.25rem;
+  background: #fafafa;
+}
+
+.polaris-navigator-root .menu-field span {
+  color: #64748b;
+}
+
+.polaris-navigator-root .menu-field select {
+  border: 1px solid #ececec;
+  border-radius: 0.25rem;
+  background: #fefefe;
+  color: #404040;
+}
+
+.polaris-navigator-root .rail-tabs {
+  border: 1px solid #ececec;
+  border-radius: 0.25rem;
+  background: #fafafa;
+}
+
+.polaris-navigator-root .rail-tabs button {
+  height: auto;
+  min-height: 30px;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.2rem;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: #64748b;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.polaris-navigator-root .rail-tabs button.is-active {
+  background: #fefefe;
+  color: #262626;
+  box-shadow: 0 0 0 1px #e2e2e2;
+}
+
+.polaris-navigator-root .mini-button {
+  height: auto;
+  min-height: 32px;
+  padding: 0.45rem 0.95rem;
+  border: 1px solid #ececec;
+  border-radius: 0.25rem;
+  background: #fefefe;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: #404040;
+  transform: none;
+}
+
+.polaris-navigator-root .mini-button:hover:not(:disabled) {
+  transform: none;
+  background: #f7f7f7;
+  border-color: #e2e2e2;
+  color: #262626;
+}
+
+.polaris-navigator-root .mini-button-primary {
+  background: #f7f7f7;
+  border-color: #d4d4d4;
+  color: #262626;
+  font-weight: 600;
+}
+
+.polaris-navigator-root .mini-button-primary:hover:not(:disabled) {
+  background: #f0f0f0;
+  border-color: #c4c4c4;
+  color: #171717;
+}
+
+.polaris-navigator-root .mini-button:focus,
+.polaris-navigator-root .rail-tabs button:focus {
+  outline: none;
+}
+
+.polaris-navigator-root .mini-button:focus-visible,
+.polaris-navigator-root .rail-tabs button:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #a3a3a3;
 }
 
 /* Match `.polaris-operators-add-button`. */
@@ -1963,7 +2424,7 @@
 }
 
 .polaris-navigator-map {
-  --background: #f8fafc;
+  --background: #ffffff;
   --background-elevated: #ffffff;
   --panel: #ffffff;
   --panel-soft: rgba(15, 23, 42, 0.04);
@@ -1973,7 +2434,7 @@
   --text: #0f172a;
   --text-muted: #64748b;
   --text-soft: #475569;
-  --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+  --shadow: none;
   color: var(--text);
   border-radius: 0.5rem;
 }
@@ -1981,20 +2442,44 @@
 .polaris-navigator-map .panel-shell {
   flex: 1 1 0;
   min-height: 0;
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 
 .polaris-navigator-map .panel-shell-glow {
-  background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.06), transparent 32%),
-    linear-gradient(180deg, transparent, rgba(15, 23, 42, 0.02));
+  background: transparent;
 }
 
+/* Map panel title — same typographic format as Navigator / Operators `.polaris-operators-page-title`. */
+.polaris-navigator-map .map-panel .panel-header h2 {
+  margin: 0;
+  font-size: 18px !important;
+  font-weight: 300 !important;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: #475569 !important;
+}
+
+@media (min-width: 768px) {
+  .polaris-navigator-map .map-panel .panel-header h2 {
+    font-size: 22px !important;
+  }
+}
+
+/* Flat floor-plan canvas: white, faint grid, minimal chrome */
 .polaris-navigator-map .map-surface {
-  background:
-    radial-gradient(circle at center, rgba(14, 165, 233, 0.06), transparent 42%),
-    linear-gradient(180deg, #f8fafc, #f1f5f9);
+  background: #fff;
+}
+
+.polaris-navigator-map .map-image {
+  border: none;
+  border-radius: 10px;
+  /* One PNG pixel per grid cell — nearest-neighbor upscale keeps edges sharp */
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  filter: none;
+  transform: translateZ(0);
 }
 
 .polaris-navigator-map .map-chrome {
@@ -2006,12 +2491,242 @@
 }
 
 .polaris-navigator-map .map-tool {
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.45rem 0.95rem;
+  border: 1px solid #ececec;
+  border-radius: 0.25rem;
+  background: #fefefe;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: #404040;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .polaris-navigator-map .map-tool:hover:not(:disabled) {
+  background: #f7f7f7;
+  border-color: #e2e2e2;
+  color: #262626;
+  transform: none;
+}
+
+.polaris-navigator-map .map-tool:focus {
+  outline: none;
+}
+
+.polaris-navigator-map .map-tool:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #a3a3a3;
+}
+
+.polaris-navigator-map .map-tool:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.polaris-navigator-map .path-line {
+  stroke: #2563eb;
+  stroke-width: 2;
+  opacity: 0.92;
+}
+
+.polaris-navigator-map .poi-heading {
+  stroke: rgba(71, 85, 105, 0.55);
+  stroke-width: 1.75;
+}
+
+.polaris-navigator-map .poi-view-cone {
+  fill: rgba(37, 99, 235, 0.08);
+  stroke: rgba(37, 99, 235, 0.28);
+  stroke-width: 1;
+}
+
+.polaris-navigator-map .poi-view-cone.is-highlighted {
+  fill: rgba(37, 99, 235, 0.11);
+}
+
+.polaris-navigator-map .poi-view-cone.is-selected {
+  fill: rgba(37, 99, 235, 0.14);
+  stroke: rgba(29, 78, 216, 0.45);
+}
+
+.polaris-navigator-map .poi-anchor-halo {
+  fill: rgba(37, 99, 235, 0.1);
+  stroke: rgba(37, 99, 235, 0.4);
+  stroke-width: 1.25;
+}
+
+.polaris-navigator-map .poi-anchor-halo.is-selected {
+  fill: rgba(37, 99, 235, 0.14);
+  stroke: rgba(29, 78, 216, 0.65);
+}
+
+.polaris-navigator-map .yolo-ring {
+  fill: rgba(100, 116, 139, 0.08);
+  stroke: rgba(100, 116, 139, 0.45);
+  stroke-width: 1.25;
+}
+
+.polaris-navigator-map .yolo-ring.is-selected {
+  fill: rgba(37, 99, 235, 0.1);
+  stroke: rgba(37, 99, 235, 0.55);
+}
+
+.polaris-navigator-map .yolo-ring.is-highlighted {
+  fill: rgba(37, 99, 235, 0.08);
+  stroke: rgba(37, 99, 235, 0.42);
+}
+
+.polaris-navigator-map .yolo-halo {
+  fill: rgba(148, 163, 184, 0.12);
+  stroke: rgba(148, 163, 184, 0.35);
+  stroke-width: 1.25;
+}
+
+.polaris-navigator-map .yolo-halo.is-selected {
+  fill: rgba(37, 99, 235, 0.12);
+  stroke: rgba(37, 99, 235, 0.4);
+}
+
+.polaris-navigator-map .yolo-dot {
+  fill: #f8fafc;
+  stroke: #334155;
+  stroke-width: 1.5;
+}
+
+.polaris-navigator-map .yolo-dot.is-selected {
+  fill: #eff6ff;
+  stroke: #1d4ed8;
+}
+
+.polaris-navigator-map .yolo-dot.is-highlighted {
+  fill: #f1f5f9;
+  stroke: #475569;
+}
+
+.polaris-navigator-map .poi-pin {
+  border: 1px solid rgba(15, 23, 42, 0.18);
   background: #fff;
+  box-shadow: none;
+}
+
+.polaris-navigator-map .poi-pin::after {
+  border-right-color: rgba(15, 23, 42, 0.18);
+  border-bottom-color: rgba(15, 23, 42, 0.18);
+  background: #fff;
+}
+
+.polaris-navigator-map .poi-pin-label {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #fff;
+  color: #334155;
+}
+
+.polaris-navigator-map .poi-pin.is-selected {
+  border-color: rgba(37, 99, 235, 0.55);
+  box-shadow: none;
+}
+
+.polaris-navigator-map .poi-pin.is-selected::after {
+  border-right-color: rgba(37, 99, 235, 0.55);
+  border-bottom-color: rgba(37, 99, 235, 0.55);
+}
+
+.polaris-navigator-map .poi-pin.is-highlighted {
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+.polaris-navigator-map .poi-pin.is-highlighted::after {
+  border-right-color: rgba(37, 99, 235, 0.35);
+  border-bottom-color: rgba(37, 99, 235, 0.35);
+}
+
+.polaris-navigator-map .poi-pin:hover {
+  transform: translate(-50%, calc(-100% + 10px));
+}
+
+.polaris-navigator-map .yolo-chip {
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  background: #fff;
+  color: #334155;
+  box-shadow: none;
+}
+
+.polaris-navigator-map .yolo-chip::before {
+  background: #64748b;
+  box-shadow: none;
+}
+
+.polaris-navigator-map .yolo-chip.has-label::after {
+  background: #fff;
+  border-right-color: rgba(15, 23, 42, 0.16);
+  border-bottom-color: rgba(15, 23, 42, 0.16);
+}
+
+.polaris-navigator-map .yolo-chip.is-selected {
+  border-color: rgba(37, 99, 235, 0.5);
+  background: #fff;
+  box-shadow: none;
+}
+
+.polaris-navigator-map .yolo-chip.is-selected::before {
+  background: #2563eb;
+}
+
+.polaris-navigator-map .yolo-chip.is-selected::after {
+  border-right-color: rgba(37, 99, 235, 0.45);
+  border-bottom-color: rgba(37, 99, 235, 0.45);
+  background: #fff;
+}
+
+.polaris-navigator-map .yolo-chip.is-highlighted {
+  border-color: rgba(37, 99, 235, 0.32);
+}
+
+.polaris-navigator-map .yolo-chip.is-highlighted::after {
+  border-right-color: rgba(37, 99, 235, 0.32);
+  border-bottom-color: rgba(37, 99, 235, 0.32);
+}
+
+.polaris-navigator-map .yolo-chip.dot-only:hover {
+  transform: translate(-50%, -50%);
+}
+
+.polaris-navigator-map .yolo-chip.has-label:hover {
+  transform: translate(-50%, calc(-100% - 10px));
+}
+
+.polaris-navigator-map .map-legend span {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: #fff;
+  color: #64748b;
+  box-shadow: none;
+}
+
+.polaris-navigator-map .legend-swatch.robot {
+  background: #334155;
+}
+
+.polaris-navigator-map .legend-swatch.poi {
+  background: #2563eb;
+}
+
+.polaris-navigator-map .legend-swatch.yolo {
+  background: #64748b;
+}
+
+.polaris-navigator-map .legend-swatch.path {
+  background: #2563eb;
 }
 
 .polaris-navigator-map .panel-empty h3,

@@ -8,10 +8,31 @@ type LiveFeedPanelProps = {
   pov: PovState;
   poseLabel: string | null;
   frameLabel: string;
+  /**
+   * When true, render only the POV stage (no `PanelShell`).
+   * Use inside `NavigatorOptionCard` with chips in the card header.
+   */
+  embedded?: boolean;
 };
 
 export function LiveFeedPanel(props: LiveFeedPanelProps): React.ReactElement {
-  const { connected, pov, poseLabel, frameLabel } = props;
+  const { connected, pov, poseLabel, frameLabel, embedded = false } = props;
+
+  const stage = (
+    <div className="pov-stage polaris-nav-pov-stage">
+      <img alt="Robot POV" className="pov-image" decoding="async" src={pov.image_url} />
+      <div className="media-badge">{connected ? "LIVE" : "STANDBY"}</div>
+      {!pov.available ? (
+        <div className="pov-pending-banner" role="status">
+          Waiting for camera feed…
+        </div>
+      ) : null}
+    </div>
+  );
+
+  if (embedded) {
+    return stage;
+  }
 
   return (
     <PanelShell
@@ -26,15 +47,7 @@ export function LiveFeedPanel(props: LiveFeedPanelProps): React.ReactElement {
       kicker="Live"
       title="POV"
     >
-      <div className="pov-stage">
-        <img alt="Robot POV" className="pov-image" decoding="async" src={pov.image_url} />
-        <div className="media-badge">{connected ? "LIVE" : "STANDBY"}</div>
-        {!pov.available ? (
-          <div className="pov-pending-banner" role="status">
-            Waiting for camera feed…
-          </div>
-        ) : null}
-      </div>
+      {stage}
     </PanelShell>
   );
 }

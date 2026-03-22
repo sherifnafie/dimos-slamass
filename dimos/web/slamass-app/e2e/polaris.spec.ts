@@ -19,7 +19,7 @@ test.describe("/polaris", () => {
     ).toBeVisible();
     await expect(page.getByTestId("polaris-nav-title")).toBeVisible();
     await expect(page.getByTestId("polaris-robot-slot")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: /open operators/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /explore polaris/i })).toBeVisible();
     await expect(page.getByTestId("polaris-lander-bento")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Specification highlights", level: 2 })).toBeVisible();
     await expect(
@@ -115,15 +115,22 @@ test.describe("/polaris/operators", () => {
       page.getByRole("button", { name: "Close sidebar" }),
     ).toBeVisible();
     const dialog = page.getByRole("dialog");
+    const navigatorLink = dialog.getByTestId("polaris-sidebar-navigator");
+    await expect(navigatorLink).toBeVisible();
+    await expect(navigatorLink).toHaveAttribute("href", "/polaris/navigator");
+    await expect(navigatorLink.getByText("Navigator")).toBeVisible();
+    await expect(navigatorLink.locator("img")).toHaveCount(0);
+
     const operators = dialog.getByTestId("polaris-sidebar-operators");
     await expect(operators).toBeVisible();
+    await expect(operators).toHaveAttribute("href", "/polaris/operators");
     await expect(operators.getByText("Operators")).toBeVisible();
-    await expect(operators.locator("img")).toHaveCount(0);
-
-    const abilitiesTile = dialog.getByTestId("polaris-sidebar-abilities");
-    await expect(abilitiesTile).toBeVisible();
-    await expect(abilitiesTile.getByText("Abilities")).toBeVisible();
-    await expect(abilitiesTile.locator("img")).toHaveCount(0);
+    const operatorsArt = operators.locator("img.polaris-sidebar-nav-operators-img");
+    await expect(operatorsArt).toHaveCount(1);
+    await expect(operatorsArt).toHaveAttribute(
+      "src",
+      /shop\.unitree\.com\/cdn\/shop\/files\/23\.png/,
+    );
   });
 
   test("mobile: hamburger opens slide-over sidebar", async ({ page }) => {
@@ -180,12 +187,24 @@ test.describe("/polaris/operators", () => {
     await expect(navigatorLink).toHaveAttribute("href", "/polaris/navigator");
     await navigatorLink.click();
     await expect(page).toHaveURL(/\/polaris\/navigator/);
-    await expect(page.getByTestId("polaris-navigator-heading")).toHaveText("SLAMASS");
+    await expect(page.getByTestId("polaris-navigator-heading")).toHaveText("Navigator");
     await expect(page.getByTestId("polaris-navigator-back")).toHaveAttribute(
       "href",
       "/polaris/operators",
     );
-    await expect(page.locator("main.workspace")).toBeVisible();
+    await expect(page.getByTestId("polaris-navigator-main")).toBeVisible();
+  });
+
+  test("/navigator alias loads Navigator with Polaris chrome", async ({ page }) => {
+    await page.goto("/navigator");
+    await expect(page.getByTestId("polaris-navigator-heading")).toHaveText("Navigator");
+    await expect(page.getByTestId("polaris-nav-title")).toHaveText("Polaris");
+    await expect(page.getByTestId("polaris-navigator-main")).toBeVisible();
+  });
+
+  test("/configurator alias matches navigator entry", async ({ page }) => {
+    await page.goto("/configurator");
+    await expect(page.getByTestId("polaris-navigator-heading")).toHaveText("Navigator");
   });
 });
 

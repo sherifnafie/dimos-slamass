@@ -63,8 +63,13 @@ from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
 
-UI_MIN_ZOOM = 1.0
-UI_MAX_ZOOM = 1.0
+UI_MIN_ZOOM = 0.25
+UI_MAX_ZOOM = 4.0
+# Overview after focus-map; keep in sync with DEFAULT_MAP_ZOOM in slamass-app mapViewport.ts
+UI_DEFAULT_MAP_ZOOM = 0.78
+# Active map fusion grid (m / cell). Finer than before for a sharper UI map; incoming
+# costmap cells are merged by world position in ActiveMapState.update_from_costmap.
+ACTIVE_MAP_GRID_RESOLUTION = 0.075
 UI_FOCUS_POI_ZOOM = 1.0
 UI_FOCUS_ROBOT_ZOOM = 1.0
 POI_ARRIVAL_TOLERANCE_METERS = 0.6
@@ -199,7 +204,7 @@ class LayerVisibilityState:
 class UiCameraState:
     center_x: float | None = None
     center_y: float | None = None
-    zoom: float = 1.0
+    zoom: float = UI_DEFAULT_MAP_ZOOM
 
 
 @dataclass(slots=True)
@@ -1249,7 +1254,7 @@ class SlamassService:
             if self.map_state is None:
                 raise HTTPException(status_code=404, detail="No active map available")
             center_x, center_y = self._map_center_locked()
-            self._apply_ui_camera_locked(center_x=center_x, center_y=center_y, zoom=UI_MIN_ZOOM)
+            self._apply_ui_camera_locked(center_x=center_x, center_y=center_y, zoom=UI_DEFAULT_MAP_ZOOM)
             payload = self._commit_ui_state_locked()
         await self.publish_event("ui_state_updated", payload)
         return payload
@@ -1260,7 +1265,7 @@ class SlamassService:
             self.map_state = None
             self.path = []
             self._dirty_map = False
-            self.ui_state.camera = UiCameraState(center_x=None, center_y=None, zoom=UI_MIN_ZOOM)
+            self.ui_state.camera = UiCameraState(center_x=None, center_y=None, zoom=UI_DEFAULT_MAP_ZOOM)
             ui_payload = self._commit_ui_state_locked()
 
         await self.publish_event("state_updated", {"map": None, "path": []})
@@ -1846,7 +1851,7 @@ class SlamassService:
         }
         if self.map_state is not None:
             center_x, center_y = self._map_center_locked()
-            self.ui_state.camera = UiCameraState(center_x=center_x, center_y=center_y, zoom=1.0)
+            self.ui_state.camera = UiCameraState(center_x=center_x, center_y=center_y, zoom=UI_DEFAULT_MAP_ZOOM)
 
     async def _set_inspection_state(self, status: str, message: str, poi_id: str | None) -> None:
         async with self._state_lock:
@@ -1880,14 +1885,14 @@ class SlamassService:
             if self.map_state is None:
                 self.map_state = ActiveMapState.empty_from_extent(
                     map_id="active",
-                    resolution=0.15,
+                    resolution=ACTIVE_MAP_GRID_RESOLUTION,
                     min_x=raw_costmap.origin_x,
                     min_y=raw_costmap.origin_y,
                     max_x=raw_costmap.origin_x + raw_costmap.width * raw_costmap.resolution,
                     max_y=raw_costmap.origin_y + raw_costmap.height * raw_costmap.resolution,
                 )
                 center_x, center_y = self._map_center_locked()
-                self.ui_state.camera = UiCameraState(center_x=center_x, center_y=center_y, zoom=1.0)
+                self.ui_state.camera = UiCameraState(center_x=center_x, center_y=center_y, zoom=UI_DEFAULT_MAP_ZOOM)
                 ui_payload = self._commit_ui_state_locked()
 
             changed = self.map_state.update_from_costmap(raw_costmap)

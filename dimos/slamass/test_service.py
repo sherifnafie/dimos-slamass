@@ -524,7 +524,7 @@ async def test_service_focus_poi_updates_ui_state(tmp_path: Path) -> None:
     assert ui["highlighted_items"] == [{"kind": "vlm_poi", "entity_id": poi.poi_id}]
     assert ui["camera"]["center_x"] == pytest.approx(0.15)
     assert ui["camera"]["center_y"] == pytest.approx(0.05)
-    assert ui["camera"]["zoom"] == pytest.approx(1.0)
+    assert ui["camera"]["zoom"] == pytest.approx(2.8)
 
 
 @pytest.mark.asyncio

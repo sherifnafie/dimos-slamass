@@ -25,6 +25,7 @@ import {
 } from "../teleop";
 import type { ChatToolDefinition, ManualInspectionMode } from "../types";
 import { fetchJson } from "./fetchJson";
+import { NavigatorOptionCard } from "./NavigatorOptionCard";
 import { useNavigatorSlamassState } from "./useNavigatorSlamassState";
 
 type NavigatorDashboardViewProps = ReturnType<
@@ -67,8 +68,6 @@ export function NavigatorDashboardView(
   const {
     state,
     slamassApiStatus,
-    layoutMode,
-    setLayoutMode,
     busyAction,
     activityEntries,
     queueCameraSync,
@@ -311,28 +310,33 @@ export function NavigatorDashboardView(
   const mapLabel = state.map ? formatTimestamp(state.map.updated_at) : "No map";
 
   return (
-    <div className="app-shell app-shell--light">
-      <div className="app-shell-noise" />
-
-      <header className="topbar">
-        <div className="topbar-brand">
-          <div className="brand-mark">S</div>
-          <div className="topbar-brand-copy">
-            <h1 data-testid="polaris-navigator-heading">SLAMASS</h1>
-            <p>
-              Navigator ·{" "}
-              <a
-                className="topbar-operators-link"
-                data-testid="polaris-navigator-back"
-                href="/polaris/operators"
-              >
-                Operators
-              </a>
-            </p>
+    <div className="app-shell--light polaris-navigator-root">
+      <div className="px-4 pt-2 sm:px-8 sm:pt-3">
+        <div className="polaris-operators-inner polaris-fade-stagger polaris-fade-stagger--navigator mx-auto w-full max-w-3xl">
+          <a
+            className="polaris-navigator-back"
+            data-testid="polaris-navigator-back"
+            href="/polaris/operators"
+          >
+            ← Operators
+          </a>
+          <div className="polaris-operators-page-head polaris-navigator-page-head">
+            <h1
+              className="polaris-operators-page-title"
+              data-testid="polaris-navigator-heading"
+            >
+              Navigator
+            </h1>
           </div>
+          <p className="polaris-operator-card-sub polaris-navigator-lede">
+            Spatial mapping and agent console
+          </p>
         </div>
+      </div>
 
-        <div className="topbar-status">
+      <div className="px-4 pb-2 sm:px-8 sm:pb-2">
+        <div className="polaris-navigator-toolbar polaris-navigator-toolbar--actions mx-auto flex w-full max-w-[min(100vw-2rem,1600px)] flex-wrap items-center justify-between gap-3">
+          <div className="topbar-status">
           <span
             className={`toolbar-chip status-pill ${state.connected ? "is-live" : "is-offline"}`}
           >
@@ -359,34 +363,9 @@ export function NavigatorDashboardView(
           {state.yolo_runtime.mode !== "live" ? (
             <span className="toolbar-chip tone-accent">YOLO paused</span>
           ) : null}
-        </div>
-
-        <div className="topbar-actions">
-          <div className="layout-toggle" aria-label="Dashboard layout">
-            <button
-              className={layoutMode === "duo" ? "is-active" : ""}
-              onClick={() => {
-                if (layoutMode !== "duo") {
-                  setLayoutMode("duo");
-                }
-              }}
-              type="button"
-            >
-              Duo
-            </button>
-            <button
-              className={layoutMode === "trio" ? "is-active" : ""}
-              onClick={() => {
-                if (layoutMode !== "trio") {
-                  setLayoutMode("trio");
-                }
-              }}
-              type="button"
-            >
-              Trio
-            </button>
           </div>
 
+          <div className="topbar-actions">
           <button
             className="action-button"
             disabled={
@@ -558,89 +537,166 @@ export function NavigatorDashboardView(
               </div>
             ) : null}
           </div>
+          </div>
         </div>
-      </header>
+      </div>
 
-      <main className={`workspace workspace--${layoutMode}`}>
-        <LiveFeedPanel
-          connected={state.connected}
-          frameLabel={povLabel}
-          poseLabel={poseLabel}
-          pov={state.pov}
-        />
-
-        <PanelShell
-          aside={
-            <div className="panel-chip-row">
-              <span className="toolbar-chip">Updated {mapLabel}</span>
-            </div>
-          }
-          bodyClassName="panel-body-stage"
-          className="map-panel"
-          kicker="Spatial"
-          title="Map"
+      <main
+        className="polaris-navigator-main-split polaris-navigator-workspace"
+        data-testid="polaris-navigator-main"
+      >
+        <aside
+          aria-label="Navigator options"
+          className="polaris-navigator-sidebar"
         >
-          <MapPane
-            layers={state.layers}
-            map={state.map}
-            onCameraChange={queueCameraSync}
-            onClearFocus={() => {
-              void handleClearFocus();
-            }}
-            onFocusItem={(item) => {
-              void handleFocusItem(item);
-            }}
-            onFocusMap={() => {
-              void handleFocusMap();
-            }}
-            onFocusRobot={() => {
-              void handleFocusRobot();
-            }}
-            onNavigate={(x, y) => {
-              void handleNavigate(x, y);
-            }}
-            onSelectItem={(item) => {
-              void handleSelectItem(item);
-            }}
-            path={state.path}
-            pois={state.pois}
-            robotPose={state.robot_pose}
-            ui={state.ui}
-            yoloObjects={state.yolo_objects}
-          />
-        </PanelShell>
+          <div className="polaris-navigator-operations-column polaris-navigator-map">
+            <PanelShell
+              className="map-panel"
+              bodyClassName="polaris-navigator-operations-body"
+              title="Operations"
+            >
+              <NavigatorOptionCard
+                description="New frames appear as the stream updates."
+                headerAside={
+                  <div className="polaris-nav-option-card-chips">
+                    {poseLabel ? (
+                      <span className="toolbar-chip monospace-chip">
+                        {poseLabel}
+                      </span>
+                    ) : null}
+                    <span className="toolbar-chip">
+                      {state.pov.available ? `Updated ${povLabel}` : povLabel}
+                    </span>
+                  </div>
+                }
+                kicker="Robot camera"
+                title="Capture feed"
+              >
+                <LiveFeedPanel
+                  connected={state.connected}
+                  embedded
+                  frameLabel={povLabel}
+                  poseLabel={poseLabel}
+                  pov={state.pov}
+                />
+              </NavigatorOptionCard>
 
-        {layoutMode === "trio" ? (
-          <OperatorRail
-            activityEntries={activityEntries}
-            busyAction={busyAction}
-            chat={state.chat}
-            items={semanticItems}
-            onClearFocus={() => {
-              void handleClearFocus();
-            }}
-            onFocusItem={(item) => {
-              void handleFocusItem(item);
-            }}
-            onGoToItem={(item) => {
-              void handleGoToItem(item);
-            }}
-            onHighlightItem={(item) => {
-              void handleHighlightItem(item);
-            }}
-            onResetChat={() => {
-              void handleResetChat();
-            }}
-            onSelectItem={(item) => {
-              void handleSelectItem(item);
-            }}
-            onSubmitChatMessage={(message) => {
-              void handleSubmitChatMessage(message);
-            }}
-            selectedItem={state.ui.selected_item}
-            selectedPreview={selectedPreview}
-          />
-        ) : null}
+              <NavigatorOptionCard
+                description="Choose what is drawn on the spatial map."
+                kicker="Map display"
+                title="Layers"
+              >
+                <div
+                  aria-label="Map layer visibility"
+                  className="polaris-nav-layer-row"
+                  role="group"
+                >
+                  <button
+                    className={`polaris-nav-layer-pill${state.layers.show_pois ? " is-on" : ""}`}
+                    onClick={() => {
+                      handleLayerToggle("show_pois", !state.layers.show_pois);
+                    }}
+                    type="button"
+                  >
+                    VLM POIs
+                  </button>
+                  <button
+                    className={`polaris-nav-layer-pill${state.layers.show_yolo ? " is-on" : ""}`}
+                    onClick={() => {
+                      handleLayerToggle("show_yolo", !state.layers.show_yolo);
+                    }}
+                    type="button"
+                  >
+                    YOLO
+                  </button>
+                </div>
+              </NavigatorOptionCard>
+
+              <NavigatorOptionCard
+                bodyVariant="scroll"
+                className="polaris-nav-option-card--grow"
+                description="Timeline, semantic anchors, and agent chat."
+                kicker="Workspace"
+                title="Activity & memory"
+              >
+                <OperatorRail
+                  activityEntries={activityEntries}
+                  busyAction={busyAction}
+                  chat={state.chat}
+                  embedded
+                  items={semanticItems}
+                  onClearFocus={() => {
+                    void handleClearFocus();
+                  }}
+                  onFocusItem={(item) => {
+                    void handleFocusItem(item);
+                  }}
+                  onGoToItem={(item) => {
+                    void handleGoToItem(item);
+                  }}
+                  onHighlightItem={(item) => {
+                    void handleHighlightItem(item);
+                  }}
+                  onResetChat={() => {
+                    void handleResetChat();
+                  }}
+                  onSelectItem={(item) => {
+                    void handleSelectItem(item);
+                  }}
+                  onSubmitChatMessage={(message) => {
+                    void handleSubmitChatMessage(message);
+                  }}
+                  selectedItem={state.ui.selected_item}
+                  selectedPreview={selectedPreview}
+                />
+              </NavigatorOptionCard>
+            </PanelShell>
+          </div>
+        </aside>
+
+        <div className="polaris-navigator-map-column polaris-navigator-map">
+          <PanelShell
+            aside={
+              <div className="panel-chip-row">
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium leading-none text-slate-600">
+                  Updated {mapLabel}
+                </span>
+              </div>
+            }
+            bodyClassName="panel-body-stage"
+            className="map-panel"
+            title="Spatial map"
+          >
+            <MapPane
+              layers={state.layers}
+              map={state.map}
+              onCameraChange={queueCameraSync}
+              onClearFocus={() => {
+                void handleClearFocus();
+              }}
+              onFocusItem={(item) => {
+                void handleFocusItem(item);
+              }}
+              onFocusMap={() => {
+                void handleFocusMap();
+              }}
+              onFocusRobot={() => {
+                void handleFocusRobot();
+              }}
+              onNavigate={(x, y) => {
+                void handleNavigate(x, y);
+              }}
+              onSelectItem={(item) => {
+                void handleSelectItem(item);
+              }}
+              path={state.path}
+              pois={state.pois}
+              robotPose={state.robot_pose}
+              ui={state.ui}
+              yoloObjects={state.yolo_objects}
+            />
+          </PanelShell>
+        </div>
       </main>
 
       {selectedPoi || selectedYoloObject ? (

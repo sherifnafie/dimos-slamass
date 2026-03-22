@@ -20,6 +20,7 @@ import type {
   UiState,
   YoloObject,
 } from "../types";
+import { applyFitOverviewCameraToAppState, DEFAULT_MAP_ZOOM } from "../mapViewport";
 import { fetchJson } from "./fetchJson";
 
 const LAYOUT_STORAGE_KEY = "slamass-layout-mode";
@@ -98,7 +99,7 @@ const emptyState: AppState = {
     camera: {
       center_x: null,
       center_y: null,
-      zoom: 1,
+      zoom: DEFAULT_MAP_ZOOM,
     },
     selected_item: null,
     highlighted_items: [],
@@ -166,19 +167,19 @@ export function useNavigatorSlamassState(): {
         role: "system",
         tone: "neutral",
         title: "Navigator",
-        detail: "Same workspace layout as the main SLAMASS dashboard.",
+        detail: "Same workspace layout as the main Navigator dashboard.",
         timestamp: formatClock(new Date()),
       },
     ],
   );
   const activityCounterRef = useRef(1);
   const cameraSyncTimerRef = useRef<number | null>(null);
+  /** Latest camera from wheel/pan while debounced PUT is pending or in flight (SSE must not stomp it). */
+  const pendingLocalCameraRef = useRef<UiCameraState | null>(null);
+  const cameraPutInFlightRef = useRef(false);
+  const sessionMapFitDoneRef = useRef(false);
 
   const mergeUiState = useCallback((nextUi: UiState) => {
-    if (cameraSyncTimerRef.current !== null) {
-      window.clearTimeout(cameraSyncTimerRef.current);
-      cameraSyncTimerRef.current = null;
-    }
     startTransition(() => {
       setState((previous) => ({
         ...previous,
@@ -189,6 +190,12 @@ export function useNavigatorSlamassState(): {
 
   const issueUiCommand = useCallback(
     async (url: string, init?: RequestInit): Promise<UiState> => {
+      if (cameraSyncTimerRef.current !== null) {
+        window.clearTimeout(cameraSyncTimerRef.current);
+        cameraSyncTimerRef.current = null;
+      }
+      pendingLocalCameraRef.current = null;
+      cameraPutInFlightRef.current = false;
       const nextUi = await fetchJson<UiState>(url, init);
       mergeUiState(nextUi);
       return nextUi;
@@ -234,6 +241,7 @@ export function useNavigatorSlamassState(): {
 
   const queueCameraSync = useCallback(
     (camera: UiCameraState) => {
+      pendingLocalCameraRef.current = camera;
       startTransition(() => {
         setState((previous) => ({
           ...previous,
@@ -248,14 +256,29 @@ export function useNavigatorSlamassState(): {
         window.clearTimeout(cameraSyncTimerRef.current);
       }
       cameraSyncTimerRef.current = window.setTimeout(() => {
-        void issueUiCommand("/api/ui/camera", {
-          method: "PUT",
-          body: JSON.stringify(camera),
-        });
         cameraSyncTimerRef.current = null;
+        const snapshot = pendingLocalCameraRef.current;
+        if (snapshot === null) {
+          return;
+        }
+        cameraPutInFlightRef.current = true;
+        void (async () => {
+          try {
+            const nextUi = await fetchJson<UiState>("/api/ui/camera", {
+              method: "PUT",
+              body: JSON.stringify(snapshot),
+            });
+            pendingLocalCameraRef.current = null;
+            mergeUiState(nextUi);
+          } catch (error) {
+            reportActionError("Camera sync failed", error);
+          } finally {
+            cameraPutInFlightRef.current = false;
+          }
+        })();
       }, 140);
     },
-    [issueUiCommand],
+    [mergeUiState, reportActionError],
   );
 
   useEffect(() => {
@@ -266,9 +289,30 @@ export function useNavigatorSlamassState(): {
         const data = await fetchJson<AppState>("/api/state");
         if (!cancelled) {
           setSlamassApiStatus("ok");
+          const normalized = normalizeAppStateForDev(data);
+          const withFit = data.map
+            ? applyFitOverviewCameraToAppState(normalized)
+            : normalized;
+          let postFocusMapFromLoad = false;
+          if (data.map && !sessionMapFitDoneRef.current) {
+            sessionMapFitDoneRef.current = true;
+            postFocusMapFromLoad = true;
+          }
           startTransition(() => {
-            setState(normalizeAppStateForDev(data));
+            setState(withFit);
           });
+          if (postFocusMapFromLoad) {
+            void fetchJson<UiState>("/api/ui/focus-map", { method: "POST" })
+              .then((ui) => {
+                if (cancelled) {
+                  return;
+                }
+                mergeUiState(ui);
+              })
+              .catch(() => {
+                /* Map may disappear before the call completes. */
+              });
+          }
         }
       } catch {
         if (!cancelled) {
@@ -302,11 +346,31 @@ export function useNavigatorSlamassState(): {
 
     const onMapUpdated = (event: MessageEvent): void => {
       const payload = JSON.parse(event.data as string) as AppState["map"];
+      if (payload === null) {
+        sessionMapFitDoneRef.current = false;
+      }
+      const shouldSessionFit = Boolean(payload) && !sessionMapFitDoneRef.current;
+      if (shouldSessionFit) {
+        sessionMapFitDoneRef.current = true;
+      }
       startTransition(() => {
-        setState((previous) =>
-          normalizeAppStateForDev({ ...previous, map: payload }),
-        );
+        setState((previous) => {
+          const next = normalizeAppStateForDev({ ...previous, map: payload });
+          return shouldSessionFit ? applyFitOverviewCameraToAppState(next) : next;
+        });
       });
+      if (shouldSessionFit) {
+        void fetchJson<UiState>("/api/ui/focus-map", { method: "POST" })
+          .then((ui) => {
+            if (cancelled) {
+              return;
+            }
+            mergeUiState(ui);
+          })
+          .catch(() => {
+            /* ignore */
+          });
+      }
     };
 
     const onPoiUpserted = (event: MessageEvent): void => {
@@ -371,7 +435,24 @@ export function useNavigatorSlamassState(): {
 
     const onUiUpdated = (event: MessageEvent): void => {
       const payload = JSON.parse(event.data as string) as UiState;
-      mergeUiState(payload);
+      startTransition(() => {
+        setState((previous) => {
+          const merged = applyUiState(previous.ui, payload);
+          const holdCamera =
+            pendingLocalCameraRef.current !== null &&
+            (cameraSyncTimerRef.current !== null || cameraPutInFlightRef.current);
+          if (holdCamera) {
+            return {
+              ...previous,
+              ui: {
+                ...merged,
+                camera: pendingLocalCameraRef.current as UiCameraState,
+              },
+            };
+          }
+          return { ...previous, ui: merged };
+        });
+      });
     };
 
     source.addEventListener("state_updated", onStateUpdated);
@@ -532,7 +613,7 @@ export function useNavigatorSlamassState(): {
   const handleDeleteItem = useCallback(
     async (item: SemanticItemRef) => {
       const confirmed = window.confirm(
-        "Delete this semantic item from the SLAMASS map?",
+        "Delete this semantic item from the Navigator map?",
       );
       if (!confirmed) {
         return;
@@ -749,7 +830,7 @@ export function useNavigatorSlamassState(): {
             camera: {
               center_x: null,
               center_y: null,
-              zoom: 1,
+              zoom: DEFAULT_MAP_ZOOM,
             },
           },
         }));

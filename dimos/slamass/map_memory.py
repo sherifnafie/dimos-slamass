@@ -29,6 +29,14 @@ LOG_ODDS_FREE = -1.15
 LOG_ODDS_MIN = -6.0
 LOG_ODDS_MAX = 6.0
 
+# Preview PNG: light floor vs neutral structure grey (Polaris / Ops-style), not dark walls.
+_PREVIEW_FREE_RGB = np.array([245, 247, 248], dtype=np.float32)  # #F5F7F8
+_PREVIEW_OCCUPIED_RGB = np.array([233, 234, 235], dtype=np.float32)  # #E9EAEB
+
+# Each grid cell becomes N×N PNG pixels (nearest-neighbor). UI still uses map width/height in cells;
+# the browser scales the denser texture for sharper zoom / pixelated rendering.
+MAP_PREVIEW_PIXELS_PER_CELL = 4
+
 
 @dataclass(slots=True)
 class RawCostmap:
@@ -236,8 +244,8 @@ class ActiveMapState:
         known = self.observation_count > 0
 
         rgba = np.zeros((self.height, self.width, 4), dtype=np.uint8)
-        free_rgb = np.array([226, 228, 220], dtype=np.float32)
-        occupied_rgb = np.array([40, 39, 45], dtype=np.float32)
+        free_rgb = _PREVIEW_FREE_RGB
+        occupied_rgb = _PREVIEW_OCCUPIED_RGB
 
         if np.any(known):
             probs = probability[known].astype(np.float32)[:, None]
@@ -247,6 +255,10 @@ class ActiveMapState:
             rgba[known, 1] = rgba_known[:, 1]
             rgba[known, 2] = rgba_known[:, 2]
             rgba[known, 3] = 255
+
+        scale = max(1, int(MAP_PREVIEW_PIXELS_PER_CELL))
+        if scale > 1:
+            rgba = np.repeat(np.repeat(rgba, scale, axis=0), scale, axis=1)
 
         flipped = np.flipud(rgba)
         image = Image.fromarray(flipped, mode="RGBA")

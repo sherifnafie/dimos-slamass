@@ -33,3 +33,7 @@ export const POLARIS_A2_PREVIEW_URL =
 /** Sidebar Abilities row (same tile layout as Operators). */
 export const POLARIS_SIDEBAR_ABILITIES_IMAGE_URL =
   "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/2728.png";
+
+/** Sidebar Operators nav tile (Unitree shop product art). */
+export const POLARIS_SIDEBAR_OPERATORS_IMAGE_URL =
+  "https://shop.unitree.com/cdn/shop/files/23.png?v=1718274083";

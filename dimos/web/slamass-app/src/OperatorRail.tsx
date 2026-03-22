@@ -38,6 +38,8 @@ type OperatorRailProps = {
   onClearFocus: () => void;
   onResetChat: () => void;
   onSubmitChatMessage: (message: string) => void;
+  /** Omit outer `PanelShell` for sidebar card embedding */
+  embedded?: boolean;
 };
 
 function itemLabel(kind: SemanticKind): string {
@@ -59,48 +61,46 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
     onClearFocus,
     onResetChat,
     onSubmitChatMessage,
+    embedded = false,
   } = props;
 
   const [railView, setRailView] = React.useState<RailView>("timeline");
   const visibleEntries = React.useMemo(() => activityEntries.slice(-8), [activityEntries]);
 
-  return (
-    <PanelShell
-      aside={
-        <div className="rail-tabs" role="tablist" aria-label="Operator rail views">
-          <button
-            className={railView === "timeline" ? "is-active" : ""}
-            onClick={() => {
-              setRailView("timeline");
-            }}
-            type="button"
-          >
-            Timeline
-          </button>
-          <button
-            className={railView === "semantic" ? "is-active" : ""}
-            onClick={() => {
-              setRailView("semantic");
-            }}
-            type="button"
-          >
-            Semantic
-          </button>
-          <button
-            className={railView === "chat" ? "is-active" : ""}
-            onClick={() => {
-              setRailView("chat");
-            }}
-            type="button"
-          >
-            Agent
-          </button>
-        </div>
-      }
-      bodyClassName="panel-body-console"
-      className="console-panel"
-    >
-      <div className="rail-stack">
+  const tabs = (
+    <div className="rail-tabs" role="tablist" aria-label="Operator rail views">
+      <button
+        className={railView === "timeline" ? "is-active" : ""}
+        onClick={() => {
+          setRailView("timeline");
+        }}
+        type="button"
+      >
+        Timeline
+      </button>
+      <button
+        className={railView === "semantic" ? "is-active" : ""}
+        onClick={() => {
+          setRailView("semantic");
+        }}
+        type="button"
+      >
+        Semantic
+      </button>
+      <button
+        className={railView === "chat" ? "is-active" : ""}
+        onClick={() => {
+          setRailView("chat");
+        }}
+        type="button"
+      >
+        Agent
+      </button>
+    </div>
+  );
+
+  const body = (
+    <div className="rail-stack">
         {selectedPreview ? (
           <section className="rail-selected-card">
             <img alt={selectedPreview.title} src={selectedPreview.thumbnail_url} />
@@ -202,6 +202,24 @@ export function OperatorRail(props: OperatorRailProps): React.ReactElement {
           )}
         </div>
       </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="operator-rail-embedded">
+        <div className="operator-rail-embedded-tabs">{tabs}</div>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <PanelShell
+      aside={tabs}
+      bodyClassName="panel-body-console"
+      className="console-panel"
+    >
+      {body}
     </PanelShell>
   );
 }

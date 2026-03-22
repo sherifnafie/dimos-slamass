@@ -50,7 +50,11 @@ export default function PolarisLanderPage(): React.ReactElement {
                     key={step.i}
                     style={{ opacity: step.opacity, transform: step.transform }}
                   >
-                    {step.apex ? <span className="polaris-lander-arc-apex-glyph" /> : null}
+                    {step.apex ? (
+                      <span aria-hidden="true" className="polaris-lander-arc-apex-glyph">
+                        ✶
+                      </span>
+                    ) : null}
                   </span>
                 ))}
               </div>
@@ -64,8 +68,8 @@ export default function PolarisLanderPage(): React.ReactElement {
                 giving machines the ability to perceive, remember, and reason about the environments they
                 operate in.
               </p>
-              <a className="polaris-lander-cta" href="/polaris/operators">
-                Open operators
+              <a className="polaris-operators-add-button" href="/polaris/operators">
+                Explore Polaris
               </a>
             </div>
           </div>

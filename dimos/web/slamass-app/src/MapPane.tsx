@@ -3,9 +3,11 @@ import React from "react";
 import go2TopdownSprite from "./assets/go2-topdown.png";
 import {
   buildViewport,
+  clampZoom,
   panCamera,
   screenToWorld,
   worldToImagePixels,
+  zoomCameraAtScreenPoint,
 } from "./mapViewport";
 import { refFromPoi, refFromYoloObject, semanticKey } from "./semanticItems";
 import {
@@ -136,6 +138,44 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
   } = props;
   const [containerRef, size] = useSize<HTMLDivElement>();
   const dragStateRef = React.useRef<DragState | null>(null);
+  const cameraRef = React.useRef(ui.camera);
+  React.useEffect(() => {
+    cameraRef.current = ui.camera;
+  }, [ui.camera]);
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !map) {
+      return undefined;
+    }
+
+    const onWheel = (event: WheelEvent): void => {
+      const rect = el.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
+      if (width <= 0 || height <= 0) {
+        return;
+      }
+      event.preventDefault();
+      const cam = cameraRef.current;
+      const viewportNow = buildViewport(map, width, height, cam);
+      const localX = event.clientX - rect.left;
+      const localY = event.clientY - rect.top;
+      const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const nextZoom = clampZoom(cam.zoom * factor);
+      if (Math.abs(nextZoom - cam.zoom) < 1e-6) {
+        return;
+      }
+      onCameraChange(
+        zoomCameraAtScreenPoint(map, cam, localX, localY, nextZoom, viewportNow),
+      );
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+    };
+  }, [map, onCameraChange]);
 
   const viewport = React.useMemo(() => {
     if (!map || size.width <= 0 || size.height <= 0) {
@@ -291,7 +331,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     >
       {!map || !viewport ? (
         <div className="panel-empty">
-          <h3>SLAMASS map not ready</h3>
+          <h3>Navigator map not ready</h3>
           <p>Start the Go2 stack and wait for the service to ingest raw costmap updates.</p>
         </div>
       ) : (
@@ -337,7 +377,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
           </div>
 
           <img
-            alt="SLAMASS occupancy map"
+            alt="Navigator occupancy map"
             className="map-image"
             draggable={false}
             onDragStart={preventNativeDrag}
@@ -345,8 +385,8 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
             style={{
               width: `${viewport.imageWidth}px`,
               height: `${viewport.imageHeight}px`,
-              left: `${viewport.imageLeft}px`,
-              top: `${viewport.imageTop}px`,
+              left: `${Math.round(viewport.imageLeft)}px`,
+              top: `${Math.round(viewport.imageTop)}px`,
             }}
           />
           <svg
@@ -355,8 +395,8 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
             style={{
               width: `${viewport.imageWidth}px`,
               height: `${viewport.imageHeight}px`,
-              left: `${viewport.imageLeft}px`,
-              top: `${viewport.imageTop}px`,
+              left: `${Math.round(viewport.imageLeft)}px`,
+              top: `${Math.round(viewport.imageTop)}px`,
             }}
             viewBox={`0 0 ${viewport.imageWidth} ${viewport.imageHeight}`}
           >
@@ -457,8 +497,8 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
             style={{
               width: `${viewport.imageWidth}px`,
               height: `${viewport.imageHeight}px`,
-              left: `${viewport.imageLeft}px`,
-              top: `${viewport.imageTop}px`,
+              left: `${Math.round(viewport.imageLeft)}px`,
+              top: `${Math.round(viewport.imageTop)}px`,
             }}
           >
             {robotPose && (() => {

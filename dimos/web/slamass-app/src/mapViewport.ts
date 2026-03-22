@@ -1,7 +1,13 @@
-import { MapState, UiCameraState } from "./types";
+import type { AppState, MapState, UiCameraState } from "./types";
 
-export const MIN_MAP_ZOOM = 1;
-export const MAX_MAP_ZOOM = 1;
+/** Below 1 shows more map (zoomed out); above 1 magnifies. */
+export const MIN_MAP_ZOOM = 0.25;
+export const MAX_MAP_ZOOM = 4;
+/**
+ * Overview zoom after fit (centered on map). zoom=1 touches the shorter view axis; lower = more margin.
+ * Must stay aligned with `UI_DEFAULT_MAP_ZOOM` in `dimos/slamass/service.py`.
+ */
+export const DEFAULT_MAP_ZOOM = 0.78;
 
 export type MapViewport = {
   width: number;
@@ -24,6 +30,29 @@ export function getMapCenter(map: MapState): [number, number] {
     map.origin_x + (map.width * map.resolution) / 2,
     map.origin_y + (map.height * map.resolution) / 2,
   ];
+}
+
+/** Same framing as POST /api/ui/focus-map: map center + overview zoom. */
+export function fitOverviewCamera(map: MapState): UiCameraState {
+  const [cx, cy] = getMapCenter(map);
+  return normalizeCamera(map, {
+    center_x: cx,
+    center_y: cy,
+    zoom: DEFAULT_MAP_ZOOM,
+  });
+}
+
+export function applyFitOverviewCameraToAppState(state: AppState): AppState {
+  if (!state.map) {
+    return state;
+  }
+  return {
+    ...state,
+    ui: {
+      ...state.ui,
+      camera: fitOverviewCamera(state.map),
+    },
+  };
 }
 
 export function normalizeCamera(map: MapState, camera: UiCameraState): UiCameraState {

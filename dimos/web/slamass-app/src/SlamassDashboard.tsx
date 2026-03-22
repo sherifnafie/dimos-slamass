@@ -1,6 +1,7 @@
 import React, { startTransition } from "react";
 
 import { apiUrl, normalizeAppStateForDev } from "./apiBase";
+import { applyFitOverviewCameraToAppState, DEFAULT_MAP_ZOOM } from "./mapViewport";
 import { formatPoseLabel, formatTimestamp } from "./slamassDisplayUtils";
 import { AgentToolsModal } from "./AgentToolsModal";
 import { LiveFeedPanel } from "./LiveFeedPanel";
@@ -72,7 +73,7 @@ const emptyState: AppState = {
     camera: {
       center_x: null,
       center_y: null,
-      zoom: 1,
+      zoom: DEFAULT_MAP_ZOOM,
     },
     selected_item: null,
     highlighted_items: [],
@@ -179,6 +180,8 @@ export default function App(): React.ReactElement {
   ]);
 
   const cameraSyncTimerRef = React.useRef<number | null>(null);
+  const pendingLocalCameraRef = React.useRef<UiCameraState | null>(null);
+  const cameraPutInFlightRef = React.useRef(false);
   const teleopIntervalRef = React.useRef<number | null>(null);
   const teleopKeysRef = React.useRef<Set<string>>(new Set());
   const teleopRequestInFlightRef = React.useRef(false);
@@ -190,6 +193,7 @@ export default function App(): React.ReactElement {
   const lastInspectionRef = React.useRef<string>("");
   const mapReadyRef = React.useRef(false);
   const didLogInitialSnapshotRef = React.useRef(false);
+  const sessionMapFitDoneRef = React.useRef(false);
 
   const selectedPoi = React.useMemo(
     () => resolveSelectedPoi(state.pois, state.ui.selected_item),
@@ -298,10 +302,6 @@ export default function App(): React.ReactElement {
   }, []);
 
   const mergeUiState = React.useCallback((nextUi: UiState) => {
-    if (cameraSyncTimerRef.current !== null) {
-      window.clearTimeout(cameraSyncTimerRef.current);
-      cameraSyncTimerRef.current = null;
-    }
     startTransition(() => {
       setState((previous) => ({
         ...previous,
@@ -312,6 +312,12 @@ export default function App(): React.ReactElement {
 
   const issueUiCommand = React.useCallback(
     async (url: string, init?: RequestInit): Promise<UiState> => {
+      if (cameraSyncTimerRef.current !== null) {
+        window.clearTimeout(cameraSyncTimerRef.current);
+        cameraSyncTimerRef.current = null;
+      }
+      pendingLocalCameraRef.current = null;
+      cameraPutInFlightRef.current = false;
       const nextUi = await fetchJson<UiState>(url, init);
       mergeUiState(nextUi);
       return nextUi;
@@ -321,6 +327,7 @@ export default function App(): React.ReactElement {
 
   const queueCameraSync = React.useCallback(
     (camera: UiCameraState) => {
+      pendingLocalCameraRef.current = camera;
       startTransition(() => {
         setState((previous) => ({
           ...previous,
@@ -335,14 +342,29 @@ export default function App(): React.ReactElement {
         window.clearTimeout(cameraSyncTimerRef.current);
       }
       cameraSyncTimerRef.current = window.setTimeout(() => {
-        void issueUiCommand("/api/ui/camera", {
-          method: "PUT",
-          body: JSON.stringify(camera),
-        });
         cameraSyncTimerRef.current = null;
+        const snapshot = pendingLocalCameraRef.current;
+        if (snapshot === null) {
+          return;
+        }
+        cameraPutInFlightRef.current = true;
+        void (async () => {
+          try {
+            const nextUi = await fetchJson<UiState>("/api/ui/camera", {
+              method: "PUT",
+              body: JSON.stringify(snapshot),
+            });
+            pendingLocalCameraRef.current = null;
+            mergeUiState(nextUi);
+          } catch (error) {
+            reportActionError("Camera sync failed", error);
+          } finally {
+            cameraPutInFlightRef.current = false;
+          }
+        })();
       }, 140);
     },
-    [issueUiCommand],
+    [mergeUiState, reportActionError],
   );
 
   React.useEffect(() => {
@@ -369,9 +391,30 @@ export default function App(): React.ReactElement {
           );
         }
 
+        const normalized = normalizeAppStateForDev(data);
+        const withFit = data.map ? applyFitOverviewCameraToAppState(normalized) : normalized;
+        let postFocusMapFromLoad = false;
+        if (data.map && !sessionMapFitDoneRef.current) {
+          sessionMapFitDoneRef.current = true;
+          postFocusMapFromLoad = true;
+        }
+
         startTransition(() => {
-          setState(normalizeAppStateForDev(data));
+          setState(withFit);
         });
+
+        if (postFocusMapFromLoad && !cancelled) {
+          void fetchJson<UiState>("/api/ui/focus-map", { method: "POST" })
+            .then((ui) => {
+              if (cancelled) {
+                return;
+              }
+              mergeUiState(ui);
+            })
+            .catch(() => {
+              /* Map may disappear before the call completes. */
+            });
+        }
       } catch (error) {
         reportActionError("Initial state fetch failed", error);
       }
@@ -410,13 +453,35 @@ export default function App(): React.ReactElement {
 
     source.addEventListener("map_updated", (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as AppState["map"];
+      if (payload === null) {
+        sessionMapFitDoneRef.current = false;
+      }
       if (!mapReadyRef.current && payload) {
         mapReadyRef.current = true;
         appendActivity("system", "Map ready", "Occupancy map is rendering.", "success");
       }
+      const shouldSessionFit = Boolean(payload) && !sessionMapFitDoneRef.current;
+      if (shouldSessionFit) {
+        sessionMapFitDoneRef.current = true;
+      }
       startTransition(() => {
-        setState((previous) => normalizeAppStateForDev({ ...previous, map: payload }));
+        setState((previous) => {
+          const next = normalizeAppStateForDev({ ...previous, map: payload });
+          return shouldSessionFit ? applyFitOverviewCameraToAppState(next) : next;
+        });
       });
+      if (shouldSessionFit && !cancelled) {
+        void fetchJson<UiState>("/api/ui/focus-map", { method: "POST" })
+          .then((ui) => {
+            if (cancelled) {
+              return;
+            }
+            mergeUiState(ui);
+          })
+          .catch(() => {
+            /* ignore */
+          });
+      }
     });
 
     source.addEventListener("poi_upserted", (event) => {
@@ -518,12 +583,33 @@ export default function App(): React.ReactElement {
 
     source.addEventListener("ui_state_updated", (event) => {
       const payload = JSON.parse((event as MessageEvent<string>).data) as UiState;
-      mergeUiState(payload);
+      startTransition(() => {
+        setState((previous) => {
+          const merged = applyUiState(previous.ui, payload);
+          const holdCamera =
+            pendingLocalCameraRef.current !== null &&
+            (cameraSyncTimerRef.current !== null || cameraPutInFlightRef.current);
+          if (holdCamera) {
+            return {
+              ...previous,
+              ui: {
+                ...merged,
+                camera: pendingLocalCameraRef.current as UiCameraState,
+              },
+            };
+          }
+          return { ...previous, ui: merged };
+        });
+      });
     });
 
     return () => {
       cancelled = true;
       source.close();
+      if (cameraSyncTimerRef.current !== null) {
+        window.clearTimeout(cameraSyncTimerRef.current);
+        cameraSyncTimerRef.current = null;
+      }
     };
   }, [appendActivity, mergeUiState, reportActionError]);
 
@@ -574,7 +660,7 @@ export default function App(): React.ReactElement {
             camera: {
               center_x: null,
               center_y: null,
-              zoom: 1,
+              zoom: DEFAULT_MAP_ZOOM,
             },
           },
         }));
@@ -770,7 +856,7 @@ export default function App(): React.ReactElement {
 
   const handleDeleteItem = React.useCallback(
     async (item: SemanticItemRef) => {
-      const confirmed = window.confirm("Delete this semantic item from the SLAMASS map?");
+      const confirmed = window.confirm("Delete this semantic item from the Navigator map?");
       if (!confirmed) {
         return;
       }
@@ -1050,7 +1136,7 @@ export default function App(): React.ReactElement {
         <div className="topbar-brand">
           <div className="brand-mark">S</div>
           <div className="topbar-brand-copy">
-            <h1>SLAMASS</h1>
+            <h1>Navigator</h1>
             <p>Semantic map ops</p>
           </div>
         </div>
@@ -1266,7 +1352,9 @@ export default function App(): React.ReactElement {
         <PanelShell
           aside={
             <div className="panel-chip-row">
-              <span className="toolbar-chip">Updated {mapLabel}</span>
+              <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium leading-none text-slate-400">
+                Updated {mapLabel}
+              </span>
             </div>
           }
           bodyClassName="panel-body-stage"
