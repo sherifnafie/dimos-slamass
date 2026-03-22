@@ -22,6 +22,7 @@ from typing import Any, Protocol
 
 from openai import OpenAI
 
+
 SYSTEM_PROMPT = """You are the SLAMASS operator agent for a live robotics demo.
 
 You help the user through the SLAMASS chat UI. You can reason over:
@@ -372,31 +373,6 @@ class ChatBackend(Protocol):
     ) -> ChatBackendResponse: ...
 
 
-class DisabledChatBackend:
-    """Chat UI works, but model calls are skipped when ``OPENAI_API_KEY`` is unset."""
-
-    def complete(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-    ) -> ChatBackendResponse:
-        _ = messages, tools
-        return ChatBackendResponse(
-            content=(
-                "Operator chat is disabled: set OPENAI_API_KEY to enable the chat agent. "
-                "Map, POV, MCP tools, and manual controls still work."
-            ),
-            tool_calls=[],
-        )
-
-
-def default_chat_backend(model_name: str = "gpt-5.4") -> ChatBackend:
-    """Prefer OpenAI when configured; otherwise allow SLAMASS to start without a key."""
-    if os.getenv("OPENAI_API_KEY", "").strip():
-        return OpenAIChatBackend(model_name=model_name)
-    return DisabledChatBackend()
-
-
 class OpenAIChatBackend:
     def __init__(self, model_name: str = "gpt-5.4") -> None:
         api_key = os.getenv("OPENAI_API_KEY")
@@ -437,7 +413,7 @@ class SlamassChatAgent:
         backend: ChatBackend | None = None,
         model_name: str = "gpt-5.4",
     ) -> None:
-        self._backend = backend if backend is not None else default_chat_backend(model_name=model_name)
+        self._backend = backend or OpenAIChatBackend(model_name=model_name)
         self._tools = self._build_tools()
 
     async def run_turn(
@@ -634,8 +610,6 @@ __all__ = [
     "ChatMessage",
     "ChatRuntime",
     "ChatTurnResult",
-    "DisabledChatBackend",
     "OpenAIChatBackend",
     "SlamassChatAgent",
-    "default_chat_backend",
 ]

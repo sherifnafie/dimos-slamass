@@ -323,9 +323,6 @@ class GlobalPlanner(Resource):
     def _find_safe_goal(self, goal: Vector3) -> Vector3 | None:
         costmap = self._navigation_map.binary_costmap
 
-        if costmap.cell_value(goal) == CostValues.UNKNOWN:
-            return goal
-
         safe_goal = find_safe_goal(
             costmap,
             goal,

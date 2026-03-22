@@ -20,6 +20,15 @@ from dimos.msgs.geometry_msgs import Vector3, VectorLike
 from dimos.msgs.nav_msgs import CostValues, OccupancyGrid
 
 
+def _clamped_goal_grid(costmap: OccupancyGrid, goal: VectorLike) -> tuple[int, int]:
+    goal_grid = costmap.world_to_grid(goal)
+    gx = int(np.floor(goal_grid.x))
+    gy = int(np.floor(goal_grid.y))
+    gx = min(max(gx, 0), costmap.width - 1)
+    gy = min(max(gy, 0), costmap.height - 1)
+    return gx, gy
+
+
 def find_safe_goal(
     costmap: OccupancyGrid,
     goal: VectorLike,
@@ -89,9 +98,9 @@ def _find_safe_goal_bfs(
     - Memory usage scales with search area
     """
 
-    # Convert goal to grid coordinates
-    goal_grid = costmap.world_to_grid(goal)
-    gx, gy = int(goal_grid.x), int(goal_grid.y)
+    # Start from the nearest in-bounds cell so clicks just outside the costmap
+    # still snap to a reachable goal instead of failing immediately.
+    gx, gy = _clamped_goal_grid(costmap, goal)
 
     # Convert distances to grid cells
     clearance_cells = int(np.ceil(min_clearance / costmap.resolution))
@@ -154,9 +163,9 @@ def _find_safe_goal_bfs_contiguous(
     - Slightly slower than regular BFS due to additional checks
     """
 
-    # Convert goal to grid coordinates
-    goal_grid = costmap.world_to_grid(goal)
-    gx, gy = int(goal_grid.x), int(goal_grid.y)
+    # Start from the nearest in-bounds cell so clicks just outside the costmap
+    # still snap to a reachable goal instead of failing immediately.
+    gx, gy = _clamped_goal_grid(costmap, goal)
 
     # Convert distances to grid cells
     clearance_cells = int(np.ceil(min_clearance / costmap.resolution))

@@ -51,3 +51,38 @@ def test_find_safe_goal(costmap, input_pos, expected_pos) -> None:
     )
 
     assert safe_goal == Vector3(expected_pos[0], expected_pos[1], 0.0)
+
+
+def test_find_safe_goal_from_unknown_cell_snaps_to_nearest_free_space() -> None:
+    grid = np.zeros((5, 5), dtype=np.int8)
+    grid[2, 2] = CostValues.UNKNOWN
+    costmap = OccupancyGrid(grid=grid, resolution=1.0)
+
+    safe_goal = find_safe_goal(
+        costmap,
+        Vector3(2.0, 2.0, 0.0),
+        algorithm="bfs_contiguous",
+        cost_threshold=CostValues.OCCUPIED,
+        min_clearance=0.0,
+        max_search_distance=3.0,
+        connectivity_check_radius=0,
+    )
+
+    assert safe_goal == Vector3(2.0, 3.0, 0.0)
+
+
+def test_find_safe_goal_from_out_of_bounds_snaps_to_nearest_in_bounds_space() -> None:
+    grid = np.zeros((5, 5), dtype=np.int8)
+    costmap = OccupancyGrid(grid=grid, resolution=1.0)
+
+    safe_goal = find_safe_goal(
+        costmap,
+        Vector3(8.0, 2.0, 0.0),
+        algorithm="bfs_contiguous",
+        cost_threshold=CostValues.OCCUPIED,
+        min_clearance=0.0,
+        max_search_distance=3.0,
+        connectivity_check_radius=0,
+    )
+
+    assert safe_goal == Vector3(4.0, 2.0, 0.0)

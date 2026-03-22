@@ -57,6 +57,7 @@ from dimos.mapping.occupancy.inflation import simple_inflate
 from dimos.mapping.types import LatLon
 from dimos.msgs.geometry_msgs import PoseStamped, Quaternion, Twist, TwistStamped, Vector3
 from dimos.msgs.nav_msgs import OccupancyGrid, Path
+from dimos.msgs.sensor_msgs import Image
 from dimos.slamass.yolo_protocol import SlamassYoloDetections
 from dimos.utils.logging_config import setup_logger
 
@@ -66,6 +67,9 @@ logger = setup_logger()
 
 _browser_open_lock = threading.Lock()
 _browser_opened = False
+_POV_MAX_FPS = 10.0
+_POV_JPEG_QUALITY = 78
+_POV_MAX_WIDTH = 1280
 
 
 class WebsocketVisModule(Module):
@@ -92,6 +96,7 @@ class WebsocketVisModule(Module):
     gps_location: In[LatLon]
     path: In[Path]
     global_costmap: In[OccupancyGrid]
+    color_image: In[Image]
     slamass_yolo_detections: In[SlamassYoloDetections]
 
     # LCM outputs
@@ -128,6 +133,8 @@ class WebsocketVisModule(Module):
         self.vis_state = {}  # type: ignore[var-annotated]
         self.state_lock = threading.Lock()
         self.costmap_encoder = OptimizedCostmapEncoder(chunk_size=64)
+        self._last_pov_emit_monotonic = 0.0
+        self._pov_seq = 0
 
         # Track GPS goal points for visualization
         self.gps_goal_points: list[dict[str, float]] = []
@@ -195,6 +202,12 @@ class WebsocketVisModule(Module):
 
         try:
             unsub = self.global_costmap.subscribe(self._on_global_costmap)
+            self._disposables.add(Disposable(unsub))
+        except Exception:
+            ...
+
+        try:
+            unsub = self.color_image.subscribe(self._on_color_image)
             self._disposables.add(Disposable(unsub))
         except Exception:
             ...
@@ -419,6 +432,33 @@ class WebsocketVisModule(Module):
         raw_costmap_data = self._process_raw_costmap(msg)
         self.vis_state["raw_costmap"] = raw_costmap_data
         self._emit("raw_costmap", raw_costmap_data)
+
+    def _on_color_image(self, msg: Image) -> None:
+        now = time.monotonic()
+        if now - self._last_pov_emit_monotonic < 1.0 / _POV_MAX_FPS:
+            return
+
+        try:
+            image_base64 = msg.to_base64(
+                quality=_POV_JPEG_QUALITY,
+                max_width=_POV_MAX_WIDTH,
+            )
+        except Exception:
+            logger.debug("Could not encode POV frame for websocket bridge", exc_info=True)
+            return
+
+        self._last_pov_emit_monotonic = now
+        self._pov_seq += 1
+        payload = {
+            "seq": self._pov_seq,
+            "ts": float(msg.ts) if msg.ts is not None else time.time(),
+            "mime_type": "image/jpeg",
+            "width": int(msg.width),
+            "height": int(msg.height),
+            "image_base64": image_base64,
+        }
+        self.vis_state["pov_frame"] = payload
+        self._emit("pov_frame", payload)
 
     def _on_slamass_yolo_detections(self, batch: SlamassYoloDetections) -> None:
         robot_pose = self.vis_state.get("robot_pose")
