@@ -6,9 +6,13 @@ import { MapPane } from "./MapPane";
 import { PanelShell } from "./PanelShell";
 import { PolarisLayout } from "./PolarisLayout";
 
+const MAP_SOCKET_HELP =
+  "SLAMASS must connect to DimOS websocket_vis (Socket.IO), default http://127.0.0.1:7779. Start the robot stack first, e.g. dimos --simulation --viewer none run unitree-go2-slamass-mcp --daemon, then dimos-slamass. Override with dimos-slamass --map-socket-url if needed.";
+
 export default function PolarisConfiguratorPage(): React.ReactElement {
   const {
     state,
+    slamassApiStatus,
     queueCameraSync,
     handleSelectItem,
     handleFocusItem,
@@ -35,8 +39,23 @@ export default function PolarisConfiguratorPage(): React.ReactElement {
             aria-live="polite"
             className="polaris-configurator-status"
             role="status"
+            title={
+              slamassApiStatus === "error"
+                ? "Could not load /api/state from the SLAMASS sidecar (wrong URL, CORS, or dimos-slamass not running)."
+                : slamassApiStatus === "loading"
+                  ? "Loading SLAMASS state…"
+                  : state.connected
+                    ? "DimOS map socket is connected; pose, costmap, and POV can stream."
+                    : MAP_SOCKET_HELP
+            }
           >
-            {state.connected ? "Robot online" : "Robot offline"}
+            {slamassApiStatus === "loading"
+              ? "Connecting…"
+              : slamassApiStatus === "error"
+                ? "SLAMASS unreachable"
+                : state.connected
+                  ? "Map socket online"
+                  : "Map socket offline"}
           </span>
         </div>
 

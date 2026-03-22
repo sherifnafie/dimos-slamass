@@ -6,6 +6,11 @@
  * Global styles.css sets html/body/#root height:100% and body{overflow:hidden}.
  * Polaris must scroll inside this shell, not the document.
  */
+.polaris-root {
+  /* Create (Go2 hover) + lander bento tiles — same accent border */
+  --polaris-tile-border-accent: #c2dff7;
+}
+
 .polaris-root.polaris-root--shell {
   box-sizing: border-box;
   height: 100%;
@@ -14,6 +19,225 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+}
+
+@keyframes polaris-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Stagger direct children (e.g. lander hero) — operators / bento / create use modifiers */
+.polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
+  .polaris-fade-stagger--create
+) > * {
+  opacity: 0;
+  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
+  .polaris-fade-stagger--create
+) > *:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
+  .polaris-fade-stagger--create
+) > *:nth-child(2) {
+  animation-delay: 0.11s;
+}
+
+.polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
+  .polaris-fade-stagger--create
+) > *:nth-child(3) {
+  animation-delay: 0.17s;
+}
+
+.polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
+  .polaris-fade-stagger--create
+) > *:nth-child(4) {
+  animation-delay: 0.23s;
+}
+
+.polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
+  .polaris-fade-stagger--create
+) > *:nth-child(5) {
+  animation-delay: 0.29s;
+}
+
+.polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
+  .polaris-fade-stagger--create
+) > *:nth-child(6) {
+  animation-delay: 0.35s;
+}
+
+.polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
+  .polaris-fade-stagger--create
+) > *:nth-child(7) {
+  animation-delay: 0.41s;
+}
+
+.polaris-fade-stagger:not(.polaris-fade-stagger--operators):not(.polaris-fade-stagger--bento):not(
+  .polaris-fade-stagger--create
+) > *:nth-child(8) {
+  animation-delay: 0.47s;
+}
+
+/* `/polaris/operators` — toolbar then each row */
+.polaris-fade-stagger--operators > .polaris-operators-page-head {
+  opacity: 0;
+  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.05s;
+}
+
+.polaris-fade-stagger--operators > .polaris-operators-list > .polaris-operators-list-item {
+  opacity: 0;
+  animation: polaris-fade-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.polaris-fade-stagger--operators > .polaris-operators-list > .polaris-operators-list-item:nth-child(1) {
+  animation-delay: 0.11s;
+}
+
+.polaris-fade-stagger--operators > .polaris-operators-list > .polaris-operators-list-item:nth-child(2) {
+  animation-delay: 0.17s;
+}
+
+.polaris-fade-stagger--operators > .polaris-operators-list > .polaris-operators-list-item:nth-child(3) {
+  animation-delay: 0.23s;
+}
+
+.polaris-fade-stagger--operators > .polaris-operators-list > .polaris-operators-list-item:nth-child(4) {
+  animation-delay: 0.29s;
+}
+
+.polaris-fade-stagger--operators > .polaris-operators-list > .polaris-operators-list-item:nth-child(5) {
+  animation-delay: 0.35s;
+}
+
+.polaris-fade-stagger--operators > .polaris-operators-list > .polaris-operators-list-item:nth-child(6) {
+  animation-delay: 0.41s;
+}
+
+.polaris-fade-stagger--operators > .polaris-operators-list > .polaris-operators-list-item:nth-child(7) {
+  animation-delay: 0.47s;
+}
+
+.polaris-fade-stagger--operators > .polaris-operators-list > .polaris-operators-list-item:nth-child(8) {
+  animation-delay: 0.53s;
+}
+
+/* `/polaris/create` — intro rows then operator-style step cards */
+.polaris-fade-stagger--create > .polaris-create-back {
+  opacity: 0;
+  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.05s;
+}
+
+.polaris-fade-stagger--create > .polaris-operators-page-head.polaris-create-page-head {
+  opacity: 0;
+  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.11s;
+}
+
+.polaris-fade-stagger--create > .polaris-create-lede.polaris-operator-card-sub {
+  opacity: 0;
+  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.17s;
+}
+
+.polaris-fade-stagger--create > .polaris-create-rule {
+  opacity: 0;
+  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.23s;
+}
+
+.polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-pick-grid > .polaris-create-pick-cell {
+  opacity: 0;
+  animation: polaris-fade-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-pick-grid > .polaris-create-pick-cell:nth-child(1) {
+  animation-delay: 0.29s;
+}
+
+.polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-pick-grid > .polaris-create-pick-cell:nth-child(2) {
+  animation-delay: 0.35s;
+}
+
+.polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-pick-grid > .polaris-create-pick-cell:nth-child(3) {
+  animation-delay: 0.41s;
+}
+
+.polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-progress-line {
+  opacity: 0;
+  animation: polaris-fade-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.47s;
+}
+
+/* `/polaris` bento — section head then cards */
+.polaris-fade-stagger--bento > .polaris-lander-bento-head {
+  opacity: 0;
+  animation: polaris-fade-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.05s;
+}
+
+.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card {
+  opacity: 0;
+  animation: polaris-fade-in 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(1) {
+  animation-delay: 0.11s;
+}
+
+.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(3) {
+  animation-delay: 0.19s;
+}
+
+.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(4) {
+  animation-delay: 0.23s;
+}
+
+.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(5) {
+  animation-delay: 0.27s;
+}
+
+.polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card:nth-child(6) {
+  animation-delay: 0.31s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .polaris-fade-stagger > *,
+  .polaris-fade-stagger--operators > .polaris-operators-page-head,
+  .polaris-fade-stagger--operators > .polaris-operators-list > .polaris-operators-list-item,
+  .polaris-fade-stagger--create > .polaris-create-back,
+  .polaris-fade-stagger--create > .polaris-operators-page-head.polaris-create-page-head,
+  .polaris-fade-stagger--create > .polaris-create-lede.polaris-operator-card-sub,
+  .polaris-fade-stagger--create > .polaris-create-rule,
+  .polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-pick-grid > .polaris-create-pick-cell,
+  .polaris-fade-stagger--create > .polaris-create-pick-block > .polaris-create-progress-line,
+  .polaris-fade-stagger--bento > .polaris-lander-bento-head,
+  .polaris-fade-stagger--bento > .polaris-lander-bento-grid > .polaris-lander-bento-card {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .polaris-lander-preview-rotate,
+  .polaris-lander-preview-skew {
+    transform: none !important;
+  }
 }
 
 /* Explicit menu control so it always shows. */
@@ -127,14 +351,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin: 1.75rem 0 1.5rem;
+  margin: 1.75rem 0;
   flex-wrap: wrap;
 }
 
 @media (min-width: 768px) {
   .polaris-operators-page-head {
     margin-top: 2.25rem;
-    margin-bottom: 1.75rem;
+    margin-bottom: 2.25rem;
   }
 }
 
@@ -170,6 +394,7 @@
   line-height: 1.25;
   color: #404040;
   cursor: pointer;
+  text-decoration: none;
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease,
@@ -201,6 +426,12 @@
 /* `/polaris` static lander (navbar + minimal copy) */
 .polaris-lander-main {
   color: #334155;
+}
+
+.polaris-skild-rule {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid #e8e8e8;
 }
 
 /* Hero arc — empty glass circles above headline (reference: soft semicircle crown). */
@@ -276,18 +507,18 @@
   opacity: 0.72;
 }
 
-/* Primary page heading on `/polaris` (tagline). */
-.polaris-lander-title {
+/* `/polaris` lander hero — match header `.polaris-title` weight / tracking / tone */
+.polaris-root .polaris-lander-title {
   margin: 0 0 1rem;
   font-size: 1.75rem;
-  font-weight: 300;
-  letter-spacing: -0.04em;
+  font-weight: 300 !important;
+  letter-spacing: -0.02em;
   line-height: 1.25;
-  color: #0f172a;
+  color: #475569 !important;
 }
 
 @media (min-width: 768px) {
-  .polaris-lander-title {
+  .polaris-root .polaris-lander-title {
     font-size: 2.125rem;
     line-height: 1.2;
   }
@@ -334,6 +565,58 @@
   border-color: rgba(15, 23, 42, 0.2);
   background: #f8fafc;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+.polaris-lander-cta:focus {
+  outline: none;
+}
+
+.polaris-lander-cta:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #a3a3a3;
+}
+
+/*
+ * Lander preview rail — Tailark hero-section-9 pattern (21st.dev / tailark):
+ * bottom + right gradient masks, perspective 1200px, rotateX(20deg), skew-x 0.36rad; margin-top separates from CTA.
+ */
+.polaris-lander-preview-rail {
+  -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+}
+
+.polaris-lander-preview-perspective {
+  -webkit-mask-image: linear-gradient(to right, black 50%, transparent 100%);
+  mask-image: linear-gradient(to right, black 50%, transparent 100%);
+  perspective: 1200px;
+  perspective-origin: 32% 42%;
+}
+
+.polaris-lander-preview-rotate {
+  transform: rotateX(20deg);
+  transform-style: preserve-3d;
+}
+
+.polaris-lander-preview-skew {
+  position: relative;
+  transform: skewX(0.36rad);
+}
+
+@media (min-width: 640px) {
+  .polaris-lander-preview-skew {
+    min-height: 26rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .polaris-lander-preview-skew {
+    height: 58rem;
+    max-height: 88vh;
+    min-height: 0;
+  }
+}
+
+.polaris-lander-preview-img {
+  display: block;
 }
 
 /* `/polaris` — Unitree A2–style bento grid (layout reference: https://www.unitree.com/A2), light band */
@@ -437,7 +720,7 @@
   flex-direction: column;
   min-height: 0;
   padding: 1.25rem 1.25rem 0;
-  border: 1px solid rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--polaris-tile-border-accent);
   border-radius: 1.25rem;
   background: linear-gradient(155deg, #ffffff 0%, #f1f5f9 38%, #e2e8f0 100%);
   box-shadow:
@@ -694,7 +977,237 @@
   padding-bottom: 2rem;
 }
 
+/* Operators list: bottom inset matches heading top margin (row-wise vertical balance). */
+.polaris-operators-inner.polaris-fade-stagger--operators {
+  padding-bottom: 1.75rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-operators-inner.polaris-fade-stagger--operators {
+    padding-bottom: 2.25rem;
+  }
+}
+
+/* `/polaris/create` — same type scale as `/polaris/operators` (page title + card subcopy) */
+.polaris-create-back {
+  display: inline-block;
+  margin-bottom: 1rem;
+}
+
+.polaris-operators-page-head.polaris-create-page-head {
+  margin-top: 1.75rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-operators-page-head.polaris-create-page-head {
+    margin-top: 2.25rem;
+    margin-bottom: 1.5rem;
+  }
+}
+
+.polaris-create-lede.polaris-operator-card-sub {
+  margin: 0 0 1.25rem;
+  max-width: 40rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-create-lede.polaris-operator-card-sub {
+    margin-bottom: 1.5rem;
+  }
+}
+
+.polaris-create-rule {
+  margin: 0 0 1.5rem;
+  max-width: 42rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-create-rule {
+    margin-bottom: 1.75rem;
+  }
+}
+
+.polaris-create-pick-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* `/polaris/create` — thin onboarding bar under cards (lavender → polaris blue) */
+.polaris-create-progress-line {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+@media (min-width: 768px) {
+  .polaris-create-progress-line {
+    margin-top: 1.25rem;
+  }
+}
+
+.polaris-create-progress-line-track {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.055);
+}
+
+@media (min-width: 640px) {
+  .polaris-create-progress-line-track {
+    height: 7px;
+  }
+}
+
+/* Blue leads on the left (filled segment), softens toward lavender / ice at the right. */
+.polaris-create-progress-line-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--polaris-tile-border-accent) 88%, #38bdf8) 0%,
+    var(--polaris-tile-border-accent) 22%,
+    color-mix(in srgb, var(--polaris-tile-border-accent) 72%, #e8e4f4) 62%,
+    #eef2ff 100%
+  );
+  transition: width 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .polaris-create-progress-line-fill {
+    transition: none;
+  }
+}
+
+/* `/polaris/create` — bordered tiles + titles */
+.polaris-create-pick-grid {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .polaris-create-pick-grid {
+    gap: 1.25rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.polaris-create-pick-cell {
+  margin: 0;
+  padding: 0;
+}
+
+.polaris-create-pick-card {
+  box-sizing: border-box;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  padding: 1.1rem 1.15rem 1.2rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 0.875rem;
+  background: #fff;
+}
+
+@media (min-width: 768px) {
+  .polaris-create-pick-card {
+    padding: 1.2rem 1.25rem 1.35rem;
+    border-radius: 1rem;
+  }
+}
+
+/* Go2 choose-operator tile: border shifts on hover (mouse / trackpad). */
+.polaris-create-pick-card.polaris-create-pick-card--go2-hover {
+  transition: border-color 0.2s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .polaris-create-pick-card.polaris-create-pick-card--go2-hover:hover {
+    border-color: var(--polaris-tile-border-accent);
+  }
+}
+
+/* Portrait create picks (G1, B2): soft grey → white background (TSX adds wash overlays on top) */
+.polaris-create-pick-card.polaris-create-pick-card--portrait {
+  background: linear-gradient(
+    180deg,
+    rgb(241 245 249) 0%,
+    rgb(248 250 252) 40%,
+    rgb(255 255 255) 100%
+  );
+}
+
+/* Robot art: no inner well — same max footprint as operators thumbnails (12rem × 9rem) */
+.polaris-create-pick-card-media {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  align-self: stretch;
+}
+
+.polaris-create-pick-card-img {
+  display: block;
+  max-width: min(12rem, 100%);
+  max-height: 9rem;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+/* Portrait create picks (G1, B2): media fills under title (grid stretch); image pinned to card bottom */
+.polaris-create-pick-card--portrait .polaris-create-pick-card-media {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  flex-shrink: 1;
+  min-height: 0;
+  margin-top: 0;
+  align-self: stretch;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+@media (max-width: 767px) {
+  .polaris-create-pick-card--portrait .polaris-create-pick-card-media {
+    /* Single-column grid: no row stretch — give a tall well so the robot still sits on the bottom line */
+    min-height: 15rem;
+  }
+}
+
+.polaris-create-pick-card--portrait .polaris-create-pick-card-img {
+  display: block;
+  flex-shrink: 0;
+  max-width: min(13rem, 100%);
+  max-height: min(20rem, 55vh);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: bottom center;
+}
+
+.polaris-create-pick-card-body.polaris-operator-card-body {
+  flex: 0 0 auto;
+  margin: 0 0 0.85rem;
+  align-self: stretch;
+  text-align: center;
+}
+
+.polaris-create-pick-card .polaris-operator-card-title {
+  justify-content: center;
+  margin-bottom: 0;
+  text-align: center;
+}
+
 .polaris-operators-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -708,7 +1221,7 @@
 .polaris-operator-card {
   display: flex;
   width: 100%;
-  align-items: flex-start;
+  align-items: center;
   gap: 1.25rem;
   padding: 1.5rem 0;
   border: none;
@@ -730,10 +1243,12 @@
 }
 
 .polaris-operator-card-visual {
+  --op-card-visual-w: 12rem;
+  --op-card-visual-h: 9rem;
   display: flex;
   flex-shrink: 0;
-  width: 12rem;
-  height: 9rem;
+  width: var(--op-card-visual-w);
+  height: var(--op-card-visual-h);
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -742,21 +1257,55 @@
   background: #fafafa;
 }
 
+/* Live POV hover target: shrink-wrap to the sized image (not the full well). */
+.polaris-operator-card-pov-hit {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+.polaris-operator-card-img--static {
+  position: relative;
+  z-index: 0;
+  vertical-align: middle;
+}
+
+.polaris-operator-card-img--live {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  box-sizing: border-box;
+  margin: auto;
+  max-width: none;
+  max-height: none;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .polaris-operator-card-visual--empty {
   border: 1px dashed #d4d4d4;
   background: #fafafa;
 }
 
+/*
+ * Use calc from the well size so dimensions match the old % rules even when the img is not a
+ * direct flex child (e.g. wrapped in .polaris-operator-card-pov-hit — % would resolve against the
+ * shrink-wrapped box and collapse).
+ */
 .polaris-operator-card-img {
-  max-width: 93%;
-  max-height: 93%;
+  max-width: calc(0.93 * var(--op-card-visual-w));
+  max-height: calc(0.93 * var(--op-card-visual-h));
+  width: auto;
+  height: auto;
   object-fit: contain;
 }
 
 /* First two operator rows: slightly smaller robot art inside the same image well. */
-.polaris-operators-list-item:nth-child(-n + 2) .polaris-operator-card-img {
-  max-width: 82%;
-  max-height: 82%;
+.polaris-operators-list-item:nth-child(-n + 2) .polaris-operator-card-img--static {
+  max-width: calc(0.82 * var(--op-card-visual-w));
+  max-height: calc(0.82 * var(--op-card-visual-h));
 }
 
 .polaris-operator-card-placeholder {
@@ -1391,11 +1940,14 @@
   gap: 1rem;
   min-height: 0;
   grid-template-columns: 1fr;
+  /* Feed sizes to content; map row fills remaining flex height so % heights resolve. */
+  grid-template-rows: auto 1fr;
 }
 
 @media (min-width: 960px) {
   .polaris-configurator-split {
     grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    grid-template-rows: 1fr;
     align-items: stretch;
   }
 }
@@ -1423,6 +1975,8 @@
 @media (min-width: 960px) {
   .polaris-configurator-column--map {
     min-height: 0;
+    /* Definite height so PanelShell / .map-surface height: 100% resolves in the grid row. */
+    height: 100%;
   }
 }
 
@@ -1443,6 +1997,8 @@
 }
 
 .polaris-configurator-map .panel-shell {
+  flex: 1 1 0;
+  min-height: 0;
   border-radius: 0.5rem;
   box-shadow: var(--shadow);
 }

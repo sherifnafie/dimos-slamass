@@ -29,6 +29,13 @@ test.describe("/polaris", () => {
 });
 
 test.describe("/polaris/operators", () => {
+  test("/operators alias loads operators page", async ({ page }) => {
+    await page.goto("/operators");
+    await expect(page.getByTestId("polaris-operators-heading")).toHaveText(
+      "Operators",
+    );
+  });
+
   test("desktop: slate shell, hamburger opens sidebar on demand", async ({
     page,
   }) => {
@@ -73,16 +80,16 @@ test.describe("/polaris/operators", () => {
     const robotSlots = page.getByTestId("polaris-robot-slot");
     await expect(robotSlots).toHaveCount(4);
     await expect(robotSlots.first()).toBeVisible();
-    const firstRobotImg = robotSlots.first().locator(".polaris-operator-card-img");
+    const firstRobotImg = robotSlots.first().locator(".polaris-operator-card-img--static");
     await expect(firstRobotImg).toBeVisible();
     await expect(firstRobotImg).toHaveAttribute(
       "src",
       /65264e97e81744409042d34bf3ba6da6_400x400\.png/,
     );
-    const secondCardImg = robotSlots.nth(1).locator(".polaris-operator-card-img");
+    const secondCardImg = robotSlots.nth(1).locator(".polaris-operator-card-img--static");
     await expect(secondCardImg).toHaveAttribute(
       "src",
-      /65264e97e81744409042d34bf3ba6da6_400x400\.png/,
+      /9896d21bdef4443d821a324931d8af0c_800x800\.png/,
     );
     const thirdCardImg = robotSlots.nth(2).locator(".polaris-operator-card-img");
     await expect(thirdCardImg).toBeVisible();
@@ -91,7 +98,7 @@ test.describe("/polaris/operators", () => {
       /11d0a76afbb74e8fb7f692652b4c33e0_800x800\.png/,
     );
     await expect(robotSlots.nth(2).getByText("Unitree AS2")).toBeVisible();
-    const fourthCardImg = robotSlots.nth(3).locator(".polaris-operator-card-img");
+    const fourthCardImg = robotSlots.nth(3).locator(".polaris-operator-card-img--static");
     await expect(fourthCardImg).toBeVisible();
     await expect(fourthCardImg).toHaveAttribute(
       "src",
@@ -153,6 +160,17 @@ test.describe("/polaris/operators", () => {
     await expect(operators.getByText("Operators")).toBeVisible();
   });
 
+  test("add operator navigates to create page", async ({ page }) => {
+    await page.goto("/polaris/operators");
+    await page.getByTestId("polaris-add-operator-button").click();
+    await expect(page).toHaveURL(/\/polaris\/create$/);
+    await expect(page.getByTestId("polaris-create-heading")).toHaveText("Choose Operator");
+    await expect(page.getByTestId("polaris-create-back")).toHaveAttribute(
+      "href",
+      "/polaris/operators",
+    );
+  });
+
   test("configurator link navigates to general view", async ({ page }) => {
     await page.goto("/polaris/operators");
     const configurator = page
@@ -169,5 +187,63 @@ test.describe("/polaris/operators", () => {
     );
     await expect(page.getByRole("region", { name: "Robot capture history" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Spatial map" })).toBeVisible();
+  });
+});
+
+test.describe("/polaris/create", () => {
+  test("direct URL loads choose operator page", async ({ page }) => {
+    await page.goto("/polaris/create");
+    await expect(page.getByTestId("polaris-create-heading")).toHaveText("Choose Operator");
+  });
+
+  test("/create alias loads choose operator page", async ({ page }) => {
+    await page.goto("/create");
+    await expect(page.getByTestId("polaris-create-heading")).toHaveText("Choose Operator");
+  });
+
+  test("desktop: G1 pick image bottom aligns with card bottom", async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 900 });
+    await page.goto("/polaris/create");
+
+    const g1 = page.getByTestId("polaris-create-pick-g1");
+    await expect(g1).toBeVisible();
+    const img = g1.locator(".polaris-create-pick-card-img");
+    await expect(img).toBeVisible();
+    await img.evaluate((el: HTMLImageElement) => {
+      if (el.complete && el.naturalWidth > 0) {
+        return;
+      }
+      return new Promise<void>((resolve, reject) => {
+        el.addEventListener("load", () => resolve(), { once: true });
+        el.addEventListener("error", () => reject(new Error("G1 preview image failed to load")), {
+          once: true,
+        });
+      });
+    });
+
+    const media = g1.locator(".polaris-create-pick-card-media");
+    const cardBox = await g1.boundingBox();
+    const mediaBox = await media.boundingBox();
+    const imgBox = await img.boundingBox();
+    expect(cardBox).not.toBeNull();
+    expect(mediaBox).not.toBeNull();
+    expect(imgBox).not.toBeNull();
+
+    const imgBottom = imgBox!.y + imgBox!.height;
+    const mediaBottom = mediaBox!.y + mediaBox!.height;
+    expect(
+      Math.abs(imgBottom - mediaBottom),
+      "image bottom should match media frame bottom (object-position / flex-end)",
+    ).toBeLessThan(2);
+
+    const paddingBottom = await g1.evaluate((el) =>
+      parseFloat(getComputedStyle(el).paddingBottom),
+    );
+    const cardBottom = cardBox!.y + cardBox!.height;
+    const expectedMediaBottom = cardBottom - paddingBottom;
+    expect(
+      Math.abs(mediaBottom - expectedMediaBottom),
+      "portrait media block should sit on the card’s bottom padding edge",
+    ).toBeLessThan(4);
   });
 });

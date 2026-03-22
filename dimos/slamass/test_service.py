@@ -26,6 +26,7 @@ from dimos.slamass.service import (
     decode_pov_frame_message,
     InspectionAnalysis,
     OpenAIInspectionAnalyzer,
+    prepare_pov_jpeg,
     RobotPose,
     SlamassService,
 )
@@ -152,6 +153,13 @@ def test_decode_pov_frame_message_roundtrips_jpeg_bytes() -> None:
     assert decoded == image_bytes
 
 
+def test_decode_pov_frame_message_accepts_data_url_prefix() -> None:
+    image_bytes = make_test_jpeg()
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    decoded = decode_pov_frame_message({"image_base64": f"data:image/jpeg;base64,{b64}"})
+    assert decoded == image_bytes
+
+
 def test_openai_inspection_analyzer_uses_slamass_default_model() -> None:
     analyzer = OpenAIInspectionAnalyzer()
 
@@ -196,7 +204,13 @@ async def test_service_prefers_live_socket_pov_over_observe_polling(tmp_path: Pa
 
     await service._handle_live_pov_frame(live_frame)
 
-    assert service.latest_pov_jpeg == live_frame
+    expected = prepare_pov_jpeg(
+        live_frame,
+        max_width=service._pov_max_width,
+        quality=service._pov_jpeg_quality,
+    )
+    assert service.latest_pov_jpeg == expected
+    assert service._pov_live is True
     assert service.pov_seq == 1
     assert service._socket_pov_is_fresh() is True
     assert fake_mcp.observe_calls == 0

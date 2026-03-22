@@ -1,5 +1,6 @@
 import React from "react";
 
+import polarisLanderOperatorsPreview from "./assets/polaris-lander-operators-preview.jpg";
 import { PolarisLayout } from "./PolarisLayout";
 import { POLARIS_A2_PREVIEW_URL } from "./polarisAssets";
 
@@ -34,41 +35,68 @@ export default function PolarisLanderPage(): React.ReactElement {
         className="polaris-lander-main min-h-[calc(100vh-7rem)]"
         data-testid="polaris-lander"
       >
-        <div className="polaris-lander-hero mx-auto max-w-lg px-4 py-16 text-center sm:px-6">
-          <div aria-hidden className="polaris-lander-arc" data-testid="polaris-lander-arc">
-            {LANDER_ARC_STEPS.map((step) => (
-              <span
-                className={
-                  step.apex
-                    ? "polaris-lander-arc-dot polaris-lander-arc-dot--apex"
-                    : "polaris-lander-arc-dot"
-                }
-                key={step.i}
-                style={{ opacity: step.opacity, transform: step.transform }}
-              >
-                {step.apex ? <span className="polaris-lander-arc-apex-glyph" /> : null}
-              </span>
-            ))}
+        {/* Hero layout matches Tailark hero-section-9: copy block, then overlapping 3D+skew preview rail */}
+        <section className="overflow-hidden bg-white pb-32 lg:pb-48">
+          <div className="relative mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:py-24">
+            <div className="polaris-fade-stagger relative z-10 mx-auto max-w-2xl text-center">
+              <div aria-hidden className="polaris-lander-arc" data-testid="polaris-lander-arc">
+                {LANDER_ARC_STEPS.map((step) => (
+                  <span
+                    className={
+                      step.apex
+                        ? "polaris-lander-arc-dot polaris-lander-arc-dot--apex"
+                        : "polaris-lander-arc-dot"
+                    }
+                    key={step.i}
+                    style={{ opacity: step.opacity, transform: step.transform }}
+                  >
+                    {step.apex ? <span className="polaris-lander-arc-apex-glyph" /> : null}
+                  </span>
+                ))}
+              </div>
+              <h1 className="polaris-lander-title" data-testid="polaris-lander-intro">
+                The operating system
+                <br />
+                for the physical world.
+              </h1>
+              <p className="polaris-lander-tagline" data-testid="polaris-lander-tagline">
+                Polaris builds and deploys autonomous spatial intelligence on the Unitree robot ecosystem,
+                giving machines the ability to perceive, remember, and reason about the environments they
+                operate in.
+              </p>
+              <a className="polaris-lander-cta" href="/polaris/operators">
+                Open operators
+              </a>
+            </div>
           </div>
-          <h1 className="polaris-lander-title" data-testid="polaris-lander-intro">
-            The operating system for the physical world.
-          </h1>
-          <p className="polaris-lander-tagline" data-testid="polaris-lander-tagline">
-            Polaris builds and deploys autonomous spatial intelligence on the Unitree robot ecosystem,
-            giving machines the ability to perceive, remember, and reason about the environments they operate
-            in.
-          </p>
-          <a className="polaris-lander-cta" href="/polaris/operators">
-            Open operators
-          </a>
-        </div>
+
+          <div
+            className="polaris-lander-preview-rail mt-10 ml-0 mr-auto w-full max-w-[min(100%,96rem)] pl-0 pr-4 sm:mt-12 sm:pr-6 lg:mt-14"
+            data-testid="polaris-lander-preview"
+          >
+            <div className="polaris-lander-preview-perspective pl-2 sm:pl-4 lg:pl-8 -mr-8 lg:-mr-28">
+              <div className="polaris-lander-preview-rotate">
+                <div className="polaris-lander-preview-skew">
+                  <img
+                    alt="Polaris operators — robot fleet overview"
+                    className="polaris-lander-preview-img relative z-[2] h-auto w-full rounded-xl border border-slate-200 object-cover object-top lg:h-full"
+                    decoding="async"
+                    height={532}
+                    src={polarisLanderOperatorsPreview}
+                    width={1024}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section
           aria-labelledby="polaris-lander-bento-heading"
           className="polaris-lander-bento"
           data-testid="polaris-lander-bento"
         >
-          <div className="polaris-lander-bento-inner mx-auto max-w-6xl px-4 pb-20 pt-4 sm:px-6">
+          <div className="polaris-lander-bento-inner polaris-fade-stagger polaris-fade-stagger--bento mx-auto max-w-6xl px-4 pb-20 pt-4 sm:px-6">
             <div className="polaris-lander-bento-head">
               <h2 className="polaris-lander-bento-heading" id="polaris-lander-bento-heading">
                 Specification highlights

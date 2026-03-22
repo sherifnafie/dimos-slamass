@@ -27,15 +27,24 @@ function useSize<T extends HTMLElement>(): [React.RefObject<T>, { width: number;
     if (!ref.current) {
       return;
     }
+    const el = ref.current;
+    const apply = (width: number, height: number) => {
+      setSize({ width, height });
+    };
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      apply(rect.width, rect.height);
+    };
+    measure();
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) {
         return;
       }
       const box = entry.contentRect;
-      setSize({ width: box.width, height: box.height });
+      apply(box.width, box.height);
     });
-    observer.observe(ref.current);
+    observer.observe(el);
     return () => observer.disconnect();
   }, []);
 

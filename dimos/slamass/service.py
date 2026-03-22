@@ -33,6 +33,7 @@ import zlib
 import aiohttp
 from dotenv import find_dotenv, load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAIError
@@ -346,6 +347,7 @@ class McpToolClient:
     def __init__(self, mcp_url: str) -> None:
         self.mcp_url = mcp_url
         self._session: aiohttp.ClientSession | None = None
+        self._mcp_initialized = False
 
     async def start(self) -> None:
         if self._session is None or self._session.closed:
@@ -362,14 +364,27 @@ class McpToolClient:
         if not isinstance(content, list):
             return None
 
+        flat: list[dict[str, Any]] = []
         for item in content:
-            if item.get("type") != "image_url":
+            if isinstance(item, list):
+                for sub in item:
+                    if isinstance(sub, dict):
+                        flat.append(sub)
+            elif isinstance(item, dict):
+                flat.append(item)
+
+        for part in flat:
+            if part.get("type") != "image_url":
                 continue
-            image_url = item.get("image_url", {}).get("url", "")
+            url_holder = part.get("image_url")
+            image_url = url_holder.get("url", "") if isinstance(url_holder, dict) else ""
             if not isinstance(image_url, str) or not image_url.startswith("data:image/"):
                 continue
             _, encoded = image_url.split(",", 1)
-            return base64.b64decode(encoded)
+            try:
+                return base64.b64decode(encoded)
+            except Exception:
+                return None
         return None
 
     async def relative_move(
@@ -404,6 +419,31 @@ class McpToolClient:
                     return text
         return ""
 
+    async def _ensure_mcp_initialized(self) -> None:
+        if self._mcp_initialized:
+            return
+        await self.start()
+        assert self._session is not None
+        async with self._session.post(
+            self.mcp_url,
+            json={
+                "jsonrpc": "2.0",
+                "id": "slamass-mcp-init",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {"name": "dimos-slamass", "version": "1.0.0"},
+                },
+            },
+        ) as response:
+            response.raise_for_status()
+            body = await response.json()
+        err = body.get("error")
+        if err is not None:
+            raise RuntimeError(f"MCP initialize failed: {err}")
+        self._mcp_initialized = True
+
     async def call_tool(
         self,
         name: str,
@@ -411,7 +451,7 @@ class McpToolClient:
         *,
         request_id: str | None = None,
     ) -> dict[str, Any]:
-        await self.start()
+        await self._ensure_mcp_initialized()
         assert self._session is not None
         async with self._session.post(
             self.mcp_url,
@@ -548,8 +588,13 @@ def decode_pov_frame_message(payload: dict[str, Any]) -> bytes | None:
     encoded = payload.get("image_base64")
     if not isinstance(encoded, str) or not encoded:
         return None
+    raw = encoded.strip()
+    if raw.startswith("data:"):
+        if "," not in raw:
+            return None
+        _, raw = raw.split(",", 1)
     try:
-        return base64.b64decode(encoded)
+        return base64.b64decode(raw)
     except Exception:
         return None
 
@@ -857,6 +902,7 @@ class SlamassService:
         self._pov_max_width = max(1, pov_max_width) if pov_max_width is not None and pov_max_width > 0 else None
         self._pov_jpeg_quality = max(1, min(100, pov_jpeg_quality))
         self._last_socket_pov_monotonic = 0.0
+        self._pov_live: bool = False
 
         self.robot_pose: RobotPose | None = None
         self.path: list[list[float]] = []
@@ -943,7 +989,7 @@ class SlamassService:
                 "robot_pose": self._serialize_pose(self.robot_pose),
                 "path": self.path,
                 "pov": {
-                    "available": self.latest_pov_jpeg is not None,
+                    "available": self._pov_live,
                     "seq": self.pov_seq,
                     "updated_at": self.pov_updated_at,
                     "image_url": f"/api/pov/latest.jpg?v={self.pov_seq}",
@@ -1894,9 +1940,19 @@ class SlamassService:
             await self.publish_event("yolo_object_upserted", object_payload)
 
     async def _handle_live_pov_frame(self, image_bytes: bytes) -> None:
+        try:
+            prepared = prepare_pov_jpeg(
+                image_bytes,
+                max_width=self._pov_max_width,
+                quality=self._pov_jpeg_quality,
+            )
+        except Exception:
+            logger.debug("POV socket frame could not be normalized", exc_info=True)
+            return
         async with self._state_lock:
             self._last_socket_pov_monotonic = time.monotonic()
-            self.latest_pov_jpeg = image_bytes
+            self.latest_pov_jpeg = prepared
+            self._pov_live = True
             self.pov_seq += 1
             self.pov_updated_at = utc_now_iso()
         await self.publish_event("state_updated", await self._state_delta())
@@ -1931,6 +1987,7 @@ class SlamassService:
                     )
                     async with self._state_lock:
                         self.latest_pov_jpeg = image_bytes
+                        self._pov_live = True
                         self.pov_seq += 1
                         self.pov_updated_at = utc_now_iso()
                     await self.publish_event("state_updated", await self._state_delta())
@@ -2088,7 +2145,7 @@ class SlamassService:
                 "robot_pose": self._serialize_pose(self.robot_pose),
                 "path": self.path,
                 "pov": {
-                    "available": self.latest_pov_jpeg is not None,
+                    "available": self._pov_live,
                     "seq": self.pov_seq,
                     "updated_at": self.pov_updated_at,
                     "image_url": f"/api/pov/latest.jpg?v={self.pov_seq}",
@@ -2728,6 +2785,24 @@ def create_app(
     app = FastAPI(lifespan=lifespan)
     app.state.slamass = slamass
 
+    _cors_origins = os.getenv("DIMOS_SLAMASS_CORS_ORIGINS", "").strip()
+    if _cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[o.strip() for o in _cors_origins.split(",") if o.strip()],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?",
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
     @app.get("/api/state")
     async def get_state() -> dict[str, Any]:
         return await slamass.snapshot()
@@ -2770,10 +2845,9 @@ def create_app(
 
     @app.get("/api/pov/latest.jpg")
     async def get_latest_pov() -> Response:
-        if slamass.latest_pov_jpeg is None:
-            raise HTTPException(status_code=503, detail="No POV frame available yet")
+        body = slamass.latest_pov_jpeg or make_placeholder_jpeg()
         return Response(
-            content=slamass.latest_pov_jpeg,
+            content=body,
             media_type="image/jpeg",
             headers={"Cache-Control": "no-store"},
         )

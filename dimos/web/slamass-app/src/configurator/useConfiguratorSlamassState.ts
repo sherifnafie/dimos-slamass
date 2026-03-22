@@ -63,8 +63,12 @@ function applyUiState(previous: UiState, next: UiState): UiState {
   return next.revision >= previous.revision ? next : previous;
 }
 
+export type SlamassApiStatus = "loading" | "ok" | "error";
+
 export function useConfiguratorSlamassState(): {
   state: AppState;
+  /** Whether /api/state has been reached; "error" if the first load failed (CORS, wrong port, sidecar down). */
+  slamassApiStatus: SlamassApiStatus;
   queueCameraSync: (camera: UiCameraState) => void;
   handleSelectItem: (item: SemanticItemRef | null) => void;
   handleFocusItem: (item: SemanticItemRef) => void;
@@ -73,6 +77,7 @@ export function useConfiguratorSlamassState(): {
   handleClearFocus: () => void;
 } {
   const [state, setState] = useState<AppState>(emptyState);
+  const [slamassApiStatus, setSlamassApiStatus] = useState<SlamassApiStatus>("loading");
   const cameraSyncTimerRef = useRef<number | null>(null);
 
   const mergeUiState = useCallback((nextUi: UiState) => {
@@ -130,12 +135,15 @@ export function useConfiguratorSlamassState(): {
       try {
         const data = await fetchJson<AppState>("/api/state");
         if (!cancelled) {
+          setSlamassApiStatus("ok");
           startTransition(() => {
             setState(normalizeAppStateForDev(data));
           });
         }
       } catch {
-        /* keep emptyState */
+        if (!cancelled) {
+          setSlamassApiStatus("error");
+        }
       }
     };
 
@@ -314,6 +322,7 @@ export function useConfiguratorSlamassState(): {
 
   return {
     state,
+    slamassApiStatus,
     queueCameraSync,
     handleSelectItem,
     handleFocusItem,
