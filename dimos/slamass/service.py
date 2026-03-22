@@ -75,6 +75,10 @@ MIN_POV_POLL_INTERVAL_SECONDS = 0.05
 DEFAULT_POV_MAX_WIDTH = 1024
 DEFAULT_POV_JPEG_QUALITY = 76
 MAP_SOCKET_POV_STALE_AFTER_SECONDS = 0.75
+# Manual actions should tolerate a brief stream hiccup and reuse the image the
+# operator is already seeing before falling back to a fresh observe() call.
+MANUAL_CAPTURE_MAX_POV_AGE_SECONDS = 2.0
+TELEOP_COMMAND_EPSILON = 1e-4
 INSPECTION_MODE_AI_GATE = "ai_gate"
 INSPECTION_MODE_ALWAYS_CREATE = "always_create"
 SEMANTIC_KIND_POI = "vlm_poi"
@@ -379,6 +383,9 @@ class McpToolClient:
             "relative_move",
             {"forward": forward, "left": left, "degrees": degrees},
         )
+
+    async def cancel_navigation_goal(self) -> str:
+        return await self.call_tool_text("cancel_navigation_goal")
 
     async def set_yolo_inference(self, *, enabled: bool) -> str:
         text = await self.call_tool_text("set_yolo_inference", {"enabled": enabled})
@@ -857,6 +864,8 @@ class SlamassService:
         self._pov_max_width = max(1, pov_max_width) if pov_max_width is not None and pov_max_width > 0 else None
         self._pov_jpeg_quality = max(1, min(100, pov_jpeg_quality))
         self._last_socket_pov_monotonic = 0.0
+        self._last_pov_update_monotonic = 0.0
+        self._teleop_navigation_preempted = False
 
         self.robot_pose: RobotPose | None = None
         self.path: list[list[float]] = []
@@ -963,6 +972,7 @@ class SlamassService:
             }
 
     async def navigate(self, x: float, y: float, yaw: float | None = None) -> None:
+        self._teleop_navigation_preempted = False
         await self.map_client.emit_click(x, y, yaw)
 
     async def send_move_command(
@@ -975,6 +985,18 @@ class SlamassService:
         angular_y: float = 0.0,
         angular_z: float = 0.0,
     ) -> dict[str, Any]:
+        is_manual_motion = self._has_nonzero_manual_motion(
+            linear_x=linear_x,
+            linear_y=linear_y,
+            linear_z=linear_z,
+            angular_x=angular_x,
+            angular_y=angular_y,
+            angular_z=angular_z,
+        )
+        if is_manual_motion:
+            await self._preempt_navigation_for_teleop()
+        else:
+            self._teleop_navigation_preempted = False
         try:
             await self.map_client.emit_move_command(
                 linear_x=linear_x,
@@ -1464,9 +1486,9 @@ class SlamassService:
         return await self.inspect_now()
 
     async def chat_look_current_view(self, *, query: str) -> dict[str, Any]:
-        image_bytes = await self._observe_jpeg()
+        image_bytes = await self._current_view_jpeg()
         if image_bytes is None:
-            return {"ok": False, "error": "No image available from observe()"}
+            return {"ok": False, "error": "No recent POV frame available"}
         dimos_image = jpeg_bytes_to_dimos_image(image_bytes)
         prompt = (
             "Answer the operator's question about the current live robot view. "
@@ -1529,9 +1551,9 @@ class SlamassService:
             raise HTTPException(status_code=409, detail="No robot pose available")
 
         try:
-            image_bytes = await self._observe_jpeg()
+            image_bytes = await self._current_view_jpeg()
             if image_bytes is None:
-                raise RuntimeError("No image available from observe()")
+                raise RuntimeError("No recent POV frame available")
 
             thumbnail_bytes = make_thumbnail(image_bytes)
             hero_path = self.storage.create_image_asset(image_bytes, ".jpg")
@@ -1895,7 +1917,9 @@ class SlamassService:
 
     async def _handle_live_pov_frame(self, image_bytes: bytes) -> None:
         async with self._state_lock:
-            self._last_socket_pov_monotonic = time.monotonic()
+            now = time.monotonic()
+            self._last_socket_pov_monotonic = now
+            self._last_pov_update_monotonic = now
             self.latest_pov_jpeg = image_bytes
             self.pov_seq += 1
             self.pov_updated_at = utc_now_iso()
@@ -1930,6 +1954,7 @@ class SlamassService:
                         quality=self._pov_jpeg_quality,
                     )
                     async with self._state_lock:
+                        self._last_pov_update_monotonic = time.monotonic()
                         self.latest_pov_jpeg = image_bytes
                         self.pov_seq += 1
                         self.pov_updated_at = utc_now_iso()
@@ -2028,11 +2053,70 @@ class SlamassService:
         if asyncio.iscoroutine(result):
             await result
 
+    def _has_nonzero_manual_motion(
+        self,
+        *,
+        linear_x: float,
+        linear_y: float,
+        linear_z: float,
+        angular_x: float,
+        angular_y: float,
+        angular_z: float,
+    ) -> bool:
+        return any(
+            abs(value) > TELEOP_COMMAND_EPSILON
+            for value in (linear_x, linear_y, linear_z, angular_x, angular_y, angular_z)
+        )
+
+    async def _cancel_goto_poi_task(self) -> None:
+        if self._goto_poi_task is None:
+            return
+        self._goto_poi_task.cancel()
+        with contextlib_suppress(asyncio.CancelledError):
+            await self._goto_poi_task
+        self._goto_poi_task = None
+
+    async def _preempt_navigation_for_teleop(self) -> None:
+        if self._teleop_navigation_preempted:
+            return
+
+        await self._cancel_goto_poi_task()
+
+        cancel_navigation = getattr(self.mcp_client, "cancel_navigation_goal", None)
+        try:
+            if cancel_navigation is not None:
+                result = cancel_navigation()
+            else:
+                result = self.mcp_client.call_tool_text("cancel_navigation_goal")
+            if asyncio.iscoroutine(result):
+                result = await result
+            if isinstance(result, str) and (
+                result.startswith("Tool not found:") or result.startswith("Error running tool")
+            ):
+                raise RuntimeError(result)
+        except Exception as exc:
+            logger.warning("Teleop could not cancel active navigation", error=str(exc))
+        self._teleop_navigation_preempted = True
+
     async def _observe_jpeg(self) -> bytes | None:
         result = self.mcp_client.observe_jpeg()
         if asyncio.iscoroutine(result):
             return await result
         return result
+
+    async def _current_view_jpeg(self) -> bytes | None:
+        async with self._state_lock:
+            cached_pov = self.latest_pov_jpeg
+            last_pov_update = self._last_pov_update_monotonic
+
+        if (
+            cached_pov is not None
+            and last_pov_update > 0.0
+            and time.monotonic() - last_pov_update <= MANUAL_CAPTURE_MAX_POV_AGE_SECONDS
+        ):
+            return cached_pov
+
+        return await self._observe_jpeg()
 
     async def _set_yolo_inference_enabled(
         self,

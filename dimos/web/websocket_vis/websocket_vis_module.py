@@ -70,6 +70,22 @@ _browser_opened = False
 _POV_MAX_FPS = 10.0
 _POV_JPEG_QUALITY = 78
 _POV_MAX_WIDTH = 1280
+_MOVE_COMMAND_EPSILON = 1e-4
+
+
+def _move_command_has_manual_motion(data: dict[str, Any]) -> bool:
+    for component in ("linear", "angular"):
+        values = data.get(component)
+        if not isinstance(values, dict):
+            continue
+        for axis in ("x", "y", "z"):
+            value = values.get(axis, 0.0)
+            try:
+                if abs(float(value)) > _MOVE_COMMAND_EPSILON:
+                    return True
+            except (TypeError, ValueError):
+                continue
+    return False
 
 
 class WebsocketVisModule(Module):
@@ -101,6 +117,7 @@ class WebsocketVisModule(Module):
 
     # LCM outputs
     goal_request: Out[PoseStamped]
+    cancel_goal_cmd: Out[Bool]
     gps_goal: Out[LatLon]
     explore_cmd: Out[Bool]
     stop_explore_cmd: Out[Bool]
@@ -135,6 +152,7 @@ class WebsocketVisModule(Module):
         self.costmap_encoder = OptimizedCostmapEncoder(chunk_size=64)
         self._last_pov_emit_monotonic = 0.0
         self._pov_seq = 0
+        self._teleop_navigation_preempted = False
 
         # Track GPS goal points for visualization
         self.gps_goal_points: list[dict[str, float]] = []
@@ -329,6 +347,7 @@ class WebsocketVisModule(Module):
                 frame_id="world",
             )
             self.goal_request.publish(goal)
+            self._teleop_navigation_preempted = False
             log_payload: dict[str, float] = {
                 "x": round(goal.position.x, 3),
                 "y": round(goal.position.y, 3),
@@ -375,6 +394,14 @@ class WebsocketVisModule(Module):
 
         @self.sio.event  # type: ignore[untyped-decorator]
         async def move_command(sid: str, data: dict[str, Any]) -> None:
+            if _move_command_has_manual_motion(data):
+                if not self._teleop_navigation_preempted:
+                    self.cancel_goal_cmd.publish(Bool(data=True))
+                    self._teleop_navigation_preempted = True
+                    logger.info("Teleop preempted active navigation")
+            else:
+                self._teleop_navigation_preempted = False
+
             # Publish Twist if transport is configured
             if self.cmd_vel and self.cmd_vel.transport:
                 twist = Twist(

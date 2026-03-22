@@ -290,6 +290,18 @@ class UnitreeSkillContainer(Module):
         return f"Wait completed with length={seconds}s"
 
     @skill
+    def cancel_navigation_goal(self) -> str:
+        """Cancel any active navigation goal immediately."""
+        try:
+            cancel_goal_rpc = self.get_rpc_calls("NavigationInterface.cancel_goal")
+        except Exception:
+            logger.error("Navigation module not connected properly")
+            return "Failed to connect to navigation module."
+
+        cancel_goal_rpc()
+        return "Navigation goal cancelled."
+
+    @skill
     def current_time(self) -> str:
         """Provides current time."""
         return str(datetime.datetime.now())

@@ -33,13 +33,14 @@ from dimos.slamass.storage import SlamassStorage
 
 
 class FakeMcpClient:
-    def __init__(self, image_bytes: bytes) -> None:
+    def __init__(self, image_bytes: bytes | None) -> None:
         self._image_bytes = image_bytes
         self.observe_calls = 0
         self.relative_move_calls: list[tuple[float, float, float]] = []
+        self.cancel_navigation_goal_calls = 0
         self.set_yolo_inference_calls: list[bool] = []
 
-    def observe_jpeg(self) -> bytes:
+    def observe_jpeg(self) -> bytes | None:
         self.observe_calls += 1
         return self._image_bytes
 
@@ -48,6 +49,10 @@ class FakeMcpClient:
     ) -> dict[str, str]:
         self.relative_move_calls.append((forward, left, degrees))
         return {"status": "ok"}
+
+    async def cancel_navigation_goal(self) -> str:
+        self.cancel_navigation_goal_calls += 1
+        return "Navigation goal cancelled."
 
     async def set_yolo_inference(self, *, enabled: bool) -> str:
         self.set_yolo_inference_calls.append(enabled)
@@ -199,6 +204,30 @@ async def test_service_prefers_live_socket_pov_over_observe_polling(tmp_path: Pa
     assert service.latest_pov_jpeg == live_frame
     assert service.pov_seq == 1
     assert service._socket_pov_is_fresh() is True
+    assert fake_mcp.observe_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_service_inspect_now_uses_recent_cached_pov_when_observe_unavailable(
+    tmp_path: Path,
+) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_mcp = FakeMcpClient(None)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=fake_mcp,
+        analyzer=FakeAnalyzer(should_create_poi=True, title="Window Bay"),
+    )
+    service.robot_pose = RobotPose(x=1.0, y=2.0, z=0.0, yaw=0.2)
+
+    await service._handle_live_pov_frame(make_test_jpeg())
+    result = await service.inspect_now()
+
+    assert result["status"] == "accepted"
+    assert len(storage.list_pois()) == 1
     assert fake_mcp.observe_calls == 0
 
 
@@ -682,12 +711,13 @@ async def test_service_go_to_yolo_object_uses_best_view_pose(tmp_path: Path) -> 
 async def test_service_send_move_command_uses_map_socket(tmp_path: Path) -> None:
     storage = SlamassStorage(tmp_path)
     fake_map_client = FakeMapClient()
+    fake_mcp = FakeMcpClient(make_test_jpeg())
     service = SlamassService(
         map_socket_url="http://localhost:7779",
         mcp_url="http://localhost:9990/mcp",
         state_dir=tmp_path,
         storage=storage,
-        mcp_client=FakeMcpClient(make_test_jpeg()),
+        mcp_client=fake_mcp,
         analyzer=FakeAnalyzer(),
     )
     service.map_client = fake_map_client  # type: ignore[assignment]
@@ -695,6 +725,7 @@ async def test_service_send_move_command_uses_map_socket(tmp_path: Path) -> None
     result = await service.send_move_command(linear_x=0.4, linear_y=0.2, angular_z=-0.7)
 
     assert result == {"ok": True}
+    assert fake_mcp.cancel_navigation_goal_calls == 1
     assert fake_map_client.move_calls == [
         {
             "linear_x": 0.4,
@@ -705,6 +736,51 @@ async def test_service_send_move_command_uses_map_socket(tmp_path: Path) -> None
             "angular_z": -0.7,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_service_send_move_command_preempts_navigation_only_once_per_teleop_burst(
+    tmp_path: Path,
+) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_map_client = FakeMapClient()
+    fake_mcp = FakeMcpClient(make_test_jpeg())
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=fake_mcp,
+        analyzer=FakeAnalyzer(),
+    )
+    service.map_client = fake_map_client  # type: ignore[assignment]
+
+    await service.send_move_command(linear_x=0.3)
+    await service.send_move_command(linear_x=0.3)
+    await service.send_move_command()
+    await service.send_move_command(linear_x=-0.2)
+
+    assert fake_mcp.cancel_navigation_goal_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_service_send_move_command_cancels_pending_poi_follow_up(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_map_client = FakeMapClient()
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+    )
+    service.map_client = fake_map_client  # type: ignore[assignment]
+    service._goto_poi_task = asyncio.create_task(asyncio.sleep(30.0))
+
+    await service.send_move_command(linear_y=0.2)
+
+    assert service._goto_poi_task is None
 
 
 @pytest.mark.asyncio

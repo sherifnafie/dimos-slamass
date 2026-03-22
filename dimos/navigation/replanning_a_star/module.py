@@ -31,6 +31,7 @@ class ReplanningAStarPlanner(Module, NavigationInterface):
     odom: In[PoseStamped]  # TODO: Use TF.
     global_costmap: In[OccupancyGrid]
     goal_request: In[PoseStamped]
+    cancel_goal_cmd: In[Bool]
     clicked_point: In[PointStamped]
     target: In[PoseStamped]
 
@@ -58,6 +59,13 @@ class ReplanningAStarPlanner(Module, NavigationInterface):
         )
         self._disposables.add(
             Disposable(self.goal_request.subscribe(self._planner.handle_goal_request))
+        )
+        self._disposables.add(
+            Disposable(
+                self.cancel_goal_cmd.subscribe(
+                    lambda msg: self._planner.cancel_goal() if msg.data else None
+                )
+            )
         )
         self._disposables.add(Disposable(self.target.subscribe(self._planner.handle_goal_request)))
 

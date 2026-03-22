@@ -35,7 +35,7 @@ export function LiveFeedPanel(props: LiveFeedPanelProps): React.ReactElement {
         ) : (
           <div className="panel-empty">
             <h3>POV not ready</h3>
-            <p>Waiting for `observe()` frames.</p>
+            <p>Waiting for live POV frames.</p>
           </div>
         )}
       </div>
