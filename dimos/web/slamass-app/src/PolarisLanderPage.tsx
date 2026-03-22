@@ -2,7 +2,7 @@ import React from "react";
 
 import polarisLanderOperatorsPreview from "./assets/polaris-lander-operators-preview.jpg";
 import { PolarisLayout } from "./PolarisLayout";
-import { POLARIS_A2_PREVIEW_URL } from "./polarisAssets";
+import { POLARIS_A2_PREVIEW_URL, POLARIS_GO2_PREVIEW_URL } from "./polarisAssets";
 
 const LANDER_ARC_COUNT = 13;
 const LANDER_ARC_HALFWIDTH_PX = 252;
@@ -59,7 +59,7 @@ export default function PolarisLanderPage(): React.ReactElement {
                 ))}
               </div>
               <h1 className="polaris-lander-title" data-testid="polaris-lander-intro">
-                The operating system
+                The operating system{" "}
                 <br />
                 for the physical world.
               </h1>
@@ -71,6 +71,53 @@ export default function PolarisLanderPage(): React.ReactElement {
               <a className="polaris-operators-add-button" href="/polaris/operators">
                 Explore Polaris
               </a>
+            </div>
+
+            <div
+              className="polaris-lander-spotlight"
+              data-testid="polaris-lander-spotlight"
+            >
+              <div aria-hidden className="polaris-lander-spotlight-floor" />
+              <a
+                className="polaris-lander-spotlight-card"
+                href="/polaris/navigator"
+              >
+                <div className="polaris-lander-spotlight-media">
+                  <img
+                    alt="Unitree Go2 quadruped robot"
+                    className="polaris-lander-spotlight-img"
+                    decoding="async"
+                    height={400}
+                    src={POLARIS_GO2_PREVIEW_URL}
+                    width={400}
+                  />
+                </div>
+                <div className="polaris-lander-spotlight-copy">
+                  <div className="polaris-lander-spotlight-title-row">
+                    <h2 className="polaris-lander-spotlight-title">Unitree Go2</h2>
+                    <span
+                      aria-label="Active"
+                      className="polaris-lander-spotlight-status"
+                      role="status"
+                    />
+                  </div>
+                  <dl className="polaris-lander-spotlight-meta">
+                    <div className="polaris-lander-spotlight-meta-row">
+                      <dt>Type</dt>
+                      <dd>Unitree Go2 X</dd>
+                    </div>
+                    <div className="polaris-lander-spotlight-meta-row">
+                      <dt>Location</dt>
+                      <dd>Floor lab</dd>
+                    </div>
+                    <div className="polaris-lander-spotlight-meta-row">
+                      <dt>Task</dt>
+                      <dd>Live session</dd>
+                    </div>
+                  </dl>
+                </div>
+              </a>
+              <span aria-hidden className="polaris-lander-spotlight-map-pin" />
             </div>
           </div>
 

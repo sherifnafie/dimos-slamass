@@ -1,15 +1,14 @@
 import React from "react";
 
-import go2TopdownSprite from "./assets/go2-topdown.png";
 import {
   buildViewport,
   clampZoom,
-  panCamera,
   screenToWorld,
   worldToImagePixels,
   zoomCameraAtScreenPoint,
 } from "./mapViewport";
 import { refFromPoi, refFromYoloObject, semanticKey } from "./semanticItems";
+import type { RobotOperatorHoverCard } from "./robotOperatorLabel";
 import {
   LayerVisibility,
   MapState,
@@ -69,19 +68,6 @@ function isInsideMapFrame(
   );
 }
 
-function describeHighlightState(ui: UiState): string {
-  if (ui.selected_item) {
-    return "Selected";
-  }
-  if (ui.highlighted_items.length > 1) {
-    return `${ui.highlighted_items.length} highlights`;
-  }
-  if (ui.highlighted_items.length === 1) {
-    return "1 highlight";
-  }
-  return "No highlights";
-}
-
 function yoloLabelVisibility(zoom: number): "none" | "priority" | "all" {
   if (zoom < 1.25) {
     return "none";
@@ -95,6 +81,8 @@ function yoloLabelVisibility(zoom: number): "none" | "priority" | "all" {
 type MapPaneProps = {
   map: MapState | null;
   robotPose: RobotPose | null;
+  /** Compact operator-style hover card on the robot marker. */
+  robotOperatorHoverCard: RobotOperatorHoverCard;
   path: Array<[number, number]>;
   pois: Poi[];
   yoloObjects: YoloObject[];
@@ -107,6 +95,8 @@ type MapPaneProps = {
   onFocusMap: () => void;
   onFocusRobot: () => void;
   onClearFocus: () => void;
+  /** When set, show a 2D / 3D switcher (perspective tilt in 3D; tap-to-navigate only in 2D). */
+  showViewModeToggle?: boolean;
 };
 
 type DragState = {
@@ -117,12 +107,11 @@ type DragState = {
   startCamera: UiCameraState;
 };
 
-const ROBOT_SPRITE_SIZE = 44;
-
 export function MapPane(props: MapPaneProps): React.ReactElement {
   const {
     map,
     robotPose,
+    robotOperatorHoverCard,
     path,
     pois,
     yoloObjects,
@@ -135,10 +124,13 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
     onFocusMap,
     onFocusRobot,
     onClearFocus,
+    showViewModeToggle = false,
   } = props;
   const [containerRef, size] = useSize<HTMLDivElement>();
+  const [mapViewMode, setMapViewMode] = React.useState<"2d" | "3d">("2d");
   const dragStateRef = React.useRef<DragState | null>(null);
   const cameraRef = React.useRef(ui.camera);
+
   React.useEffect(() => {
     cameraRef.current = ui.camera;
   }, [ui.camera]);
@@ -185,11 +177,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
   }, [map, size.height, size.width, ui.camera]);
 
   const selectedKey = semanticKey(ui.selected_item);
-  const highlightedKeys = React.useMemo(
-    () => new Set(ui.highlighted_items.map((item) => semanticKey(item))),
-    [ui.highlighted_items],
-  );
-  const hasHighlights = highlightedKeys.size > 0;
 
   const activePois = React.useMemo(
     () => pois.filter((poi) => poi.status !== "deleted"),
@@ -261,12 +248,8 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       if (!dragState.moved && Math.hypot(deltaX, deltaY) > 4) {
         dragState.moved = true;
       }
-      if (!dragState.moved) {
-        return;
-      }
-      onCameraChange(panCamera(map, dragState.startCamera, deltaX, deltaY, viewport));
     },
-    [map, onCameraChange, viewport],
+    [map, viewport],
   );
 
   const handlePointerUp = React.useCallback(
@@ -282,6 +265,10 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       event.currentTarget.releasePointerCapture(event.pointerId);
 
       if (dragState.moved) {
+        return;
+      }
+
+      if (showViewModeToggle && mapViewMode === "3d") {
         return;
       }
 
@@ -305,7 +292,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       onSelectItem(null);
       onNavigate(worldX, worldY);
     },
-    [map, onNavigate, onSelectItem, viewport],
+    [map, mapViewMode, onNavigate, onSelectItem, showViewModeToggle, viewport],
   );
 
   const handlePointerCancel = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -337,10 +324,6 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
       ) : (
         <>
           <div className="map-chrome">
-            <div className="map-meta">
-              <span>Pan map</span>
-              <span>{describeHighlightState(ui)}</span>
-            </div>
             <div className="map-toolbar" onPointerDown={stopEvent}>
               <button className="map-tool" onClick={onFocusMap} type="button">
                 Fit
@@ -373,33 +356,67 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
               >
                 Clear
               </button>
+              {showViewModeToggle ? (
+                <div
+                  aria-label="Map view mode"
+                  className="map-view-mode-switch"
+                  role="group"
+                >
+                  <button
+                    className={mapViewMode === "2d" ? "is-active" : undefined}
+                    onClick={() => {
+                      setMapViewMode("2d");
+                    }}
+                    type="button"
+                  >
+                    2D
+                  </button>
+                  <button
+                    className={mapViewMode === "3d" ? "is-active" : undefined}
+                    onClick={() => {
+                      setMapViewMode("3d");
+                    }}
+                    type="button"
+                  >
+                    3D
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
 
-          <img
-            alt="Navigator occupancy map"
-            className="map-image"
-            draggable={false}
-            onDragStart={preventNativeDrag}
-            src={map.image_url}
-            style={{
-              width: `${viewport.imageWidth}px`,
-              height: `${viewport.imageHeight}px`,
-              left: `${Math.round(viewport.imageLeft)}px`,
-              top: `${Math.round(viewport.imageTop)}px`,
-            }}
-          />
-          <svg
-            className="map-overlay map-overlay-anchored"
-            preserveAspectRatio="none"
-            style={{
-              width: `${viewport.imageWidth}px`,
-              height: `${viewport.imageHeight}px`,
-              left: `${Math.round(viewport.imageLeft)}px`,
-              top: `${Math.round(viewport.imageTop)}px`,
-            }}
-            viewBox={`0 0 ${viewport.imageWidth} ${viewport.imageHeight}`}
+          <div
+            className={[
+              "map-visual-3d-wrap",
+              showViewModeToggle && mapViewMode === "3d" ? "map-visual-3d-wrap--active" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
           >
+            <img
+                alt="Navigator occupancy map"
+                className="map-image"
+                draggable={false}
+                onDragStart={preventNativeDrag}
+                src={map.image_url}
+                style={{
+                  width: `${viewport.imageWidth}px`,
+                  height: `${viewport.imageHeight}px`,
+                  left: `${Math.round(viewport.imageLeft)}px`,
+                  top: `${Math.round(viewport.imageTop)}px`,
+                }}
+              />
+              <svg
+                className="map-overlay map-overlay-anchored"
+                preserveAspectRatio="none"
+                style={{
+                  width: `${viewport.imageWidth}px`,
+                  height: `${viewport.imageHeight}px`,
+                  left: `${Math.round(viewport.imageLeft)}px`,
+                  top: `${Math.round(viewport.imageTop)}px`,
+                }}
+                viewBox={`0 0 ${viewport.imageWidth} ${viewport.imageHeight}`}
+              >
             {path.length > 1 && (
               <polyline
                 className="path-line"
@@ -419,14 +436,13 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const itemRef = refFromPoi(poi.poi_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
-                const isHighlighted = highlightedKeys.has(itemKey);
-                const coneLength = isSelected ? 58 : isHighlighted ? 46 : 0;
-                const coneSpread = isSelected ? 0.34 : 0.24;
+                const coneLength = isSelected ? 58 : 0;
+                const coneSpread = 0.34;
                 return (
                   <g key={`${poi.poi_id}-overlay`}>
                     {coneLength > 0 && (
                       <path
-                        className={`poi-view-cone ${isSelected ? "is-selected" : "is-highlighted"}`}
+                        className={isSelected ? "poi-view-cone is-selected" : "poi-view-cone"}
                         d={[
                           `M ${anchorX} ${anchorY}`,
                           `L ${anchorX + Math.cos(poi.anchor_yaw - coneSpread) * coneLength} ${
@@ -448,9 +464,9 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                       x2={anchorX + Math.cos(poi.anchor_yaw) * 16}
                       y2={anchorY - Math.sin(poi.anchor_yaw) * 16}
                     />
-                    {(isSelected || isHighlighted) && (
+                    {isSelected && (
                       <circle
-                        className={`poi-anchor-halo ${isSelected ? "is-selected" : "is-highlighted"}`}
+                        className="poi-anchor-halo is-selected"
                         cx={anchorX}
                         cy={anchorY}
                         r={isSelected ? 10 : 8}
@@ -465,25 +481,24 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const itemRef = refFromYoloObject(object.object_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
-                const isHighlighted = highlightedKeys.has(itemKey);
                 return (
                   <g key={`${object.object_id}-marker`}>
                     <circle
-                      className={`yolo-ring ${isSelected ? "is-selected" : isHighlighted ? "is-highlighted" : ""}`}
+                      className={`yolo-ring ${isSelected ? "is-selected" : ""}`}
                       cx={x}
                       cy={y}
                       r={isSelected ? 11 : 9}
                     />
-                    {(isSelected || isHighlighted) && (
+                    {isSelected && (
                       <circle
-                        className={`yolo-halo ${isSelected ? "is-selected" : "is-highlighted"}`}
+                        className="yolo-halo is-selected"
                         cx={x}
                         cy={y}
-                        r={isSelected ? 14 : 12}
+                        r={14}
                       />
                     )}
                     <circle
-                      className={`yolo-dot ${isSelected ? "is-selected" : isHighlighted ? "is-highlighted" : ""}`}
+                      className={`yolo-dot ${isSelected ? "is-selected" : ""}`}
                       cx={x}
                       cy={y}
                       r={isSelected ? 6.5 : 5}
@@ -503,18 +518,90 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
           >
             {robotPose && (() => {
               const [robotX, robotY] = worldToImagePixels(map, viewport, robotPose.x, robotPose.y);
-              const robotRotationDegrees = -((robotPose.yaw * 180) / Math.PI) - 90;
+              const card = robotOperatorHoverCard;
+              const statusLabel =
+                card.active === "blue"
+                  ? "Standby"
+                  : card.active === "grey"
+                    ? "Inactive"
+                    : card.active === "green"
+                      ? "Active"
+                      : undefined;
               return (
                 <div
-                  aria-hidden="true"
+                  aria-describedby="map-robot-operator-gamecard"
+                  aria-label={`Robot — ${card.instanceName}`}
                   className="robot-marker"
+                  onPointerDown={stopEvent}
                   style={{
                     left: `${robotX}px`,
                     top: `${robotY}px`,
-                    transform: `translate(-50%, -50%) rotate(${robotRotationDegrees}deg)`,
+                    transform: "translate(-50%, -50%)",
                   }}
+                  tabIndex={0}
                 >
-                  <img alt="" className="robot-marker-image" src={go2TopdownSprite} />
+                  <span className="robot-marker-pulse-ring robot-marker-pulse-ring--1" />
+                  <span className="robot-marker-pulse-ring robot-marker-pulse-ring--2" />
+                  <div className="robot-marker-disc" />
+                  <div
+                    className="robot-marker-gamecard"
+                    id="map-robot-operator-gamecard"
+                    role="tooltip"
+                  >
+                    <div className="robot-marker-gamecard-media">
+                      <img
+                        alt={card.imageAlt}
+                        className="robot-marker-gamecard-img"
+                        decoding="async"
+                        draggable={false}
+                        src={card.imageUrl}
+                      />
+                    </div>
+                    <div className="robot-marker-gamecard-body">
+                      <div className="robot-marker-gamecard-title-row">
+                        <span className="robot-marker-gamecard-title">
+                          {card.instanceName}
+                        </span>
+                        {card.active ? (
+                          <span
+                            aria-label={statusLabel}
+                            className="robot-marker-gamecard-status"
+                            role="status"
+                          >
+                            <span
+                              aria-hidden
+                              className={`robot-marker-gamecard-dot robot-marker-gamecard-dot--${card.active}`}
+                            />
+                          </span>
+                        ) : null}
+                      </div>
+                      {card.modelTitle ? (
+                        <p className="robot-marker-gamecard-model">{card.modelTitle}</p>
+                      ) : null}
+                      {card.typeLine ? (
+                        <p className="robot-marker-gamecard-meta">
+                          <span className="robot-marker-gamecard-meta-label">Type</span>{" "}
+                          <span className="robot-marker-gamecard-meta-value">
+                            {card.typeLine}
+                          </span>
+                        </p>
+                      ) : null}
+                      {card.location ? (
+                        <p className="robot-marker-gamecard-meta">
+                          <span className="robot-marker-gamecard-meta-label">Location</span>{" "}
+                          <span className="robot-marker-gamecard-meta-value">
+                            {card.location}
+                          </span>
+                        </p>
+                      ) : null}
+                      {card.task ? (
+                        <p className="robot-marker-gamecard-meta">
+                          <span className="robot-marker-gamecard-meta-label">Task</span>{" "}
+                          <span className="robot-marker-gamecard-meta-value">{card.task}</span>
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               );
             })()}
@@ -524,18 +611,15 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const itemRef = refFromPoi(poi.poi_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
-                const isHighlighted = highlightedKeys.has(itemKey);
-                const isMuted = hasHighlights && !isHighlighted && !isSelected;
+                const cardImage = poi.hero_image_url || poi.thumbnail_url;
+                const cardId = `poi-gamecard-${poi.poi_id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+                const summary = poi.summary?.trim();
                 return (
                   <button
-                    className={[
-                      "poi-pin",
-                      isSelected ? "is-selected" : "",
-                      isHighlighted ? "is-highlighted" : "",
-                      isMuted ? "is-muted" : "",
-                    ]
+                    className={["poi-pin", isSelected ? "is-selected" : ""]
                       .filter(Boolean)
                       .join(" ")}
+                    aria-describedby={cardId}
                     aria-label={`POI ${poi.title}`}
                     key={poi.poi_id}
                     onClick={(event) => {
@@ -545,16 +629,56 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                     onDragStart={preventNativeDrag}
                     onPointerDown={stopEvent}
                     style={{ left: `${x}px`, top: `${y}px` }}
-                    title={poi.title}
                     type="button"
                   >
                     <img
-                      alt={poi.title}
+                      alt=""
+                      className="poi-pin-thumb"
+                      decoding="async"
                       draggable={false}
                       onDragStart={preventNativeDrag}
                       src={poi.thumbnail_url}
                     />
-                    <span className="poi-pin-label">{poi.title}</span>
+                    <div className="poi-pin-gamecard" id={cardId} role="tooltip">
+                      <div className="poi-pin-gamecard-media">
+                        <img
+                          alt=""
+                          className="poi-pin-gamecard-img"
+                          decoding="async"
+                          draggable={false}
+                          src={cardImage}
+                        />
+                      </div>
+                      <div className="poi-pin-gamecard-body">
+                        <div className="poi-pin-gamecard-title-row">
+                          <span className="poi-pin-gamecard-title">{poi.title}</span>
+                        </div>
+                        {summary ? (
+                          <p className="poi-pin-gamecard-summary">{summary}</p>
+                        ) : null}
+                        {poi.category ? (
+                          <p className="poi-pin-gamecard-meta">
+                            <span className="poi-pin-gamecard-meta-label">Category</span>{" "}
+                            <span className="poi-pin-gamecard-meta-value">{poi.category}</span>
+                          </p>
+                        ) : null}
+                        <p className="poi-pin-gamecard-meta">
+                          <span className="poi-pin-gamecard-meta-label">Interest</span>{" "}
+                          <span className="poi-pin-gamecard-meta-value">
+                            {Math.round(poi.interest_score * 100)}%
+                          </span>
+                        </p>
+                        {poi.objects.length > 0 ? (
+                          <p className="poi-pin-gamecard-meta">
+                            <span className="poi-pin-gamecard-meta-label">Objects</span>{" "}
+                            <span className="poi-pin-gamecard-meta-value">
+                              {poi.objects.slice(0, 4).join(", ")}
+                              {poi.objects.length > 4 ? "…" : ""}
+                            </span>
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
                   </button>
                 );
               })}
@@ -564,17 +688,13 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                 const itemRef = refFromYoloObject(object.object_id);
                 const itemKey = semanticKey(itemRef);
                 const isSelected = selectedKey === itemKey;
-                const isHighlighted = highlightedKeys.has(itemKey);
-                const isMuted = hasHighlights && !isHighlighted && !isSelected;
-                const showLabel = isSelected || isHighlighted || labeledYoloIds.has(object.object_id);
+                const showLabel = isSelected || labeledYoloIds.has(object.object_id);
                 return (
                   <button
                     className={[
                       "yolo-chip",
                       showLabel ? "has-label" : "dot-only",
                       isSelected ? "is-selected" : "",
-                      isHighlighted ? "is-highlighted" : "",
-                      isMuted ? "is-muted" : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}
@@ -594,6 +714,7 @@ export function MapPane(props: MapPaneProps): React.ReactElement {
                   </button>
                 );
               })}
+          </div>
           </div>
           <div className="map-legend" onPointerDown={stopEvent}>
             <span>

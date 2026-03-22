@@ -4,8 +4,10 @@ import { apiUrl, normalizeAppStateForDev } from "./apiBase";
 import { AgentToolsModal } from "./AgentToolsModal";
 import { LiveFeedPanel } from "./LiveFeedPanel";
 import { MapPane } from "./MapPane";
+import { defaultRobotOperatorHoverCard } from "./robotOperatorLabel";
 import { OperatorRail, SelectedSemanticPreview } from "./OperatorRail";
 import { PanelShell } from "./PanelShell";
+import { SettingsCogGlyphs } from "./SettingsCogGlyphs";
 import {
   buildSemanticItems,
   mergePoi,
@@ -1170,9 +1172,6 @@ export default function App(): React.ReactElement {
         </div>
 
         <div className="topbar-status">
-          <span className={`toolbar-chip status-pill ${state.connected ? "is-live" : "is-offline"}`}>
-            {state.connected ? "Online" : "Offline"}
-          </span>
           {teleopEnabled ? <span className="toolbar-chip tone-danger">Teleop armed</span> : null}
           {state.inspection.status === "running" ? (
             <span className="toolbar-chip tone-running">Inspecting</span>
@@ -1260,13 +1259,15 @@ export default function App(): React.ReactElement {
             <button
               aria-expanded={controlsMenuOpen}
               aria-haspopup="menu"
-              className="action-button secondary"
+              aria-label="Settings"
+              className="action-button secondary settings-cog-button"
               onClick={() => {
                 setControlsMenuOpen((current) => !current);
               }}
+              title="Settings"
               type="button"
             >
-              Settings
+              <SettingsCogGlyphs />
             </button>
 
             {controlsMenuOpen ? (
@@ -1393,6 +1394,7 @@ export default function App(): React.ReactElement {
           <MapPane
             layers={state.layers}
             map={state.map}
+            robotOperatorHoverCard={defaultRobotOperatorHoverCard("slamass")}
             onCameraChange={queueCameraSync}
             onClearFocus={() => {
               void handleClearFocus();

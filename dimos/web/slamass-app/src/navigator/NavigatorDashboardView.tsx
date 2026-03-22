@@ -9,8 +9,10 @@ import React, {
 import { AgentToolsModal } from "../AgentToolsModal";
 import { LiveFeedPanel } from "../LiveFeedPanel";
 import { MapPane } from "../MapPane";
+import { defaultRobotOperatorHoverCard } from "../robotOperatorLabel";
 import { OperatorRail, SelectedSemanticPreview } from "../OperatorRail";
 import { PanelShell } from "../PanelShell";
+import { SettingsCogGlyphs } from "../SettingsCogGlyphs";
 import {
   buildSemanticItems,
   resolveSelectedPoi,
@@ -25,6 +27,7 @@ import {
 } from "../teleop";
 import type { ChatToolDefinition, ManualInspectionMode } from "../types";
 import { fetchJson } from "./fetchJson";
+import { NavigatorOperatorFleet } from "./NavigatorOperatorFleet";
 import { NavigatorOptionCard } from "./NavigatorOptionCard";
 import { useNavigatorSlamassState } from "./useNavigatorSlamassState";
 
@@ -337,11 +340,6 @@ export function NavigatorDashboardView(
       <div className="px-4 pb-2 sm:px-8 sm:pb-2">
         <div className="polaris-navigator-toolbar polaris-navigator-toolbar--actions mx-auto flex w-full max-w-[min(100vw-2rem,1600px)] flex-wrap items-center justify-between gap-3">
           <div className="topbar-status">
-          <span
-            className={`toolbar-chip status-pill ${state.connected ? "is-live" : "is-offline"}`}
-          >
-            {state.connected ? "Online" : "Offline"}
-          </span>
           {slamassApiStatus === "loading" ? (
             <span className="toolbar-chip">API…</span>
           ) : null}
@@ -416,13 +414,15 @@ export function NavigatorDashboardView(
             <button
               aria-expanded={controlsMenuOpen}
               aria-haspopup="menu"
-              className="action-button secondary"
+              aria-label="Settings"
+              className="action-button secondary settings-cog-button"
               onClick={() => {
                 setControlsMenuOpen((current) => !current);
               }}
+              title="Settings"
               type="button"
             >
-              Settings
+              <SettingsCogGlyphs />
             </button>
 
             {controlsMenuOpen ? (
@@ -553,8 +553,10 @@ export function NavigatorDashboardView(
             <PanelShell
               className="map-panel"
               bodyClassName="polaris-navigator-operations-body"
-              title="Operations"
+              title="Operators"
             >
+              <NavigatorOperatorFleet />
+
               <NavigatorOptionCard
                 description="New frames appear as the stream updates."
                 headerAside={
@@ -665,11 +667,13 @@ export function NavigatorDashboardView(
             }
             bodyClassName="panel-body-stage"
             className="map-panel"
-            title="Spatial map"
+            title="Navigator"
           >
             <MapPane
               layers={state.layers}
               map={state.map}
+              robotOperatorHoverCard={defaultRobotOperatorHoverCard("navigator")}
+              showViewModeToggle
               onCameraChange={queueCameraSync}
               onClearFocus={() => {
                 void handleClearFocus();

@@ -1,111 +1,9 @@
 import React from "react";
 
-import { apiUrl } from "./apiBase";
 import { PolarisLayout } from "./PolarisLayout";
-import {
-  POLARIS_A2_PREVIEW_URL,
-  POLARIS_AS2_PREVIEW_URL,
-  POLARIS_GO2_EDU_PREVIEW_URL,
-  POLARIS_GO2_PREVIEW_URL,
-  POLARIS_OPERATOR_MOUNT_GO2_EDU_URL,
-  POLARIS_OPERATOR_SELECT_THUMB_URL,
-} from "./polarisAssets";
-
-type OperatorCard = {
-  id: string;
-  title: string;
-  /** If set, the title is rendered as an external link (e.g. product page). */
-  titleHref?: string;
-  /** Bold label + light value, same pattern as Location / Task. */
-  category?: { label: string; value: string };
-  location: string;
-  task: string;
-  imageUrl: string | null;
-  imageAlt: string;
-  /** Pulsing status dot after the title: green (active), blue (standby), or grey (inactive). */
-  active?: "green" | "blue" | "grey";
-  /** Shown in the image well when there is no photo (defaults to “Preview”). */
-  emptyVisualLabel?: string;
-  /** Mount thumbnail under Navigator; `null` = empty slot (no image). */
-  mountThumbUrl: string | null;
-  /** Value next to “Mount” in meta when `mountThumbUrl` is set (default `Z1`). */
-  mountValue?: string;
-  /** If set, mount thumbnail opens this URL in a new tab. */
-  mountThumbHref?: string;
-  /** When true, hovering the card shows the Navigator live POV in the image well. */
-  slamassPovOnHover?: boolean;
-};
-
-const OPERATOR_CARDS: OperatorCard[] = [
-  {
-    id: "go2",
-    title: "Unitree Go2",
-    category: { label: "Type", value: "Unitree Go2 X" },
-    location: "Floor lab",
-    task: "Patrol",
-    active: "green",
-    imageUrl: POLARIS_GO2_PREVIEW_URL,
-    imageAlt: "Unitree Go2 robot",
-    mountThumbUrl: POLARIS_OPERATOR_SELECT_THUMB_URL,
-    slamassPovOnHover: true,
-  },
-  {
-    id: "go2-platform",
-    title: "Unitree Go2",
-    category: { label: "Type", value: "Unitree Go2 EDU" },
-    location: "Bench",
-    task: "Calibration",
-    active: "green",
-    imageUrl: POLARIS_GO2_EDU_PREVIEW_URL,
-    imageAlt: "Unitree Go2",
-    slamassPovOnHover: true,
-    mountThumbUrl: POLARIS_OPERATOR_MOUNT_GO2_EDU_URL,
-    mountValue: "D1-T",
-    mountThumbHref: "https://www.unitree.com/D1-T",
-  },
-  {
-    id: "as2",
-    title: "Unitree AS2",
-    category: { label: "Type", value: "Quadruped" },
-    location: "—",
-    task: "—",
-    active: "blue",
-    imageUrl: POLARIS_AS2_PREVIEW_URL,
-    imageAlt: "Unitree AS2 robot",
-    mountThumbUrl: null,
-  },
-  {
-    id: "a2",
-    title: "Unitree A2",
-    titleHref: "https://www.unitree.com/A2",
-    category: { label: "Type", value: "Industrial quadruped" },
-    location: "—",
-    task: "—",
-    active: "blue",
-    imageUrl: POLARIS_A2_PREVIEW_URL,
-    imageAlt: "Unitree A2 robot",
-    mountThumbUrl: null,
-  },
-];
+import { POLARIS_OPERATOR_FLEET } from "./polarisOperatorFleet";
 
 export default function PolarisPage(): React.ReactElement {
-  const [hoveredOperatorId, setHoveredOperatorId] = React.useState<string | null>(null);
-  const [povRefreshKey, setPovRefreshKey] = React.useState(0);
-
-  React.useEffect(() => {
-    if (hoveredOperatorId === null) {
-      return;
-    }
-    const op = OPERATOR_CARDS.find((c) => c.id === hoveredOperatorId);
-    if (!op?.slamassPovOnHover) {
-      return;
-    }
-    const id = window.setInterval(() => {
-      setPovRefreshKey((k) => k + 1);
-    }, 800);
-    return () => clearInterval(id);
-  }, [hoveredOperatorId]);
-
   return (
     <PolarisLayout>
       <main className="polaris-operators-main min-h-[calc(100vh-7rem)] bg-white px-4 py-8 sm:px-8 sm:py-10">
@@ -130,7 +28,7 @@ export default function PolarisPage(): React.ReactElement {
             className="polaris-operators-list"
             role="list"
           >
-            {OPERATOR_CARDS.map((op) => (
+            {POLARIS_OPERATOR_FLEET.map((op) => (
               <li className="polaris-operators-list-item" key={op.id} role="listitem">
                 <article
                   aria-label={op.title}
@@ -146,44 +44,12 @@ export default function PolarisPage(): React.ReactElement {
                       }
                     >
                       {op.imageUrl ? (
-                        op.slamassPovOnHover ? (
-                          <div
-                            className="polaris-operator-card-pov-hit"
-                            onMouseEnter={() => {
-                              setHoveredOperatorId(op.id);
-                              setPovRefreshKey((k) => k + 1);
-                            }}
-                            onMouseLeave={() => setHoveredOperatorId(null)}
-                          >
-                            <img
-                              alt={
-                                hoveredOperatorId === op.id
-                                  ? ""
-                                  : op.imageAlt
-                              }
-                              aria-hidden={hoveredOperatorId === op.id ? true : undefined}
-                              className="polaris-operator-card-img polaris-operator-card-img--static"
-                              decoding="async"
-                              src={op.imageUrl}
-                            />
-                            {hoveredOperatorId === op.id ? (
-                              <img
-                                alt={`Live camera — ${op.imageAlt}`}
-                                className="polaris-operator-card-img polaris-operator-card-img--live"
-                                decoding="async"
-                                key={povRefreshKey}
-                                src={apiUrl(`/api/pov/latest.jpg?v=${povRefreshKey}`)}
-                              />
-                            ) : null}
-                          </div>
-                        ) : (
-                          <img
-                            alt={op.imageAlt}
-                            className="polaris-operator-card-img polaris-operator-card-img--static"
-                            decoding="async"
-                            src={op.imageUrl}
-                          />
-                        )
+                        <img
+                          alt={op.imageAlt}
+                          className="polaris-operator-card-img polaris-operator-card-img--static"
+                          decoding="async"
+                          src={op.imageUrl}
+                        />
                       ) : (
                         <span className="polaris-operator-card-placeholder">
                           {op.emptyVisualLabel ?? "Preview"}

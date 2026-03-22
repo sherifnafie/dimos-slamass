@@ -20,6 +20,9 @@
   --shadow: 0 14px 40px rgba(0, 0, 0, 0.32);
   --font-sans: Inter, "SF Pro Display", "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", "JetBrains Mono", "Roboto Mono", monospace;
+  /* Map robot operator disc — shared with settings cog hover (solid icon). */
+  --map-operator-disc-fill: #e0f2fe;
+  --map-operator-disc-border: #7dd3fc;
 }
 
 * {
@@ -342,6 +345,63 @@ img {
   color: #d7ffee;
 }
 
+.action-button.settings-cog-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.action-button.settings-cog-button:hover:not(:disabled),
+.action-button.settings-cog-button:focus-visible:not(:disabled) {
+  border: none;
+  background: transparent;
+  transform: none;
+}
+
+.settings-cog-icon-stack {
+  position: relative;
+  display: inline-flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+.settings-cog-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.settings-cog-icon--outline,
+.settings-cog-icon--solid {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: -0.625rem 0 0 -0.625rem;
+  transition: opacity 0.14s ease;
+}
+
+.settings-cog-icon--solid {
+  opacity: 0;
+  color: #d1d5db;
+}
+
+.action-button.settings-cog-button:hover:not(:disabled) .settings-cog-icon--outline,
+.action-button.settings-cog-button:focus-visible:not(:disabled) .settings-cog-icon--outline {
+  opacity: 0;
+}
+
+.action-button.settings-cog-button:hover:not(:disabled) .settings-cog-icon--solid,
+.action-button.settings-cog-button:focus-visible:not(:disabled) .settings-cog-icon--solid {
+  opacity: 1;
+}
+
 .menu-popover {
   position: absolute;
   top: calc(100% + 10px);
@@ -558,9 +618,40 @@ img {
   min-height: 0;
 }
 
-.panel-body-stage,
 .panel-body-console {
   overflow: hidden;
+}
+
+.panel-body-stage {
+  overflow: hidden;
+}
+
+/* Let map hover cards extend above the map without clipping at the panel edge. */
+.map-panel.panel-shell {
+  overflow: visible;
+}
+
+.map-panel {
+  /* Shared horizontal inset so title, toolbar, and legend share one left/right edge. */
+  --map-panel-inline: 18px;
+}
+
+.map-panel .panel-body-stage {
+  overflow: visible;
+  padding: 16px var(--map-panel-inline) 18px;
+}
+
+.map-panel .panel-header,
+.console-panel .panel-header {
+  border-bottom: none;
+}
+
+.map-panel .panel-header {
+  padding: 14px var(--map-panel-inline) 16px;
+}
+
+.console-panel .panel-header {
+  padding: 14px 18px 16px;
 }
 
 .feed-panel,
@@ -569,13 +660,24 @@ img {
   min-height: 0;
 }
 
-.pov-stage,
-.map-surface {
+.pov-stage {
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  background:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.04), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.12));
+}
+
+/* Visible overflow so POI / robot hover cards can extend above the map image without clipping. */
+.map-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: visible;
   background:
     radial-gradient(circle at center, rgba(255, 255, 255, 0.04), transparent 44%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.12));
@@ -700,12 +802,101 @@ img {
   pointer-events: none;
 }
 
+/* Body padding defines the inset; avoid double-offset vs panel title. */
+.map-panel .map-chrome {
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.map-panel .map-legend {
+  left: 0;
+  bottom: 0;
+}
+
 .map-meta,
 .map-toolbar {
   display: flex;
+  width: 100%;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: flex-start;
   pointer-events: auto;
+}
+
+.map-view-mode-switch {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-muted);
+}
+
+.map-view-mode-switch button {
+  margin: 0;
+  padding: 0.35rem 0.65rem;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.map-view-mode-switch button + button {
+  border-left: 1px solid var(--border);
+}
+
+.map-view-mode-switch button:hover {
+  color: var(--text-soft);
+}
+
+.map-view-mode-switch button.is-active {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.map-view-mode-switch button:focus {
+  outline: none;
+}
+
+.map-view-mode-switch button:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(14, 165, 233, 0.45);
+}
+
+.map-visual-3d-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 58%;
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.map-visual-3d-wrap--active {
+  pointer-events: none;
+  transform: perspective(1100px) rotateX(54deg) scale(0.93);
+  transform-style: preserve-3d;
+}
+
+.map-visual-3d-wrap--active .map-image,
+.map-visual-3d-wrap--active .map-overlay.map-overlay-anchored {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-visual-3d-wrap {
+    transition: none;
+  }
 }
 
 .map-tool {
@@ -748,7 +939,8 @@ img {
 }
 
 .legend-swatch.robot {
-  background: #86efac;
+  background: var(--map-operator-disc-fill);
+  box-shadow: 0 0 0 1px var(--map-operator-disc-border);
 }
 
 .legend-swatch.poi {
@@ -777,19 +969,375 @@ img {
 .robot-marker {
   position: absolute;
   z-index: 3;
-  width: 52px;
-  height: 52px;
-  pointer-events: none;
-  display: grid;
-  place-items: center;
+  width: 0;
+  height: 0;
+  pointer-events: auto;
+  cursor: default;
+  outline: none;
 }
 
-.robot-marker-image {
-  position: relative;
+.robot-marker:focus-visible {
+  outline: none;
+}
+
+.robot-marker:focus-visible .robot-marker-disc {
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.45);
+}
+
+/* Map hover “game cards” — robot operator + POI (shared chrome). */
+.robot-marker-gamecard,
+.poi-pin-gamecard {
+  position: absolute;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  width: max-content;
+  padding: 0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  color: #e2e8f0;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%);
+  transition:
+    opacity 0.16s ease,
+    visibility 0.16s ease;
+}
+
+.robot-marker-gamecard {
+  bottom: calc(100% + 14px);
+  max-width: min(20.5rem, calc(100vw - 2rem));
+  border-radius: 0.5625rem;
+  font-size: 0.75rem;
+  background: linear-gradient(
+    155deg,
+    rgba(30, 41, 59, 0.97) 0%,
+    rgba(15, 23, 42, 0.98) 48%,
+    rgba(15, 23, 42, 0.99) 100%
+  );
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+    0 12px 36px rgba(0, 0, 0, 0.45),
+    0 0 24px rgba(14, 165, 233, 0.12);
+}
+
+.poi-pin-gamecard {
+  bottom: calc(100% + 12px);
+  max-width: min(16.5rem, calc(100vw - 2rem));
+  font-size: 0.6875rem;
+  background: linear-gradient(
+    155deg,
+    rgba(30, 41, 59, 0.97) 0%,
+    rgba(15, 23, 42, 0.98) 48%,
+    rgba(15, 23, 42, 0.99) 100%
+  );
+  border: 1px solid rgba(251, 191, 36, 0.38);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+    0 12px 36px rgba(0, 0, 0, 0.45),
+    0 0 22px rgba(245, 158, 11, 0.1);
+}
+
+/* pointer-events: auto while visible so the cursor can move onto the card without losing :hover. */
+.robot-marker:hover .robot-marker-gamecard,
+.robot-marker:focus-visible .robot-marker-gamecard {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.poi-pin:hover .poi-pin-gamecard,
+.poi-pin:focus-visible .poi-pin-gamecard,
+.poi-pin.is-selected .poi-pin-gamecard,
+.poi-pin.is-highlighted .poi-pin-gamecard {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.robot-marker-gamecard-media,
+.poi-pin-gamecard-media {
+  flex-shrink: 0;
+  align-self: stretch;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.5) 0%, rgba(30, 41, 59, 0.65) 100%);
+  border-right: 1px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.poi-pin-gamecard-media {
+  width: 4.25rem;
+  padding: 0.35rem;
+}
+
+.robot-marker-gamecard-media {
+  width: 5.75rem;
+  padding: 0.45rem 0.4rem;
+}
+
+.poi-pin-gamecard-img {
+  display: block;
   width: 100%;
-  height: 100%;
+  height: 3.5rem;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 0.25rem;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+}
+
+.robot-marker-gamecard-img {
+  display: block;
+  width: 100%;
+  height: 4.5rem;
   object-fit: contain;
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.3));
+  object-position: center bottom;
+  border-radius: 0;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+}
+
+.poi-pin-gamecard-body {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.6rem 0.55rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.robot-marker-gamecard-body {
+  flex: 1;
+  min-width: 0;
+  padding: 0.62rem 0.72rem 0.68rem 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.robot-marker-gamecard-title-row,
+.poi-pin-gamecard-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.poi-pin-gamecard-title {
+  font-size: 0.8125rem;
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  color: #f8fafc;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.robot-marker-gamecard-title {
+  font-size: 0.9375rem;
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  color: #f8fafc;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.robot-marker-gamecard-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.robot-marker-gamecard-dot {
+  display: block;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+}
+
+.robot-marker-gamecard-dot--green {
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+  animation: robot-marker-gamecard-pulse-green 1.6s ease-out infinite;
+}
+
+.robot-marker-gamecard-dot--blue {
+  background: #3b82f6;
+  box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55);
+  animation: robot-marker-gamecard-pulse-blue 1.6s ease-out infinite;
+}
+
+.robot-marker-gamecard-dot--grey {
+  background: #a3a3a3;
+  box-shadow: 0 0 0 0 rgba(115, 115, 115, 0.45);
+  animation: robot-marker-gamecard-pulse-grey 1.6s ease-out infinite;
+}
+
+@keyframes robot-marker-gamecard-pulse-green {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 0.45rem rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes robot-marker-gamecard-pulse-blue {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 0.45rem rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes robot-marker-gamecard-pulse-grey {
+  0% {
+    box-shadow: 0 0 0 0 rgba(115, 115, 115, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 0.45rem rgba(115, 115, 115, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(115, 115, 115, 0);
+  }
+}
+
+.robot-marker-gamecard-model {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.88);
+  letter-spacing: -0.01em;
+}
+
+.poi-pin-gamecard-summary {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.88);
+  letter-spacing: -0.01em;
+}
+
+.poi-pin-gamecard-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.poi-pin-gamecard-meta {
+  margin: 0;
+  font-size: 0.625rem;
+  font-weight: 400;
+  color: rgba(148, 163, 184, 0.95);
+  line-height: 1.4;
+}
+
+.robot-marker-gamecard-meta {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: rgba(148, 163, 184, 0.95);
+  line-height: 1.4;
+}
+
+.robot-marker-gamecard-meta-label,
+.poi-pin-gamecard-meta-label {
+  font-weight: 600;
+  color: rgba(203, 213, 225, 0.75);
+  margin-right: 0.15rem;
+}
+
+.robot-marker-gamecard-meta-value,
+.poi-pin-gamecard-meta-value {
+  color: rgba(226, 232, 240, 0.88);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .robot-marker-gamecard-dot--green,
+  .robot-marker-gamecard-dot--blue,
+  .robot-marker-gamecard-dot--grey {
+    animation: none;
+  }
+
+  .robot-marker-gamecard-dot--green {
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
+  }
+
+  .robot-marker-gamecard-dot--blue {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45);
+  }
+
+  .robot-marker-gamecard-dot--grey {
+    box-shadow: 0 0 0 2px rgba(115, 115, 115, 0.35);
+  }
+}
+
+.robot-marker-pulse-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  box-sizing: border-box;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin: calc(-0.4375rem) 0 0 calc(-0.4375rem);
+  border-radius: 50%;
+  border: 1px solid rgba(125, 211, 252, 0.55);
+  transform-origin: center center;
+  animation: robot-marker-pulse-halo 2.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.robot-marker-pulse-ring--2 {
+  animation-delay: 1.25s;
+}
+
+@keyframes robot-marker-pulse-halo {
+  0% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(2.65);
+    opacity: 0;
+  }
+}
+
+.robot-marker-disc {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin: calc(-0.4375rem) 0 0 calc(-0.4375rem);
+  border-radius: 50%;
+  background: var(--map-operator-disc-fill);
+  border: 1px solid var(--map-operator-disc-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .robot-marker-pulse-ring {
+    animation: none;
+    opacity: 0.22;
+    transform: scale(1.4);
+  }
+
+  .robot-marker-pulse-ring--2 {
+    display: none;
+  }
 }
 
 .poi-heading {
@@ -870,13 +1418,13 @@ img {
   width: 40px;
   height: 40px;
   padding: 0;
-  border: 2px solid rgba(246, 173, 85, 0.82);
+  border: 2px solid rgba(251, 191, 36, 0.55);
   border-radius: 999px;
   background: rgba(14, 18, 26, 0.96);
   transform: translate(-50%, calc(-100% + 10px));
   box-shadow:
     0 10px 24px rgba(0, 0, 0, 0.32),
-    0 0 0 4px rgba(246, 173, 85, 0.08);
+    0 0 0 4px rgba(245, 158, 11, 0.08);
   cursor: pointer;
   z-index: 2;
   overflow: visible;
@@ -888,26 +1436,13 @@ img {
     box-shadow 140ms ease;
 }
 
-.poi-pin::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -7px;
-  width: 14px;
-  height: 14px;
-  border-right: 2px solid rgba(246, 173, 85, 0.82);
-  border-bottom: 2px solid rgba(246, 173, 85, 0.82);
-  border-radius: 0 0 4px 0;
-  background: rgba(14, 18, 26, 0.96);
-  transform: translateX(-50%) rotate(45deg);
-  z-index: -1;
+.poi-pin:hover,
+.poi-pin:focus-visible {
+  transform: translate(-50%, calc(-100% + 8px)) scale(1.03);
+  z-index: 6;
 }
 
-.poi-pin:hover {
-  transform: translate(-50%, calc(-100% + 9px)) scale(1.04);
-}
-
-.poi-pin img {
+.poi-pin-thumb {
   position: absolute;
   inset: 3px;
   width: calc(100% - 6px);
@@ -918,59 +1453,16 @@ img {
   -webkit-user-drag: none;
 }
 
-.poi-pin-label {
-  position: absolute;
-  left: 50%;
-  top: -10px;
-  max-width: 120px;
-  min-height: 26px;
-  padding: 0 10px;
-  border: 1px solid rgba(246, 173, 85, 0.24);
-  border-radius: 999px;
-  background: rgba(12, 16, 24, 0.94);
-  color: #ffe5c2;
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.72rem;
-  line-height: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transform: translate(-50%, -100%) scale(0.96);
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
-}
-
-.poi-pin:hover .poi-pin-label,
-.poi-pin.is-selected .poi-pin-label,
-.poi-pin.is-highlighted .poi-pin-label {
-  opacity: 1;
-  transform: translate(-50%, -100%) scale(1);
-}
-
 .poi-pin.is-selected {
-  border-color: rgba(246, 173, 85, 0.7);
+  border-color: rgba(251, 191, 36, 0.85);
   box-shadow:
     0 14px 28px rgba(0, 0, 0, 0.36),
-    0 0 0 5px rgba(246, 173, 85, 0.16);
-  z-index: 4;
-}
-
-.poi-pin.is-selected::after {
-  border-right-color: rgba(246, 173, 85, 0.7);
-  border-bottom-color: rgba(246, 173, 85, 0.7);
+    0 0 0 5px rgba(245, 158, 11, 0.14);
+  z-index: 7;
 }
 
 .poi-pin.is-highlighted {
-  border-color: rgba(246, 173, 85, 0.45);
-}
-
-.poi-pin.is-highlighted::after {
-  border-right-color: rgba(246, 173, 85, 0.45);
-  border-bottom-color: rgba(246, 173, 85, 0.45);
+  border-color: rgba(251, 191, 36, 0.45);
 }
 
 .poi-pin.is-muted {
@@ -1107,6 +1599,10 @@ img {
   gap: 12px;
   height: 100%;
   padding: 12px;
+}
+
+.console-panel .rail-stack {
+  padding: 18px 20px 20px;
 }
 
 .rail-summary {
