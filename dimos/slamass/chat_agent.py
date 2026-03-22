@@ -27,23 +27,23 @@ SYSTEM_PROMPT = """You are the SLAMASS operator agent for a live robotics demo.
 
 You help the user through the SLAMASS chat UI. You can reason over:
 - saved semantic memory from VLM POIs and YOLO objects
-- map and UI controls for focus, highlight, and camera movement
 - robot capabilities exposed through curated tools
 
 Operating rules:
 - For "where is ..." or "find ..." questions, search semantic memory first.
-- When answering a spatial question, usually also drive the UI so the operator can see the result:
-  - focus or highlight the most relevant semantic item(s)
+- For fine-grained visual questions about a saved POI or YOLO item, use ask_semantic_item_question instead of guessing from a short summary.
 - If a relevant layer is hidden, turn it on before trying to present the result.
-- Prefer go_to_semantic_item for meaningful destinations.
+- Prefer go_to_semantic_item for meaningful destinations. It waits for arrival by default, so you can inspect or speak after it finishes.
+- Use cancel_current_action if you need to stop an in-flight robot action before changing plans.
 - Use inspect_now when the user asks to inspect, refresh, or capture the current place.
 - Use look_current_view when the question is about what the robot sees right now or when the saved map memory is insufficient.
 - Use speak_text when the robot should say something out loud through its speaker.
 - Use set_yolo_runtime only when the user asks to pause or resume live YOLO labeling.
 - Use save_map only when the user explicitly asks to save or checkpoint the current SLAMASS map.
-- If the result is ambiguous, highlight the best candidates and ask one short clarification question.
+- If the result is ambiguous, present the best candidates in text and ask one short clarification question.
 - Do not delete semantic items unless the user explicitly asks.
 - Do not use stop or teleop controls. Those are outside your authority.
+- Do not try to control the map camera, highlight semantic items, or open UI panels. The operator UI handles presenter notifications separately.
 - Keep responses concise, concrete, and presenter-friendly.
 - If you took actions, say what you did briefly.
 """
@@ -86,7 +86,7 @@ EXPOSED_FUNCTION_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_runtime_overview",
-            "description": "Get high-level SLAMASS runtime state: connectivity, robot pose, semantic counts, visible layers, and current UI focus state.",
+            "description": "Get high-level SLAMASS runtime state: connectivity, robot pose, semantic counts, visible layers, current selected item, and the latest embodied action state.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -143,8 +143,8 @@ EXPOSED_FUNCTION_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "focus_semantic_item",
-            "description": "Move the SLAMASS map camera to a semantic item and select it in the UI.",
+            "name": "ask_semantic_item_question",
+            "description": "Ask a precise visual question about a saved semantic item image when search summaries are not enough.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -153,53 +153,13 @@ EXPOSED_FUNCTION_TOOLS: list[dict[str, Any]] = [
                         "enum": ["vlm_poi", "yolo_object"],
                         "description": "Semantic memory type.",
                     },
-                    "entity_id": {"type": "string", "description": "ID of the semantic item to focus."},
-                    "zoom": {"type": "number", "description": "Optional camera zoom override."},
-                },
-                "required": ["kind", "entity_id"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "highlight_semantic_items",
-            "description": "Highlight one or more semantic items in the UI. Use this for ambiguity handling or when presenting multiple relevant results.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "items": {
-                        "type": "array",
-                        "description": "Semantic items to highlight.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "kind": {
-                                    "type": "string",
-                                    "enum": ["vlm_poi", "yolo_object"],
-                                },
-                                "entity_id": {"type": "string"},
-                            },
-                            "required": ["kind", "entity_id"],
-                            "additionalProperties": False,
-                        },
-                    },
-                    "selected_item": {
-                        "type": "object",
-                        "description": "Optional semantic item to mark as the primary selection.",
-                        "properties": {
-                            "kind": {
-                                "type": "string",
-                                "enum": ["vlm_poi", "yolo_object"],
-                            },
-                            "entity_id": {"type": "string"},
-                        },
-                        "required": ["kind", "entity_id"],
-                        "additionalProperties": False,
+                    "entity_id": {"type": "string", "description": "ID of the semantic item."},
+                    "question": {
+                        "type": "string",
+                        "description": "Precise question to answer from the stored semantic item image.",
                     },
                 },
-                "required": ["items"],
+                "required": ["kind", "entity_id", "question"],
                 "additionalProperties": False,
             },
         },
@@ -264,8 +224,28 @@ EXPOSED_FUNCTION_TOOLS: list[dict[str, Any]] = [
                         "description": "Semantic memory type.",
                     },
                     "entity_id": {"type": "string", "description": "ID of the semantic item to visit."},
+                    "wait_for_arrival": {
+                        "type": "boolean",
+                        "description": "Whether this call should wait until navigation and viewpoint restoration finish.",
+                    },
+                    "timeout_s": {
+                        "type": "number",
+                        "description": "Maximum seconds to wait for arrival when wait_for_arrival is true.",
+                    },
                 },
                 "required": ["kind", "entity_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cancel_current_action",
+            "description": "Cancel the currently running embodied action, such as semantic navigation.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
                 "additionalProperties": False,
             },
         },
@@ -331,26 +311,13 @@ class ChatRuntime(Protocol):
 
     async def chat_get_semantic_item(self, *, kind: str, entity_id: str) -> dict[str, Any]: ...
 
-    async def chat_focus_semantic_item(
+    async def chat_ask_semantic_item_question(
         self,
         *,
         kind: str,
         entity_id: str,
-        zoom: float | None = None,
+        question: str,
     ) -> dict[str, Any]: ...
-
-    async def chat_highlight_semantic_items(
-        self,
-        *,
-        items: list[dict[str, str]],
-        selected_item: dict[str, str] | None = None,
-    ) -> dict[str, Any]: ...
-
-    async def chat_focus_map(self) -> dict[str, Any]: ...
-
-    async def chat_focus_robot(self, *, zoom: float | None = None) -> dict[str, Any]: ...
-
-    async def chat_clear_map_focus(self) -> dict[str, Any]: ...
 
     async def chat_set_layer_visibility(
         self,
@@ -363,7 +330,16 @@ class ChatRuntime(Protocol):
 
     async def chat_save_map(self) -> dict[str, Any]: ...
 
-    async def chat_go_to_semantic_item(self, *, kind: str, entity_id: str) -> dict[str, Any]: ...
+    async def chat_go_to_semantic_item(
+        self,
+        *,
+        kind: str,
+        entity_id: str,
+        wait_for_arrival: bool = True,
+        timeout_s: float = 120.0,
+    ) -> dict[str, Any]: ...
+
+    async def chat_cancel_current_action(self) -> dict[str, Any]: ...
 
     async def chat_inspect_now(self) -> dict[str, Any]: ...
 
@@ -535,27 +511,11 @@ class SlamassChatAgent:
                     kind=str(arguments.get("kind", "")),
                     entity_id=str(arguments.get("entity_id", "")),
                 )
-            if tool_call.name == "focus_semantic_item":
-                zoom = arguments.get("zoom")
-                return await runtime.chat_focus_semantic_item(
+            if tool_call.name == "ask_semantic_item_question":
+                return await runtime.chat_ask_semantic_item_question(
                     kind=str(arguments.get("kind", "")),
                     entity_id=str(arguments.get("entity_id", "")),
-                    zoom=float(zoom) if zoom is not None else None,
-                )
-            if tool_call.name == "highlight_semantic_items":
-                raw_items = arguments.get("items", [])
-                items = [item for item in raw_items if isinstance(item, dict)]
-                selected_item = arguments.get("selected_item")
-                return await runtime.chat_highlight_semantic_items(
-                    items=[{"kind": str(item.get("kind", "")), "entity_id": str(item.get("entity_id", ""))} for item in items],
-                    selected_item=(
-                        {
-                            "kind": str(selected_item.get("kind", "")),
-                            "entity_id": str(selected_item.get("entity_id", "")),
-                        }
-                        if isinstance(selected_item, dict)
-                        else None
-                    ),
+                    question=str(arguments.get("question", "")),
                 )
             if tool_call.name == "set_layer_visibility":
                 show_pois = arguments.get("show_pois")
@@ -569,10 +529,16 @@ class SlamassChatAgent:
             if tool_call.name == "save_map":
                 return await runtime.chat_save_map()
             if tool_call.name == "go_to_semantic_item":
+                wait_for_arrival = arguments.get("wait_for_arrival")
+                timeout_s = arguments.get("timeout_s")
                 return await runtime.chat_go_to_semantic_item(
                     kind=str(arguments.get("kind", "")),
                     entity_id=str(arguments.get("entity_id", "")),
+                    wait_for_arrival=bool(wait_for_arrival) if wait_for_arrival is not None else True,
+                    timeout_s=float(timeout_s) if timeout_s is not None else 120.0,
                 )
+            if tool_call.name == "cancel_current_action":
+                return await runtime.chat_cancel_current_action()
             if tool_call.name == "inspect_now":
                 return await runtime.chat_inspect_now()
             if tool_call.name == "look_current_view":

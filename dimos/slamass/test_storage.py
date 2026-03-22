@@ -115,6 +115,50 @@ def test_poi_upsert_and_soft_delete(tmp_path: Path) -> None:
     assert storage.get_poi(poi.poi_id) is not None
 
 
+def test_poi_agent_context_round_trip_and_delete_with_poi(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    hero = storage.create_image_asset(b"hero", ".jpg")
+    thumb = storage.create_image_asset(b"thumb", ".jpg")
+
+    poi = storage.new_poi(
+        map_id="active",
+        world_x=1.0,
+        world_y=2.0,
+        world_yaw=0.1,
+        title="Arena Corner",
+        summary="Training area",
+        category="training",
+        interest_score=0.9,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        objects=["boxing ring"],
+    )
+    storage.upsert_poi(poi)
+
+    context_record = storage.new_poi_agent_context(
+        poi_id=poi.poi_id,
+        scene_caption="A blue boxing ring sits in the center.",
+        salient_entities=[{"name": "boxing ring", "attributes": "blue", "approx_location": "center"}],
+        spatial_relations=["boxing ring near the chair"],
+        visible_text=["RING ZONE"],
+        landmark_cues=["blue boxing ring"],
+        uncertainty_notes=[],
+        search_text="blue boxing ring chair",
+        embedding_model="fake-embedding-model",
+        embedding_vector=[1.0, 0.0, 0.5],
+    )
+    storage.upsert_poi_agent_context(context_record)
+
+    loaded = storage.get_poi_agent_context(poi.poi_id)
+    assert loaded is not None
+    assert loaded.scene_caption == "A blue boxing ring sits in the center."
+    assert loaded.salient_entities[0]["name"] == "boxing ring"
+    assert loaded.embedding_vector == [1.0, 0.0, 0.5]
+
+    storage.soft_delete_poi(poi.poi_id)
+    assert storage.get_poi_agent_context(poi.poi_id) is None
+
+
 def test_storage_migrates_legacy_poi_rows_to_anchor_and_target(tmp_path: Path) -> None:
     state_dir = tmp_path
     state_dir.mkdir(parents=True, exist_ok=True)

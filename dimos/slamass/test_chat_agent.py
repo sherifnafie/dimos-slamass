@@ -45,31 +45,20 @@ class FakeRuntime:
     async def chat_get_semantic_item(self, *, kind: str, entity_id: str) -> dict[str, Any]:
         raise NotImplementedError
 
-    async def chat_focus_semantic_item(
+    async def chat_ask_semantic_item_question(
         self,
         *,
         kind: str,
         entity_id: str,
-        zoom: float | None = None,
+        question: str,
     ) -> dict[str, Any]:
-        raise NotImplementedError
-
-    async def chat_highlight_semantic_items(
-        self,
-        *,
-        items: list[dict[str, str]],
-        selected_item: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        raise NotImplementedError
-
-    async def chat_focus_map(self) -> dict[str, Any]:
-        raise NotImplementedError
-
-    async def chat_focus_robot(self, *, zoom: float | None = None) -> dict[str, Any]:
-        raise NotImplementedError
-
-    async def chat_clear_map_focus(self) -> dict[str, Any]:
-        raise NotImplementedError
+        self.calls.append(
+            (
+                "ask_semantic_item_question",
+                {"kind": kind, "entity_id": entity_id, "question": question},
+            )
+        )
+        return {"ok": True, "answer": "The boxing ring is blue."}
 
     async def chat_set_layer_visibility(
         self,
@@ -95,6 +84,10 @@ class FakeRuntime:
 
     async def chat_go_to_semantic_item(self, *, kind: str, entity_id: str) -> dict[str, Any]:
         raise NotImplementedError
+
+    async def chat_cancel_current_action(self) -> dict[str, Any]:
+        self.calls.append(("cancel_current_action", {}))
+        return {"ok": True, "cancelled": True}
 
     async def chat_inspect_now(self) -> dict[str, Any]:
         raise NotImplementedError
@@ -183,6 +176,35 @@ class SpeakBackend:
         return ChatBackendResponse(content="I announced it over the speaker.", tool_calls=[])
 
 
+class NavigationBackend:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> ChatBackendResponse:
+        self.calls += 1
+        if self.calls == 1:
+            return ChatBackendResponse(
+                content="",
+                tool_calls=[
+                    ChatBackendToolCall(
+                        call_id="call_qa",
+                        name="ask_semantic_item_question",
+                        arguments_json='{"kind": "vlm_poi", "entity_id": "poi-1", "question": "What color is the boxing ring?"}',
+                    ),
+                    ChatBackendToolCall(
+                        call_id="call_cancel",
+                        name="cancel_current_action",
+                        arguments_json="{}",
+                    ),
+                ],
+            )
+        return ChatBackendResponse(content="I checked the saved POI and cancelled the action.", tool_calls=[])
+
+
 @pytest.mark.asyncio
 async def test_chat_agent_dispatches_layer_and_save_tools() -> None:
     agent = SlamassChatAgent(backend=SequentialBackend())
@@ -226,6 +248,32 @@ async def test_chat_agent_dispatches_speak_tool() -> None:
     assert runtime.calls == [("speak_text", {"text": "Hello from SLAMASS."})]
 
 
+@pytest.mark.asyncio
+async def test_chat_agent_dispatches_saved_item_qa_and_cancel_tool() -> None:
+    agent = SlamassChatAgent(backend=NavigationBackend())
+    runtime = FakeRuntime()
+
+    result = await agent.run_turn(
+        runtime,
+        history=[],
+        user_message="Check the boxing ring POI and stop the current action.",
+    )
+
+    assert result.content == "I checked the saved POI and cancelled the action."
+    assert result.tools_used == ["ask_semantic_item_question", "cancel_current_action"]
+    assert runtime.calls == [
+        (
+            "ask_semantic_item_question",
+            {
+                "kind": "vlm_poi",
+                "entity_id": "poi-1",
+                "question": "What color is the boxing ring?",
+            },
+        ),
+        ("cancel_current_action", {}),
+    ]
+
+
 def test_chat_agent_tool_manifest_matches_scoped_surface() -> None:
     agent = SlamassChatAgent(backend=SequentialBackend())
 
@@ -236,12 +284,12 @@ def test_chat_agent_tool_manifest_matches_scoped_surface() -> None:
         "get_runtime_overview",
         "search_semantic_memory",
         "get_semantic_item",
-        "focus_semantic_item",
-        "highlight_semantic_items",
+        "ask_semantic_item_question",
         "set_layer_visibility",
         "set_yolo_runtime",
         "save_map",
         "go_to_semantic_item",
+        "cancel_current_action",
         "inspect_now",
         "look_current_view",
         "speak_text",

@@ -25,6 +25,7 @@ from dimos.slamass.chat_agent import ChatTurnResult
 from dimos.slamass.service import (
     decode_pov_frame_message,
     InspectionAnalysis,
+    PoiAgentContextAnalysis,
     OpenAIInspectionAnalyzer,
     RobotPose,
     SlamassService,
@@ -124,14 +125,62 @@ class FakeAnalyzer:
         )
 
 
+class FakePoiContextAnalyzer:
+    def analyze(self, image) -> PoiAgentContextAnalysis:  # type: ignore[no-untyped-def]
+        return PoiAgentContextAnalysis(
+            scene_caption="A blue boxing ring sits beside a folding chair and a black table.",
+            salient_entities=[
+                {
+                    "name": "boxing ring",
+                    "attributes": "blue padded frame",
+                    "approx_location": "center",
+                },
+                {
+                    "name": "chair",
+                    "attributes": "dark folding chair",
+                    "approx_location": "right",
+                },
+            ],
+            spatial_relations=["chair near the table", "boxing ring in front of the table"],
+            visible_text=["RING ZONE"],
+            landmark_cues=["blue boxing ring", "chair beside black table"],
+            uncertainty_notes=[],
+        )
+
+
+class FakeEmbedder:
+    model_name = "fake-embedding-model"
+
+    def embed_text(self, text: str) -> list[float]:
+        normalized = text.lower()
+        if "boxing" in normalized or "ring" in normalized or "chair near the table" in normalized:
+            return [1.0, 0.0]
+        if "window" in normalized:
+            return [0.0, 1.0]
+        return [0.1, 0.1]
+
+
+class FakeChatVlm:
+    def __init__(self, answer: str = "The boxing ring is blue.") -> None:
+        self.answer = answer
+        self.calls: list[tuple[str, str]] = []
+
+    def query(self, image, prompt: str) -> str:  # type: ignore[no-untyped-def]
+        self.calls.append((type(image).__name__, prompt))
+        return self.answer
+
+    def stop(self) -> None:
+        return None
+
+
 class FakeChatAgent:
-    def __init__(self, content: str = "I focused the best match on the map.") -> None:
+    def __init__(self, content: str = "I found the best matching semantic item.") -> None:
         self.content = content
         self.calls: list[tuple[str, int]] = []
 
     async def run_turn(self, runtime, *, history, user_message):  # type: ignore[no-untyped-def]
         self.calls.append((user_message, len(history)))
-        return ChatTurnResult(content=self.content, tools_used=["search_semantic_memory", "focus_semantic_item"])
+        return ChatTurnResult(content=self.content, tools_used=["search_semantic_memory"])
 
     def tool_manifest(self) -> list[dict[str, object]]:
         return [
@@ -143,6 +192,16 @@ class FakeChatAgent:
             {
                 "name": "go_to_semantic_item",
                 "description": "Navigate to a semantic item.",
+                "parameters": [],
+            },
+            {
+                "name": "ask_semantic_item_question",
+                "description": "Ask a detailed question about a saved semantic item image.",
+                "parameters": [],
+            },
+            {
+                "name": "cancel_current_action",
+                "description": "Cancel the running embodied action.",
                 "parameters": [],
             },
             {
@@ -271,6 +330,35 @@ async def test_service_inspect_now_rejects_without_creating_poi(tmp_path: Path) 
 
     assert result["status"] == "rejected"
     assert storage.list_pois() == []
+
+
+@pytest.mark.asyncio
+async def test_service_inspect_now_persists_hidden_agent_context_for_new_poi(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(should_create_poi=True, title="Arena Corner"),
+        poi_context_analyzer=FakePoiContextAnalyzer(),
+        poi_embedder=FakeEmbedder(),
+    )
+    service.robot_pose = RobotPose(x=1.5, y=2.0, z=0.0, yaw=0.0)
+
+    result = await service.inspect_now()
+
+    assert result["status"] == "accepted"
+    poi_id = str(result["poi_id"])
+    context_record = storage.get_poi_agent_context(poi_id)
+    assert context_record is not None
+    assert context_record.scene_caption.startswith("A blue boxing ring")
+    assert context_record.embedding_model == "fake-embedding-model"
+
+    details = await service.chat_get_semantic_item(kind="vlm_poi", entity_id=poi_id)
+    assert details["agent_context"] is not None
+    assert details["agent_context"]["scene_caption"].startswith("A blue boxing ring")
 
 
 @pytest.mark.asyncio
@@ -449,7 +537,6 @@ async def test_service_clear_semantic_memory_preserves_low_level_map(tmp_path: P
     assert storage.list_pois() == []
     assert storage.list_yolo_objects() == []
     assert service.ui_state.selected_item is None
-    assert service.ui_state.highlighted_items == []
 
 
 @pytest.mark.asyncio
@@ -516,7 +603,7 @@ async def test_service_go_to_poi_uses_stored_view_pose(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_service_focus_poi_updates_ui_state(tmp_path: Path) -> None:
+async def test_service_select_item_updates_ui_state(tmp_path: Path) -> None:
     storage = SlamassStorage(tmp_path)
     service = SlamassService(
         map_socket_url="http://localhost:7779",
@@ -525,15 +612,6 @@ async def test_service_focus_poi_updates_ui_state(tmp_path: Path) -> None:
         storage=storage,
         mcp_client=FakeMcpClient(make_test_jpeg()),
         analyzer=FakeAnalyzer(),
-    )
-    await service._handle_raw_costmap(
-        RawCostmap(
-            grid=np.full((3, 3), 100, dtype=np.int8),
-            origin_x=0.0,
-            origin_y=0.0,
-            resolution=0.05,
-            ts=0.0,
-        )
     )
     hero = storage.create_image_asset(b"hero", ".jpg")
     thumb = storage.create_image_asset(b"thumb", ".jpg")
@@ -555,13 +633,11 @@ async def test_service_focus_poi_updates_ui_state(tmp_path: Path) -> None:
     storage.upsert_poi(poi)
     service.pois[poi.poi_id] = poi
 
-    ui = await service.focus_poi(poi.poi_id, zoom=2.8)
-    assert service.map_state is not None
+    ui = await service.select_item("vlm_poi", poi.poi_id)
 
     assert ui["selected_item"] == {"kind": "vlm_poi", "entity_id": poi.poi_id}
-    assert ui["highlighted_items"] == [{"kind": "vlm_poi", "entity_id": poi.poi_id}]
-    assert ui["camera"]["center_x"] == pytest.approx(0.15)
-    assert ui["camera"]["center_y"] == pytest.approx(0.05)
+    assert ui["camera"]["center_x"] is None
+    assert ui["camera"]["center_y"] is None
     assert ui["camera"]["zoom"] == pytest.approx(1.0)
 
 
@@ -593,12 +669,11 @@ async def test_service_delete_poi_clears_ui_focus(tmp_path: Path) -> None:
     )
     storage.upsert_poi(poi)
     service.pois[poi.poi_id] = poi
-    await service.highlight_pois([poi.poi_id], selected_poi_id=poi.poi_id)
+    await service.select_item("vlm_poi", poi.poi_id)
 
     await service.delete_poi(poi.poi_id)
 
     assert service.ui_state.selected_item is None
-    assert service.ui_state.highlighted_items == []
 
 
 @pytest.mark.asyncio
@@ -731,6 +806,149 @@ async def test_service_go_to_yolo_object_uses_best_view_pose(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
+async def test_chat_go_to_semantic_item_waits_and_reports_arrival(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_mcp = FakeMcpClient(make_test_jpeg())
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=fake_mcp,
+        analyzer=FakeAnalyzer(),
+        poi_arrival_settle_seconds=0.0,
+        chat_agent=FakeChatAgent(),
+    )
+    hero = storage.create_image_asset(b"hero", ".jpg")
+    thumb = storage.create_image_asset(b"thumb", ".jpg")
+    poi = storage.new_poi(
+        map_id="active",
+        world_x=1.25,
+        world_y=-0.75,
+        world_yaw=0.6,
+        title="Window Nook",
+        summary="A bright nook with a large window.",
+        category="window",
+        interest_score=0.9,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        objects=["window"],
+    )
+    storage.upsert_poi(poi)
+    service.pois[poi.poi_id] = poi
+    service.robot_pose = RobotPose(x=poi.anchor_x, y=poi.anchor_y, z=0.0, yaw=poi.anchor_yaw)
+    fake_map_client = FakeMapClient()
+    service.map_client = fake_map_client  # type: ignore[assignment]
+
+    result = await service.chat_go_to_semantic_item(kind="vlm_poi", entity_id=poi.poi_id)
+
+    assert result["ok"] is True
+    assert result["status"] == "arrived"
+    assert result["kind"] == "vlm_poi"
+    assert result["entity_id"] == poi.poi_id
+    overview = await service.chat_runtime_overview()
+    assert overview["current_action"]["status"] == "arrived"
+
+
+@pytest.mark.asyncio
+async def test_chat_cancel_current_action_cancels_running_navigation(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    fake_mcp = FakeMcpClient(make_test_jpeg())
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=fake_mcp,
+        analyzer=FakeAnalyzer(),
+        chat_agent=FakeChatAgent(),
+    )
+    hero = storage.create_image_asset(b"hero", ".jpg")
+    thumb = storage.create_image_asset(b"thumb", ".jpg")
+    poi = storage.new_poi(
+        map_id="active",
+        world_x=1.25,
+        world_y=-0.75,
+        world_yaw=0.6,
+        title="Window Nook",
+        summary="A bright nook with a large window.",
+        category="window",
+        interest_score=0.9,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        objects=["window"],
+    )
+    storage.upsert_poi(poi)
+    service.pois[poi.poi_id] = poi
+    service.robot_pose = RobotPose(x=0.0, y=0.0, z=0.0, yaw=0.0)
+    fake_map_client = FakeMapClient()
+    service.map_client = fake_map_client  # type: ignore[assignment]
+
+    start_result = await service.go_to_poi(poi.poi_id, wait_for_arrival=False)
+    cancel_result = await service.chat_cancel_current_action()
+
+    assert start_result["status"] == "running"
+    assert cancel_result["cancelled"] is True
+    assert cancel_result["current_action"]["status"] == "cancelled"
+    assert fake_mcp.cancel_navigation_goal_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_chat_ask_semantic_item_question_uses_saved_poi_image_and_context(tmp_path: Path) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+        chat_agent=FakeChatAgent(),
+    )
+    service._chat_vlm = FakeChatVlm()  # type: ignore[assignment]
+    hero = storage.create_image_asset(make_test_jpeg(), ".jpg")
+    thumb = storage.create_image_asset(b"thumb", ".jpg")
+    poi = storage.new_poi(
+        map_id="active",
+        world_x=1.0,
+        world_y=2.0,
+        world_yaw=0.1,
+        title="Arena Corner",
+        summary="Training area.",
+        category="training",
+        interest_score=0.8,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        objects=["boxing ring"],
+    )
+    storage.upsert_poi(poi)
+    context_record = storage.new_poi_agent_context(
+        poi_id=poi.poi_id,
+        scene_caption="A blue boxing ring sits in the center.",
+        salient_entities=[{"name": "boxing ring", "attributes": "blue", "approx_location": "center"}],
+        spatial_relations=["boxing ring near the chair"],
+        visible_text=[],
+        landmark_cues=["blue boxing ring"],
+        uncertainty_notes=[],
+        search_text="blue boxing ring",
+        embedding_model="fake-embedding-model",
+        embedding_vector=[1.0, 0.0],
+    )
+    storage.upsert_poi_agent_context(context_record)
+    service.pois[poi.poi_id] = poi
+    service.poi_agent_contexts[poi.poi_id] = context_record
+
+    result = await service.chat_ask_semantic_item_question(
+        kind="vlm_poi",
+        entity_id=poi.poi_id,
+        question="What color is the boxing ring?",
+    )
+
+    assert result["ok"] is True
+    assert result["answer"] == "The boxing ring is blue."
+
+
+@pytest.mark.asyncio
 async def test_service_send_move_command_uses_map_socket(tmp_path: Path) -> None:
     storage = SlamassStorage(tmp_path)
     fake_map_client = FakeMapClient()
@@ -844,7 +1062,7 @@ async def test_service_stop_dimos_runs_stop_command_after_zero_velocity(tmp_path
 @pytest.mark.asyncio
 async def test_service_submit_chat_message_runs_agent_and_updates_state(tmp_path: Path) -> None:
     storage = SlamassStorage(tmp_path)
-    fake_chat_agent = FakeChatAgent(content="The window POI is highlighted on the map.")
+    fake_chat_agent = FakeChatAgent(content="The window POI is near the east wall.")
     service = SlamassService(
         map_socket_url="http://localhost:7779",
         mcp_url="http://localhost:9990/mcp",
@@ -865,11 +1083,8 @@ async def test_service_submit_chat_message_runs_agent_and_updates_state(tmp_path
     snapshot = await service.chat_snapshot()
     assert snapshot["running"] is False
     assert snapshot["messages"][0]["content"] == "Where is the window?"
-    assert snapshot["messages"][1]["content"] == "The window POI is highlighted on the map."
-    assert snapshot["messages"][1]["tools_used"] == [
-        "search_semantic_memory",
-        "focus_semantic_item",
-    ]
+    assert snapshot["messages"][1]["content"] == "The window POI is near the east wall."
+    assert snapshot["messages"][1]["tools_used"] == ["search_semantic_memory"]
     assert fake_chat_agent.calls == [("Where is the window?", 0)]
 
 
@@ -891,6 +1106,8 @@ async def test_service_chat_tools_manifest_reflects_exposed_agent_tools(tmp_path
 
     assert "search_semantic_memory" in tool_names
     assert "go_to_semantic_item" in tool_names
+    assert "ask_semantic_item_question" in tool_names
+    assert "cancel_current_action" in tool_names
     assert "look_current_view" in tool_names
     assert "speak_text" in tool_names
     assert "relative_move" not in tool_names
@@ -950,6 +1167,66 @@ async def test_chat_search_semantic_memory_finds_matching_poi(tmp_path: Path) ->
 
     assert result["results"][0]["kind"] == "vlm_poi"
     assert result["results"][0]["entity_id"] == poi.poi_id
+
+
+@pytest.mark.asyncio
+async def test_chat_search_semantic_memory_uses_embedding_context_for_agentic_queries(
+    tmp_path: Path,
+) -> None:
+    storage = SlamassStorage(tmp_path)
+    service = SlamassService(
+        map_socket_url="http://localhost:7779",
+        mcp_url="http://localhost:9990/mcp",
+        state_dir=tmp_path,
+        storage=storage,
+        mcp_client=FakeMcpClient(make_test_jpeg()),
+        analyzer=FakeAnalyzer(),
+        poi_embedder=FakeEmbedder(),
+        chat_agent=FakeChatAgent(),
+    )
+    hero = storage.create_image_asset(b"hero", ".jpg")
+    thumb = storage.create_image_asset(b"thumb", ".jpg")
+    poi = storage.new_poi(
+        map_id="active",
+        world_x=1.0,
+        world_y=2.0,
+        world_yaw=0.1,
+        title="Arena Corner",
+        summary="Open floor near the training area.",
+        category="training",
+        interest_score=0.7,
+        thumbnail_path=thumb,
+        hero_image_path=hero,
+        objects=["floor", "training"],
+    )
+    storage.upsert_poi(poi)
+    context_record = storage.new_poi_agent_context(
+        poi_id=poi.poi_id,
+        scene_caption="A blue boxing ring sits beside a chair and a black table.",
+        salient_entities=[
+            {"name": "boxing ring", "attributes": "blue padded frame", "approx_location": "center"}
+        ],
+        spatial_relations=["chair near the table"],
+        visible_text=[],
+        landmark_cues=["blue boxing ring"],
+        uncertainty_notes=[],
+        search_text="blue boxing ring chair near the table black table",
+        embedding_model="fake-embedding-model",
+        embedding_vector=[1.0, 0.0],
+    )
+    storage.upsert_poi_agent_context(context_record)
+    service.pois[poi.poi_id] = poi
+    service.poi_agent_contexts = {poi.poi_id: context_record}
+
+    result = await service.chat_search_semantic_memory(
+        query="blue boxing ring",
+        kind="vlm_poi",
+        limit=5,
+    )
+
+    assert result["results"][0]["entity_id"] == poi.poi_id
+    assert result["results"][0]["match_source"] == "embedding"
+    assert result["results"][0]["agent_hint"].startswith("A blue boxing ring")
 
 
 @pytest.mark.asyncio

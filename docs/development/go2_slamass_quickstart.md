@@ -110,7 +110,7 @@ http://localhost:7780
 11. Press `Go To` on the YOLO object. The robot should return to the saved viewing pose for that object.
 12. Press `Save Map`.
 13. Switch the dashboard to `Trio`, open the `Agent` tab, and ask something like `where is the window?`
-14. The agent should answer and also manipulate the map UI, for example by focusing or highlighting the relevant semantic item.
+14. The agent should answer from semantic memory, and presenter notifications should appear for any embodied actions it triggers.
 15. Ask `go to the window` and confirm the robot starts navigating to the saved viewpoint pose.
 16. Ask `hide YOLO and save the map` and confirm the YOLO layer toggles off and the map checkpoints successfully.
 

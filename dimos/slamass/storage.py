@@ -100,6 +100,73 @@ class PoiObservationRecord:
 
 
 @dataclass(slots=True)
+class PoiAgentContextRecord:
+    poi_id: str
+    scene_caption: str
+    salient_entities_json: str
+    spatial_relations_json: str
+    visible_text_json: str
+    landmark_cues_json: str
+    uncertainty_notes_json: str
+    search_text: str
+    embedding_model: str
+    embedding_vector_json: str
+    created_at: str
+    updated_at: str
+
+    @property
+    def salient_entities(self) -> list[dict[str, str]]:
+        raw = json.loads(self.salient_entities_json or "[]")
+        if not isinstance(raw, list):
+            return []
+        parsed: list[dict[str, str]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            parsed.append(
+                {
+                    "name": str(item.get("name", "")),
+                    "attributes": str(item.get("attributes", "")),
+                    "approx_location": str(item.get("approx_location", "")),
+                }
+            )
+        return parsed
+
+    @property
+    def spatial_relations(self) -> list[str]:
+        raw = json.loads(self.spatial_relations_json or "[]")
+        return [str(item) for item in raw] if isinstance(raw, list) else []
+
+    @property
+    def visible_text(self) -> list[str]:
+        raw = json.loads(self.visible_text_json or "[]")
+        return [str(item) for item in raw] if isinstance(raw, list) else []
+
+    @property
+    def landmark_cues(self) -> list[str]:
+        raw = json.loads(self.landmark_cues_json or "[]")
+        return [str(item) for item in raw] if isinstance(raw, list) else []
+
+    @property
+    def uncertainty_notes(self) -> list[str]:
+        raw = json.loads(self.uncertainty_notes_json or "[]")
+        return [str(item) for item in raw] if isinstance(raw, list) else []
+
+    @property
+    def embedding_vector(self) -> list[float]:
+        raw = json.loads(self.embedding_vector_json or "[]")
+        if not isinstance(raw, list):
+            return []
+        values: list[float] = []
+        for item in raw:
+            try:
+                values.append(float(item))
+            except (TypeError, ValueError):
+                continue
+        return values
+
+
+@dataclass(slots=True)
 class YoloObjectRecord:
     object_id: str
     map_id: str
@@ -222,6 +289,21 @@ class SlamassStorage:
                 model_payload_json TEXT NOT NULL,
                 gate_result TEXT NOT NULL,
                 created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS poi_agent_contexts (
+                poi_id TEXT PRIMARY KEY,
+                scene_caption TEXT NOT NULL,
+                salient_entities_json TEXT NOT NULL,
+                spatial_relations_json TEXT NOT NULL,
+                visible_text_json TEXT NOT NULL,
+                landmark_cues_json TEXT NOT NULL,
+                uncertainty_notes_json TEXT NOT NULL,
+                search_text TEXT NOT NULL,
+                embedding_model TEXT NOT NULL,
+                embedding_vector_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS app_settings (
@@ -402,6 +484,7 @@ class SlamassStorage:
             """
             DELETE FROM pois;
             DELETE FROM poi_observations;
+            DELETE FROM poi_agent_contexts;
             DELETE FROM yolo_objects;
             DELETE FROM yolo_object_observations;
             DELETE FROM app_settings WHERE key = 'chat_state';
@@ -555,6 +638,7 @@ class SlamassStorage:
             "UPDATE pois SET status = 'deleted', updated_at = ? WHERE poi_id = ?",
             (utc_now_iso(), poi_id),
         )
+        conn.execute("DELETE FROM poi_agent_contexts WHERE poi_id = ?", (poi_id,))
         conn.commit()
 
     def insert_observation(self, record: PoiObservationRecord) -> None:
@@ -578,6 +662,70 @@ class SlamassStorage:
                 record.gate_result,
                 record.created_at,
             ),
+        )
+        conn.commit()
+
+    def upsert_poi_agent_context(self, record: PoiAgentContextRecord) -> None:
+        conn = self._get_conn()
+        conn.execute(
+            """
+            INSERT INTO poi_agent_contexts (
+                poi_id, scene_caption, salient_entities_json, spatial_relations_json,
+                visible_text_json, landmark_cues_json, uncertainty_notes_json,
+                search_text, embedding_model, embedding_vector_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(poi_id) DO UPDATE SET
+                scene_caption = excluded.scene_caption,
+                salient_entities_json = excluded.salient_entities_json,
+                spatial_relations_json = excluded.spatial_relations_json,
+                visible_text_json = excluded.visible_text_json,
+                landmark_cues_json = excluded.landmark_cues_json,
+                uncertainty_notes_json = excluded.uncertainty_notes_json,
+                search_text = excluded.search_text,
+                embedding_model = excluded.embedding_model,
+                embedding_vector_json = excluded.embedding_vector_json,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at
+            """,
+            (
+                record.poi_id,
+                record.scene_caption,
+                record.salient_entities_json,
+                record.spatial_relations_json,
+                record.visible_text_json,
+                record.landmark_cues_json,
+                record.uncertainty_notes_json,
+                record.search_text,
+                record.embedding_model,
+                record.embedding_vector_json,
+                record.created_at,
+                record.updated_at,
+            ),
+        )
+        conn.commit()
+
+    def get_poi_agent_context(self, poi_id: str) -> PoiAgentContextRecord | None:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM poi_agent_contexts WHERE poi_id = ?",
+            (poi_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._poi_agent_context_from_row(row)
+
+    def list_poi_agent_contexts(self) -> list[PoiAgentContextRecord]:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM poi_agent_contexts ORDER BY created_at ASC"
+        ).fetchall()
+        return [self._poi_agent_context_from_row(row) for row in rows]
+
+    def delete_poi_agent_context(self, poi_id: str) -> None:
+        conn = self._get_conn()
+        conn.execute(
+            "DELETE FROM poi_agent_contexts WHERE poi_id = ?",
+            (poi_id,),
         )
         conn.commit()
 
@@ -774,6 +922,37 @@ class SlamassStorage:
         )
 
     @staticmethod
+    def new_poi_agent_context(
+        *,
+        poi_id: str,
+        scene_caption: str,
+        salient_entities: list[dict[str, str]],
+        spatial_relations: list[str],
+        visible_text: list[str],
+        landmark_cues: list[str],
+        uncertainty_notes: list[str],
+        search_text: str,
+        embedding_model: str,
+        embedding_vector: list[float],
+        created_at: str | None = None,
+    ) -> PoiAgentContextRecord:
+        now = utc_now_iso()
+        return PoiAgentContextRecord(
+            poi_id=poi_id,
+            scene_caption=scene_caption,
+            salient_entities_json=json.dumps(salient_entities),
+            spatial_relations_json=json.dumps(spatial_relations),
+            visible_text_json=json.dumps(visible_text),
+            landmark_cues_json=json.dumps(landmark_cues),
+            uncertainty_notes_json=json.dumps(uncertainty_notes),
+            search_text=search_text,
+            embedding_model=embedding_model,
+            embedding_vector_json=json.dumps(embedding_vector),
+            created_at=created_at or now,
+            updated_at=now,
+        )
+
+    @staticmethod
     def new_yolo_object(
         *,
         map_id: str,
@@ -892,6 +1071,23 @@ class SlamassStorage:
             thumbnail_path=str(row["thumbnail_path"]),
             hero_image_path=str(row["hero_image_path"]),
             objects_json=str(row["objects_json"]),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
+
+    @staticmethod
+    def _poi_agent_context_from_row(row: sqlite3.Row) -> PoiAgentContextRecord:
+        return PoiAgentContextRecord(
+            poi_id=str(row["poi_id"]),
+            scene_caption=str(row["scene_caption"]),
+            salient_entities_json=str(row["salient_entities_json"]),
+            spatial_relations_json=str(row["spatial_relations_json"]),
+            visible_text_json=str(row["visible_text_json"]),
+            landmark_cues_json=str(row["landmark_cues_json"]),
+            uncertainty_notes_json=str(row["uncertainty_notes_json"]),
+            search_text=str(row["search_text"]),
+            embedding_model=str(row["embedding_model"]),
+            embedding_vector_json=str(row["embedding_vector_json"]),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
         )

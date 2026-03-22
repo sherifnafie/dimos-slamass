@@ -29,8 +29,9 @@ The repo now already contains a working first pass of this concept:
 - VLM POIs now track both `anchor_x/y/yaw` for the capture viewpoint and `target_x/y` for the semantic place location
 - `Go To` wired to the stored POI viewpoint pose, meaning the saved anchor `x`, `y`, and viewing `yaw`
 - `Go To` for YOLO objects wired to the saved best-view robot pose rather than the object centroid
-- a service-owned UI command layer for map focus state, selection, highlights, and camera control, so future agent-driven zoom/highlight behavior has a clean path
-- an operator chat panel backed by a service-owned agent that can search semantic memory, manipulate the SLAMASS UI, inspect the current view, navigate to saved semantic items, toggle semantic layers, pause or resume YOLO ingestion, save the map, and use a curated set of robot MCP tools
+- an operator-selected map UI with manual pan/zoom and semantic detail modals
+- presenter notifications for major actions like navigation start, arrival, failure, and inspection outcomes
+- an operator chat panel backed by a service-owned agent that can search semantic memory, inspect the current view, navigate to saved semantic items, toggle semantic layers, pause or resume YOLO ingestion, save the map, and use a curated set of robot MCP tools
 
 Still roadmap rather than current reality:
 
@@ -111,7 +112,7 @@ Clicking a floating window opens the POI:
 The operator can now also use a chat panel:
 
 - the agent searches the saved semantic dataset first
-- the agent can highlight and focus the map while answering
+- the UI surfaces presenter notifications for embodied actions instead of agent-driven highlight/focus effects
 - the agent can also change layer visibility, pause or resume YOLO, and save the map when explicitly asked
 - the agent can command navigation back to saved POIs or YOLO object viewpoints
 - the agent can inspect the current view or use selected relative robot actions when needed
@@ -198,18 +199,17 @@ It should not reason directly over raw locomotion and map pixels unless necessar
 Important future capability:
 
 - the agent should not be limited to text responses and robot commands
-- it should also be able to manipulate the SLAMASS UI state in presenter-visible ways
-- example UI actions: zoom map to region, pan to POI, highlight one or more POIs, focus the selected POI card, open a POI detail panel, or briefly spotlight a search result
+- it should eventually gain richer presenter-visible UI affordances, but the current MVP intentionally keeps map control manual and uses notifications instead of agent-driven zoom/focus
 
-This matters because a good live demo is interactive, not purely verbal. If a user asks "where is the window area?" the best response is not just text. The best response is for the agent to answer while simultaneously driving the UI toward the relevant part of the map.
+This matters because a good live demo is interactive, not purely verbal. For the current MVP, that interaction comes from the operator selecting semantic items while the agent handles search, memory lookup, and embodied action.
 
 Current implementation stance:
 
 - the agent is service-owned, not embedded in the browser
 - the agent works through an explicit tool layer rather than raw frontend state mutation
-- semantic search, map focus/highlight, and semantic-item navigation are first-class tools
+- semantic search, layer control, inspection, and semantic-item navigation are first-class tools
 - robot action tools are intentionally curated rather than fully open-ended
-- the agent should prefer semantic memory plus UI actions before using low-level robot motion
+- the agent should prefer semantic memory plus safe embodied actions before using low-level robot motion
 
 ## Why This Pivot Is Better Than Dense Semantic Mapping
 

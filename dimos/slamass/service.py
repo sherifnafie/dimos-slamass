@@ -27,7 +27,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import time
-from typing import Any
+from typing import Any, Protocol
 import zlib
 
 import aiohttp
@@ -35,7 +35,7 @@ from dotenv import find_dotenv, load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
-from openai import OpenAIError
+from openai import OpenAI, OpenAIError
 from PIL import Image
 from pydantic import BaseModel
 import socketio  # type: ignore[import-untyped]
@@ -50,6 +50,7 @@ from dimos.slamass.chat_agent import ChatMessage, SlamassChatAgent
 from dimos.slamass.map_memory import ActiveMapState, RawCostmap
 from dimos.slamass.storage import (
     ActiveMapRecord,
+    PoiAgentContextRecord,
     PoiObservationRecord,
     PoiRecord,
     SlamassStorage,
@@ -64,8 +65,6 @@ logger = setup_logger()
 
 UI_MIN_ZOOM = 1.0
 UI_MAX_ZOOM = 1.0
-UI_FOCUS_POI_ZOOM = 1.0
-UI_FOCUS_ROBOT_ZOOM = 1.0
 POI_ARRIVAL_TOLERANCE_METERS = 0.6
 POI_ARRIVAL_SETTLE_SECONDS = 1.0
 POI_ARRIVAL_TIMEOUT_SECONDS = 120.0
@@ -98,6 +97,9 @@ VALID_MANUAL_INSPECTION_MODES = (
     INSPECTION_MODE_AI_GATE,
     INSPECTION_MODE_ALWAYS_CREATE,
 )
+POI_AGENT_CONTEXT_EMBEDDING_MODEL = "text-embedding-3-small"
+POI_AGENT_CONTEXT_EMBEDDING_MIN_SIMILARITY = 0.18
+POI_AGENT_CONTEXT_EMBEDDING_WEIGHT = 8.0
 YOLO_CLASS_WHITELIST = {
     "chair",
     "couch",
@@ -182,6 +184,26 @@ class InspectionAnalysis:
 
 
 @dataclass(slots=True)
+class PoiAgentContextAnalysis:
+    scene_caption: str
+    salient_entities: list[dict[str, str]]
+    spatial_relations: list[str]
+    visible_text: list[str]
+    landmark_cues: list[str]
+    uncertainty_notes: list[str]
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            "scene_caption": self.scene_caption,
+            "salient_entities": self.salient_entities,
+            "spatial_relations": self.spatial_relations,
+            "visible_text": self.visible_text,
+            "landmark_cues": self.landmark_cues,
+            "uncertainty_notes": self.uncertainty_notes,
+        }
+
+
+@dataclass(slots=True)
 class InspectionSettings:
     manual_mode: str = INSPECTION_MODE_AI_GATE
 
@@ -215,7 +237,6 @@ class SemanticItemRef:
 class SlamassUiState:
     camera: UiCameraState = field(default_factory=UiCameraState)
     selected_item: SemanticItemRef | None = None
-    highlighted_items: list[SemanticItemRef] = field(default_factory=list)
     revision: int = 0
 
 
@@ -223,6 +244,20 @@ class SlamassUiState:
 class ChatState:
     messages: list[ChatMessage] = field(default_factory=list)
     running: bool = False
+
+
+@dataclass(slots=True)
+class ActiveActionState:
+    action_id: str
+    action_type: str
+    status: str
+    kind: str
+    entity_id: str
+    started_at: str
+    target_x: float
+    target_y: float
+    target_yaw: float
+    last_error: str | None = None
 
 
 @dataclass(slots=True)
@@ -308,15 +343,6 @@ class UiCameraRequest(BaseModel):
 class UiSelectionRequest(BaseModel):
     kind: str | None = None
     entity_id: str | None = None
-
-
-class UiHighlightRequest(BaseModel):
-    items: list[dict[str, str]]
-    selected_item: dict[str, str] | None = None
-
-
-class UiFocusRequest(BaseModel):
-    zoom: float | None = None
 
 
 class InspectionSettingsRequest(BaseModel):
@@ -531,6 +557,75 @@ The summary should describe visible evidence only.
         )
 
 
+class PoiAgentContextAnalyzer(Protocol):
+    def analyze(self, image: DimosImage) -> PoiAgentContextAnalysis: ...
+
+
+class TextEmbedder(Protocol):
+    @property
+    def model_name(self) -> str: ...
+
+    def embed_text(self, text: str) -> list[float]: ...
+
+
+class OpenAIPoiAgentContextAnalyzer:
+    PROMPT = """Analyze this saved semantic POI image for an embodied agent's long-term workspace.
+
+Return exactly one JSON object with these keys:
+- scene_caption: short but information-dense scene description for later agent retrieval
+- salient_entities: array of objects with keys name, attributes, approx_location
+- spatial_relations: array of short relation strings grounded in the visible scene
+- visible_text: array of short visible text snippets or signage text
+- landmark_cues: array of short cues that would help identify or relocate this place
+- uncertainty_notes: array of short caveats about occlusion, ambiguity, or missing detail
+
+Rules:
+- Base everything on visible evidence only.
+- Prioritize details useful for later grounding: colors, materials, nearby objects, layout, signage, and scene structure.
+- Keep each field concise and agent-facing rather than user-facing.
+- If there is no visible text, return an empty array.
+- If a field has little useful content, return a short empty-style answer instead of inventing detail.
+"""
+
+    def __init__(self, model_name: str = "gpt-5.4-mini") -> None:
+        self._vlm = OpenAIVlModel(model_name=model_name)
+
+    def analyze(self, image: DimosImage) -> PoiAgentContextAnalysis:
+        response_text = self._vlm.query(
+            image,
+            self.PROMPT,
+            response_format={"type": "json_object"},
+        )
+        parsed = extract_json(response_text)
+        if not isinstance(parsed, dict):
+            raise ValueError(f"Expected JSON object from VLM, got: {type(parsed)}")
+
+        return PoiAgentContextAnalysis(
+            scene_caption=str(parsed.get("scene_caption", "")).strip()[:500],
+            salient_entities=_sanitize_salient_entities(parsed.get("salient_entities")),
+            spatial_relations=_sanitize_string_list(parsed.get("spatial_relations"), max_items=10, max_len=140),
+            visible_text=_sanitize_string_list(parsed.get("visible_text"), max_items=12, max_len=120),
+            landmark_cues=_sanitize_string_list(parsed.get("landmark_cues"), max_items=10, max_len=140),
+            uncertainty_notes=_sanitize_string_list(parsed.get("uncertainty_notes"), max_items=8, max_len=160),
+        )
+
+
+class OpenAITextEmbedder:
+    def __init__(self, model_name: str = POI_AGENT_CONTEXT_EMBEDDING_MODEL) -> None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "OpenAI API key must be provided or set in OPENAI_API_KEY environment variable"
+            )
+        self.model_name = model_name
+        self._client = OpenAI(api_key=api_key)
+
+    def embed_text(self, text: str) -> list[float]:
+        response = self._client.embeddings.create(model=self.model_name, input=text)
+        embedding = response.data[0].embedding
+        return [float(value) for value in embedding]
+
+
 def decode_raw_costmap_message(payload: dict[str, Any]) -> RawCostmap:
     encoded = payload.get("data")
     shape = payload.get("shape")
@@ -626,6 +721,62 @@ def np_array(pil_image: Image.Image) -> Any:
 
 def normalize_text(value: str) -> str:
     return "".join(ch for ch in value.lower() if ch.isalnum() or ch.isspace()).strip()
+
+
+def _sanitize_string_list(
+    raw: Any,
+    *,
+    max_items: int,
+    max_len: int,
+) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    values: list[str] = []
+    for item in raw:
+        text = str(item).strip()
+        if not text:
+            continue
+        values.append(text[:max_len])
+        if len(values) >= max_items:
+            break
+    return values
+
+
+def _sanitize_salient_entities(raw: Any) -> list[dict[str, str]]:
+    if not isinstance(raw, list):
+        return []
+    entities: list[dict[str, str]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()[:80]
+        if not name:
+            continue
+        entities.append(
+            {
+                "name": name,
+                "attributes": str(item.get("attributes", "")).strip()[:160],
+                "approx_location": str(item.get("approx_location", "")).strip()[:80],
+            }
+        )
+        if len(entities) >= 12:
+            break
+    return entities
+
+
+def _cosine_similarity(left: list[float], right: list[float]) -> float:
+    if not left or not right or len(left) != len(right):
+        return 0.0
+    numerator = sum(a * b for a, b in zip(left, right, strict=False))
+    left_norm = math.sqrt(sum(a * a for a in left))
+    right_norm = math.sqrt(sum(b * b for b in right))
+    if left_norm <= 0.0 or right_norm <= 0.0:
+        return 0.0
+    return numerator / (left_norm * right_norm)
+
+
+def _safe_json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
 
 
 def yaw_distance(a: float, b: float) -> float:
@@ -819,6 +970,8 @@ class SlamassService:
         storage: SlamassStorage | None = None,
         mcp_client: McpToolClient | None = None,
         analyzer: OpenAIInspectionAnalyzer | None = None,
+        poi_context_analyzer: PoiAgentContextAnalyzer | None = None,
+        poi_embedder: TextEmbedder | None = None,
         chat_agent: SlamassChatAgent | None = None,
         stop_command_runner: Any | None = None,
         poi_arrival_tolerance_m: float = POI_ARRIVAL_TOLERANCE_METERS,
@@ -833,6 +986,12 @@ class SlamassService:
         self.storage = storage or SlamassStorage(state_dir)
         self.mcp_client = mcp_client or McpToolClient(mcp_url)
         self.analyzer = analyzer or OpenAIInspectionAnalyzer(model_name=model_name)
+        self.poi_context_analyzer = poi_context_analyzer
+        if self.poi_context_analyzer is None and analyzer is None and os.getenv("OPENAI_API_KEY"):
+            self.poi_context_analyzer = OpenAIPoiAgentContextAnalyzer(model_name=model_name)
+        self.poi_embedder = poi_embedder
+        if self.poi_embedder is None and analyzer is None and os.getenv("OPENAI_API_KEY"):
+            self.poi_embedder = OpenAITextEmbedder()
         self.chat_agent = chat_agent or SlamassChatAgent(model_name=chat_model_name)
         self._chat_vlm = OpenAIVlModel(model_name=chat_model_name)
         self._stop_command_runner = stop_command_runner or run_dimos_stop_command
@@ -866,12 +1025,15 @@ class SlamassService:
         self._last_socket_pov_monotonic = 0.0
         self._last_pov_update_monotonic = 0.0
         self._teleop_navigation_preempted = False
+        self._current_action_waiter: asyncio.Future[dict[str, Any]] | None = None
+        self._current_action_cancel_reason: str | None = None
 
         self.robot_pose: RobotPose | None = None
         self.path: list[list[float]] = []
         self.map_state: ActiveMapState | None = None
         self.map_record: ActiveMapRecord | None = None
         self.pois: dict[str, PoiRecord] = {}
+        self.poi_agent_contexts: dict[str, PoiAgentContextRecord] = {}
         self.yolo_objects: dict[str, YoloObjectRecord] = {}
         self.pending_yolo_candidates: list[PendingYoloCandidate] = []
         self.latest_pov_jpeg: bytes | None = None
@@ -888,6 +1050,7 @@ class SlamassService:
         self.layer_visibility = LayerVisibilityState()
         self.ui_state = SlamassUiState()
         self.chat_state = ChatState()
+        self.current_action: ActiveActionState | None = None
 
     async def start(self) -> None:
         self._load_from_storage()
@@ -905,6 +1068,7 @@ class SlamassService:
     async def stop(self) -> None:
         self._stopped = True
         if self._goto_poi_task is not None:
+            self._current_action_cancel_reason = "SLAMASS service stopping."
             self._goto_poi_task.cancel()
             with contextlib_suppress(asyncio.CancelledError):
                 await self._goto_poi_task
@@ -951,6 +1115,7 @@ class SlamassService:
                 "connected": self.connected,
                 "robot_pose": self._serialize_pose(self.robot_pose),
                 "path": self.path,
+                "current_action": self._serialize_current_action_locked(),
                 "pov": {
                     "available": self.latest_pov_jpeg is not None,
                     "seq": self.pov_seq,
@@ -1022,51 +1187,117 @@ class SlamassService:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         return result
 
-    async def go_to_poi(self, poi_id: str) -> None:
+    async def cancel_current_action(self) -> dict[str, Any]:
+        return await self._cancel_running_action(
+            reason="Cancelled by the SLAMASS agent.",
+            cancel_navigation_goal=True,
+        )
+
+    async def go_to_poi(
+        self,
+        poi_id: str,
+        *,
+        wait_for_arrival: bool = False,
+        timeout_s: float | None = None,
+    ) -> dict[str, Any]:
         async with self._state_lock:
             poi = self.pois.get(poi_id)
             if poi is None or poi.status == "deleted":
                 raise HTTPException(status_code=404, detail="POI not found")
-        await self._go_to_view_pose(
+        return await self._go_to_view_pose(
+            kind=SEMANTIC_KIND_POI,
             entity_id=poi.poi_id,
             target_x=poi.anchor_x,
             target_y=poi.anchor_y,
             target_yaw=poi.anchor_yaw,
+            wait_for_arrival=wait_for_arrival,
+            timeout_s=timeout_s,
         )
 
-    async def go_to_yolo_object(self, object_id: str) -> None:
+    async def go_to_yolo_object(
+        self,
+        object_id: str,
+        *,
+        wait_for_arrival: bool = False,
+        timeout_s: float | None = None,
+    ) -> dict[str, Any]:
         async with self._state_lock:
             object_record = self.yolo_objects.get(object_id)
             if object_record is None or object_record.status == "deleted":
                 raise HTTPException(status_code=404, detail="YOLO object not found")
-        await self._go_to_view_pose(
+        return await self._go_to_view_pose(
+            kind=SEMANTIC_KIND_YOLO,
             entity_id=object_record.object_id,
             target_x=object_record.best_view_x,
             target_y=object_record.best_view_y,
             target_yaw=object_record.best_view_yaw,
+            wait_for_arrival=wait_for_arrival,
+            timeout_s=timeout_s,
         )
 
     async def _go_to_view_pose(
         self,
         *,
+        kind: str,
         entity_id: str,
         target_x: float,
         target_y: float,
         target_yaw: float,
-    ) -> None:
-        await self.navigate(target_x, target_y)
-        if self._goto_poi_task is not None:
-            self._goto_poi_task.cancel()
-            with contextlib_suppress(asyncio.CancelledError):
-                await self._goto_poi_task
-        self._goto_poi_task = asyncio.create_task(
-            self._finish_poi_navigation(
-                poi_id=entity_id,
+        wait_for_arrival: bool,
+        timeout_s: float | None,
+    ) -> dict[str, Any]:
+        await self._cancel_running_action(
+            reason="Superseded by a newer navigation request.",
+            cancel_navigation_goal=False,
+        )
+        action_id = f"action-{time.time_ns()}"
+        waiter = self._new_action_waiter()
+        async with self._state_lock:
+            self.current_action = ActiveActionState(
+                action_id=action_id,
+                action_type="navigate_to_semantic_item",
+                status="running",
+                kind=kind,
+                entity_id=entity_id,
+                started_at=utc_now_iso(),
                 target_x=target_x,
                 target_y=target_y,
                 target_yaw=target_yaw,
             )
+            self._current_action_waiter = waiter
+            self._current_action_cancel_reason = None
+        try:
+            await self.navigate(target_x, target_y)
+        except Exception as exc:
+            await self._complete_current_action(
+                action_id=action_id,
+                status="failed",
+                last_error=str(exc),
+            )
+            raise
+        action_payload = await self._publish_current_action_update()
+        self._goto_poi_task = asyncio.create_task(
+            self._finish_poi_navigation(
+                action_id=action_id,
+                target_x=target_x,
+                target_y=target_y,
+                target_yaw=target_yaw,
+                timeout_s=timeout_s if timeout_s is not None else self._poi_arrival_timeout_seconds,
+            )
         )
+        if not wait_for_arrival:
+            return {
+                "ok": True,
+                "status": "running",
+                "kind": kind,
+                "entity_id": entity_id,
+                "action": action_payload,
+            }
+        return await waiter
+
+    def _new_action_waiter(self) -> asyncio.Future[dict[str, Any]]:
+        loop = asyncio.get_running_loop()
+        return loop.create_future()
 
     async def set_manual_inspection_mode(self, manual_mode: str) -> dict[str, Any]:
         try:
@@ -1147,88 +1378,8 @@ class SlamassService:
         await self.publish_event("ui_state_updated", payload)
         return payload
 
-    async def highlight_items(
-        self,
-        items: list[SemanticItemRef],
-        *,
-        selected_item: SemanticItemRef | None = None,
-    ) -> dict[str, Any]:
-        async with self._state_lock:
-            self.ui_state.highlighted_items = self._normalize_item_refs_locked(items)
-            self.ui_state.selected_item = self._validate_optional_item_locked(
-                selected_item.kind if selected_item is not None else None,
-                selected_item.entity_id if selected_item is not None else None,
-            )
-            payload = self._commit_ui_state_locked()
-        await self.publish_event("ui_state_updated", payload)
-        return payload
-
-    async def clear_ui_focus(self) -> dict[str, Any]:
-        async with self._state_lock:
-            self.ui_state.selected_item = None
-            self.ui_state.highlighted_items = []
-            payload = self._commit_ui_state_locked()
-        await self.publish_event("ui_state_updated", payload)
-        return payload
-
-    async def focus_item(self, kind: str, entity_id: str, zoom: float | None = None) -> dict[str, Any]:
-        async with self._state_lock:
-            item_ref = self._require_item_ref_locked(kind, entity_id)
-            world_x, world_y = self._item_world_xy_locked(item_ref)
-            self.ui_state.selected_item = item_ref
-            self.ui_state.highlighted_items = [item_ref]
-            self._apply_ui_camera_locked(
-                center_x=world_x,
-                center_y=world_y,
-                zoom=zoom if zoom is not None else UI_FOCUS_POI_ZOOM,
-            )
-            payload = self._commit_ui_state_locked()
-        await self.publish_event("ui_state_updated", payload)
-        return payload
-
-    async def focus_poi(self, poi_id: str, zoom: float | None = None) -> dict[str, Any]:
-        return await self.focus_item(SEMANTIC_KIND_POI, poi_id, zoom)
-
-    async def focus_yolo_object(self, object_id: str, zoom: float | None = None) -> dict[str, Any]:
-        return await self.focus_item(SEMANTIC_KIND_YOLO, object_id, zoom)
-
     async def select_poi(self, poi_id: str | None) -> dict[str, Any]:
         return await self.select_item(SEMANTIC_KIND_POI if poi_id is not None else None, poi_id)
-
-    async def highlight_pois(
-        self, poi_ids: list[str], *, selected_poi_id: str | None = None
-    ) -> dict[str, Any]:
-        return await self.highlight_items(
-            [SemanticItemRef(kind=SEMANTIC_KIND_POI, entity_id=poi_id) for poi_id in poi_ids],
-            selected_item=(
-                SemanticItemRef(kind=SEMANTIC_KIND_POI, entity_id=selected_poi_id)
-                if selected_poi_id is not None
-                else None
-            ),
-        )
-
-    async def focus_robot(self, zoom: float | None = None) -> dict[str, Any]:
-        async with self._state_lock:
-            if self.robot_pose is None:
-                raise HTTPException(status_code=409, detail="No robot pose available")
-            self._apply_ui_camera_locked(
-                center_x=self.robot_pose.x,
-                center_y=self.robot_pose.y,
-                zoom=zoom if zoom is not None else UI_FOCUS_ROBOT_ZOOM,
-            )
-            payload = self._commit_ui_state_locked()
-        await self.publish_event("ui_state_updated", payload)
-        return payload
-
-    async def focus_map(self) -> dict[str, Any]:
-        async with self._state_lock:
-            if self.map_state is None:
-                raise HTTPException(status_code=404, detail="No active map available")
-            center_x, center_y = self._map_center_locked()
-            self._apply_ui_camera_locked(center_x=center_x, center_y=center_y, zoom=UI_MIN_ZOOM)
-            payload = self._commit_ui_state_locked()
-        await self.publish_event("ui_state_updated", payload)
-        return payload
 
     async def clear_low_level_map_memory(self) -> dict[str, Any]:
         async with self._state_lock:
@@ -1261,9 +1412,12 @@ class SlamassService:
             self._chat_task = None
             self.chat_state = ChatState()
             self.pois = {}
+            self.poi_agent_contexts = {}
             self.yolo_objects = {}
+            self.current_action = None
+            self._current_action_waiter = None
+            self._current_action_cancel_reason = None
             self.ui_state.selected_item = None
-            self.ui_state.highlighted_items = []
             self.inspection_state = {"status": "idle", "message": "", "poi_id": None}
             ui_payload = self._commit_ui_state_locked()
             chat_payload = self._serialize_chat_locked()
@@ -1364,11 +1518,9 @@ class SlamassService:
                 "poi_count": len(self._active_pois()),
                 "yolo_object_count": len(self._active_yolo_objects()),
                 "selected_item": self._serialize_item_ref(self.ui_state.selected_item),
-                "highlighted_items": [
-                    self._serialize_item_ref(item_ref) for item_ref in self.ui_state.highlighted_items
-                ],
                 "layers": self._serialize_layers_locked(),
                 "yolo_runtime": self._serialize_yolo_runtime_locked(),
+                "current_action": self._serialize_current_action_locked(),
             }
 
     async def chat_search_semantic_memory(
@@ -1378,8 +1530,19 @@ class SlamassService:
         kind: str = "all",
         limit: int = 5,
     ) -> dict[str, Any]:
+        query_embedding: list[float] | None = None
+        if query.strip() and self.poi_embedder is not None:
+            try:
+                query_embedding = await asyncio.to_thread(self.poi_embedder.embed_text, query.strip())
+            except Exception as exc:
+                logger.warning("SLAMASS semantic search embedding failed", error=str(exc))
         async with self._state_lock:
-            results = self._search_semantic_items_locked(query=query, kind=kind, limit=limit)
+            results = self._search_semantic_items_locked(
+                query=query,
+                kind=kind,
+                limit=limit,
+                query_embedding=query_embedding,
+            )
         return {"query": query, "kind": kind, "results": results}
 
     async def chat_get_semantic_item(self, *, kind: str, entity_id: str) -> dict[str, Any]:
@@ -1387,6 +1550,7 @@ class SlamassService:
             item_ref = self._require_item_ref_locked(kind, entity_id)
             if item_ref.kind == SEMANTIC_KIND_POI:
                 poi = self._require_active_poi_locked(item_ref.entity_id)
+                context_record = self.poi_agent_contexts.get(poi.poi_id)
                 return {
                     "kind": SEMANTIC_KIND_POI,
                     "entity_id": poi.poi_id,
@@ -1400,6 +1564,7 @@ class SlamassService:
                     "target_x": poi.target_x,
                     "target_y": poi.target_y,
                     "updated_at": poi.updated_at,
+                    "agent_context": self._serialize_poi_agent_context(context_record),
                 }
             object_record = self._require_active_yolo_object_locked(item_ref.entity_id)
             return {
@@ -1418,44 +1583,6 @@ class SlamassService:
                 "last_seen_at": object_record.last_seen_at,
             }
 
-    async def chat_focus_semantic_item(
-        self,
-        *,
-        kind: str,
-        entity_id: str,
-        zoom: float | None = None,
-    ) -> dict[str, Any]:
-        payload = await self.focus_item(kind, entity_id, zoom=zoom)
-        return {"ok": True, "ui": payload}
-
-    async def chat_highlight_semantic_items(
-        self,
-        *,
-        items: list[dict[str, str]],
-        selected_item: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        payload = await self.highlight_items(
-            [SemanticItemRef(kind=item["kind"], entity_id=item["entity_id"]) for item in items],
-            selected_item=(
-                SemanticItemRef(kind=selected_item["kind"], entity_id=selected_item["entity_id"])
-                if selected_item is not None
-                else None
-            ),
-        )
-        return {"ok": True, "ui": payload}
-
-    async def chat_focus_map(self) -> dict[str, Any]:
-        payload = await self.focus_map()
-        return {"ok": True, "ui": payload}
-
-    async def chat_focus_robot(self, *, zoom: float | None = None) -> dict[str, Any]:
-        payload = await self.focus_robot(zoom=zoom)
-        return {"ok": True, "ui": payload}
-
-    async def chat_clear_map_focus(self) -> dict[str, Any]:
-        payload = await self.clear_ui_focus()
-        return {"ok": True, "ui": payload}
-
     async def chat_set_layer_visibility(
         self,
         *,
@@ -1473,14 +1600,31 @@ class SlamassService:
         payload = await self.save_map()
         return {"ok": True, **payload}
 
-    async def chat_go_to_semantic_item(self, *, kind: str, entity_id: str) -> dict[str, Any]:
+    async def chat_go_to_semantic_item(
+        self,
+        *,
+        kind: str,
+        entity_id: str,
+        wait_for_arrival: bool = True,
+        timeout_s: float = POI_ARRIVAL_TIMEOUT_SECONDS,
+    ) -> dict[str, Any]:
         if kind == SEMANTIC_KIND_POI:
-            await self.go_to_poi(entity_id)
+            return await self.go_to_poi(
+                entity_id,
+                wait_for_arrival=wait_for_arrival,
+                timeout_s=timeout_s,
+            )
         elif kind == SEMANTIC_KIND_YOLO:
-            await self.go_to_yolo_object(entity_id)
+            return await self.go_to_yolo_object(
+                entity_id,
+                wait_for_arrival=wait_for_arrival,
+                timeout_s=timeout_s,
+            )
         else:
             raise HTTPException(status_code=404, detail=f"Unknown semantic item kind: {kind}")
-        return {"ok": True, "kind": kind, "entity_id": entity_id}
+
+    async def chat_cancel_current_action(self) -> dict[str, Any]:
+        return await self.cancel_current_action()
 
     async def chat_inspect_now(self) -> dict[str, Any]:
         return await self.inspect_now()
@@ -1495,8 +1639,27 @@ class SlamassService:
             "Base the answer only on visible evidence and keep it concise.\n\n"
             f"Question: {query.strip() or 'What is visible in the current view?'}"
         )
-        answer = await asyncio.to_thread(self._chat_vlm.query, dimos_image, prompt)
+        answer = self._chat_vlm.query(dimos_image, prompt)
         return {"ok": True, "answer": answer}
+
+    async def chat_ask_semantic_item_question(
+        self,
+        *,
+        kind: str,
+        entity_id: str,
+        question: str,
+    ) -> dict[str, Any]:
+        stripped_question = question.strip()
+        if not stripped_question:
+            return {"ok": False, "error": "Question must not be empty"}
+        async with self._state_lock:
+            item_ref = self._require_item_ref_locked(kind, entity_id)
+            prompt = self._semantic_item_question_prompt_locked(item_ref, stripped_question)
+            relative_image_path = self._semantic_item_image_path_locked(item_ref)
+        image_bytes = self._load_asset_bytes(relative_image_path)
+        dimos_image = jpeg_bytes_to_dimos_image(image_bytes)
+        answer = self._chat_vlm.query(dimos_image, prompt)
+        return {"ok": True, "answer": answer, "kind": kind, "entity_id": entity_id}
 
     async def chat_speak_text(self, *, text: str) -> dict[str, Any]:
         message = text.strip()
@@ -1609,8 +1772,8 @@ class SlamassService:
                     self.storage.upsert_poi(poi)
                     self.pois[poi.poi_id] = poi
 
+                await self._maybe_refresh_poi_agent_context(poi)
                 await self.publish_event("poi_upserted", self._serialize_poi(poi))
-                await self.focus_poi(poi.poi_id, zoom=UI_FOCUS_POI_ZOOM)
                 await self._set_inspection_state("accepted", gate_message, poi.poi_id)
             else:
                 await self._set_inspection_state("rejected", gate_message, None)
@@ -1644,8 +1807,8 @@ class SlamassService:
             if poi is None:
                 raise HTTPException(status_code=404, detail="POI not found")
             was_selected = self._is_selected_locked(SEMANTIC_KIND_POI, poi_id)
-            was_highlighted = self._is_highlighted_locked(SEMANTIC_KIND_POI, poi_id)
             self.storage.soft_delete_poi(poi_id)
+            self.poi_agent_contexts.pop(poi_id, None)
             self.pois[poi_id] = PoiRecord(
                 poi_id=poi.poi_id,
                 map_id=poi.map_id,
@@ -1667,16 +1830,7 @@ class SlamassService:
             )
             if was_selected:
                 self.ui_state.selected_item = None
-            if was_highlighted:
-                self.ui_state.highlighted_items = [
-                    highlighted
-                    for highlighted in self.ui_state.highlighted_items
-                    if not (
-                        highlighted.kind == SEMANTIC_KIND_POI
-                        and highlighted.entity_id == poi_id
-                    )
-                ]
-            if was_selected or was_highlighted:
+            if was_selected:
                 ui_payload = self._commit_ui_state_locked()
         await self.publish_event("poi_deleted", {"poi_id": poi_id})
         if ui_payload is not None:
@@ -1689,7 +1843,6 @@ class SlamassService:
             if object_record is None:
                 raise HTTPException(status_code=404, detail="YOLO object not found")
             was_selected = self._is_selected_locked(SEMANTIC_KIND_YOLO, object_id)
-            was_highlighted = self._is_highlighted_locked(SEMANTIC_KIND_YOLO, object_id)
             self.storage.soft_delete_yolo_object(object_id)
             self.yolo_objects[object_id] = YoloObjectRecord(
                 object_id=object_record.object_id,
@@ -1716,16 +1869,7 @@ class SlamassService:
             )
             if was_selected:
                 self.ui_state.selected_item = None
-            if was_highlighted:
-                self.ui_state.highlighted_items = [
-                    highlighted
-                    for highlighted in self.ui_state.highlighted_items
-                    if not (
-                        highlighted.kind == SEMANTIC_KIND_YOLO
-                        and highlighted.entity_id == object_id
-                    )
-                ]
-            if was_selected or was_highlighted:
+            if was_selected:
                 ui_payload = self._commit_ui_state_locked()
         await self.publish_event("yolo_object_deleted", {"object_id": object_id})
         if ui_payload is not None:
@@ -1823,6 +1967,10 @@ class SlamassService:
                 updated_at=record.updated_at,
             )
         self.pois = {poi.poi_id: poi for poi in self.storage.list_pois(include_deleted=True)}
+        self.poi_agent_contexts = {
+            context_record.poi_id: context_record
+            for context_record in self.storage.list_poi_agent_contexts()
+        }
         self.yolo_objects = {
             object_record.object_id: object_record
             for object_record in self.storage.list_yolo_objects(include_deleted=True)
@@ -1987,54 +2135,87 @@ class SlamassService:
     async def _finish_poi_navigation(
         self,
         *,
-        poi_id: str,
+        action_id: str,
         target_x: float,
         target_y: float,
         target_yaw: float,
+        timeout_s: float,
     ) -> None:
         try:
-            arrived = await self._wait_for_poi_arrival(target_x=target_x, target_y=target_y)
+            arrived = await self._wait_for_poi_arrival(
+                target_x=target_x,
+                target_y=target_y,
+                timeout_s=timeout_s,
+            )
             if not arrived:
                 logger.warning(
-                    "POI Go To timed out before reaching target pose",
-                    poi_id=poi_id,
+                    "Semantic Go To timed out before reaching target pose",
+                    action_id=action_id,
                     x=round(target_x, 3),
                     y=round(target_y, 3),
+                )
+                await self._complete_current_action(
+                    action_id=action_id,
+                    status="timed_out",
+                    last_error="Timed out before reaching the saved viewpoint.",
                 )
                 return
 
             async with self._state_lock:
                 current_pose = self.robot_pose
             if current_pose is None:
-                logger.warning("POI Go To lost robot pose before yaw restore", poi_id=poi_id)
+                logger.warning("Semantic Go To lost robot pose before yaw restore", action_id=action_id)
+                await self._complete_current_action(
+                    action_id=action_id,
+                    status="failed",
+                    last_error="Robot pose became unavailable before yaw restore.",
+                )
                 return
 
             rotation_degrees = math.degrees(angle_delta(target_yaw, current_pose.yaw))
             if abs(rotation_degrees) < self._poi_rotation_threshold_degrees:
                 logger.info(
-                    "POI Go To arrived already aligned with saved viewpoint",
-                    poi_id=poi_id,
+                    "Semantic Go To arrived already aligned with saved viewpoint",
+                    action_id=action_id,
                     yaw_error_degrees=round(rotation_degrees, 1),
                 )
+                await self._complete_current_action(action_id=action_id, status="arrived")
                 return
 
             logger.info(
-                "POI Go To restoring saved viewpoint yaw",
-                poi_id=poi_id,
+                "Semantic Go To restoring saved viewpoint yaw",
+                action_id=action_id,
                 degrees=round(rotation_degrees, 1),
             )
             await self._relative_rotate(rotation_degrees)
+            await self._complete_current_action(action_id=action_id, status="arrived")
         except asyncio.CancelledError:
+            await self._complete_current_action(
+                action_id=action_id,
+                status="cancelled",
+                last_error=self._current_action_cancel_reason or "Action cancelled.",
+            )
             raise
-        except Exception:
-            logger.exception("POI Go To yaw restoration failed", poi_id=poi_id)
+        except Exception as exc:
+            logger.exception("Semantic Go To failed", action_id=action_id)
+            await self._complete_current_action(
+                action_id=action_id,
+                status="failed",
+                last_error=str(exc),
+            )
         finally:
             current_task = asyncio.current_task()
             if self._goto_poi_task is current_task:
                 self._goto_poi_task = None
 
-    async def _wait_for_poi_arrival(self, *, target_x: float, target_y: float) -> bool:
-        deadline = time.monotonic() + self._poi_arrival_timeout_seconds
+    async def _wait_for_poi_arrival(
+        self,
+        *,
+        target_x: float,
+        target_y: float,
+        timeout_s: float,
+    ) -> bool:
+        deadline = time.monotonic() + timeout_s
         in_tolerance_since: float | None = None
 
         while not self._stopped and time.monotonic() < deadline:
@@ -2075,34 +2256,130 @@ class SlamassService:
             for value in (linear_x, linear_y, linear_z, angular_x, angular_y, angular_z)
         )
 
-    async def _cancel_goto_poi_task(self) -> None:
+    async def _publish_current_action_update(self) -> dict[str, Any] | None:
+        async with self._state_lock:
+            payload = self._serialize_current_action_locked()
+        await self.publish_event("state_updated", await self._state_delta())
+        return payload
+
+    async def _complete_current_action(
+        self,
+        *,
+        action_id: str,
+        status: str,
+        last_error: str | None = None,
+    ) -> dict[str, Any] | None:
+        waiter: asyncio.Future[dict[str, Any]] | None = None
+        payload: dict[str, Any] | None = None
+        async with self._state_lock:
+            if self.current_action is None or self.current_action.action_id != action_id:
+                return None
+            self.current_action.status = status
+            self.current_action.last_error = last_error
+            payload = self._serialize_current_action_locked()
+            waiter = self._current_action_waiter
+            self._current_action_waiter = None
+            self._current_action_cancel_reason = None
+        result = {
+            "ok": status == "arrived",
+            "status": status,
+            "kind": payload["kind"] if payload is not None else None,
+            "entity_id": payload["entity_id"] if payload is not None else None,
+            "action": payload,
+        }
+        if last_error:
+            result["error"] = last_error
+        if waiter is not None and not waiter.done():
+            waiter.set_result(result)
+        await self.publish_event("state_updated", await self._state_delta())
+        return result
+
+    async def _cancel_current_action_tracking(self, reason: str) -> None:
+        action_id: str | None = None
+        async with self._state_lock:
+            if self.current_action is None or self.current_action.status != "running":
+                return
+            self._current_action_cancel_reason = reason
+            action_id = self.current_action.action_id
         if self._goto_poi_task is None:
+            assert action_id is not None
+            await self._complete_current_action(
+                action_id=action_id,
+                status="cancelled",
+                last_error=reason,
+            )
             return
         self._goto_poi_task.cancel()
         with contextlib_suppress(asyncio.CancelledError):
             await self._goto_poi_task
         self._goto_poi_task = None
+        async with self._state_lock:
+            still_running = (
+                self.current_action is not None
+                and self.current_action.action_id == action_id
+                and self.current_action.status == "running"
+            )
+        if still_running:
+            assert action_id is not None
+            await self._complete_current_action(
+                action_id=action_id,
+                status="cancelled",
+                last_error=reason,
+            )
+
+    async def _cancel_navigation_goal_rpc(self) -> None:
+        cancel_navigation = getattr(self.mcp_client, "cancel_navigation_goal", None)
+        if cancel_navigation is not None:
+            result = cancel_navigation()
+        else:
+            result = self.mcp_client.call_tool_text("cancel_navigation_goal")
+        if asyncio.iscoroutine(result):
+            result = await result
+        if isinstance(result, str) and (
+            result.startswith("Tool not found:") or result.startswith("Error running tool")
+        ):
+            raise RuntimeError(result)
+
+    async def _cancel_running_action(
+        self,
+        *,
+        reason: str,
+        cancel_navigation_goal: bool,
+    ) -> dict[str, Any]:
+        had_running_action = False
+        had_follow_up_task = False
+        async with self._state_lock:
+            had_running_action = self.current_action is not None and self.current_action.status == "running"
+            had_follow_up_task = self._goto_poi_task is not None
+        if had_running_action:
+            await self._cancel_current_action_tracking(reason)
+        elif self._goto_poi_task is not None:
+            self._goto_poi_task.cancel()
+            with contextlib_suppress(asyncio.CancelledError):
+                await self._goto_poi_task
+            self._goto_poi_task = None
+        rpc_error: str | None = None
+        if cancel_navigation_goal:
+            try:
+                await self._cancel_navigation_goal_rpc()
+            except Exception as exc:
+                rpc_error = str(exc)
+                logger.warning("Could not cancel active navigation goal", error=rpc_error)
+        return {
+            "ok": True,
+            "cancelled": had_running_action or had_follow_up_task,
+            "error": rpc_error,
+            "current_action": await self._publish_current_action_update(),
+        }
 
     async def _preempt_navigation_for_teleop(self) -> None:
         if self._teleop_navigation_preempted:
             return
 
-        await self._cancel_goto_poi_task()
-
-        cancel_navigation = getattr(self.mcp_client, "cancel_navigation_goal", None)
-        try:
-            if cancel_navigation is not None:
-                result = cancel_navigation()
-            else:
-                result = self.mcp_client.call_tool_text("cancel_navigation_goal")
-            if asyncio.iscoroutine(result):
-                result = await result
-            if isinstance(result, str) and (
-                result.startswith("Tool not found:") or result.startswith("Error running tool")
-            ):
-                raise RuntimeError(result)
-        except Exception as exc:
-            logger.warning("Teleop could not cancel active navigation", error=str(exc))
+        await self._cancel_running_action(
+            reason="Preempted by teleoperation.",
+            cancel_navigation_goal=True,
+        )
         self._teleop_navigation_preempted = True
 
     async def _observe_jpeg(self) -> bytes | None:
@@ -2124,6 +2401,66 @@ class SlamassService:
             return cached_pov
 
         return await self._observe_jpeg()
+
+    def _load_asset_bytes(self, relative_path: str) -> bytes:
+        return self.storage.asset_path(relative_path).read_bytes()
+
+    def _build_poi_agent_context_search_text(
+        self,
+        poi: PoiRecord,
+        context: PoiAgentContextAnalysis,
+    ) -> str:
+        salient_bits = [
+            entity.get("name", "")
+            for entity in context.salient_entities
+            if entity.get("name")
+        ]
+        return " | ".join(
+            bit
+            for bit in [
+                poi.title,
+                poi.category,
+                poi.summary,
+                " ".join(poi.objects),
+                context.scene_caption,
+                " ".join(salient_bits),
+                " ".join(context.spatial_relations),
+                " ".join(context.visible_text),
+                " ".join(context.landmark_cues),
+            ]
+            if bit
+        )[:4000]
+
+    async def _maybe_refresh_poi_agent_context(self, poi: PoiRecord) -> None:
+        if self.poi_context_analyzer is None or self.poi_embedder is None:
+            return
+        try:
+            image_bytes = self._load_asset_bytes(poi.hero_image_path)
+            dimos_image = jpeg_bytes_to_dimos_image(image_bytes)
+            context = self.poi_context_analyzer.analyze(dimos_image)
+            search_text = self._build_poi_agent_context_search_text(poi, context)
+            embedding = self.poi_embedder.embed_text(search_text)
+            record = self.storage.new_poi_agent_context(
+                poi_id=poi.poi_id,
+                scene_caption=context.scene_caption,
+                salient_entities=context.salient_entities,
+                spatial_relations=context.spatial_relations,
+                visible_text=context.visible_text,
+                landmark_cues=context.landmark_cues,
+                uncertainty_notes=context.uncertainty_notes,
+                search_text=search_text,
+                embedding_model=self.poi_embedder.model_name,
+                embedding_vector=embedding,
+            )
+            async with self._state_lock:
+                self.storage.upsert_poi_agent_context(record)
+                self.poi_agent_contexts[poi.poi_id] = record
+        except Exception as exc:
+            logger.warning(
+                "Could not refresh hidden POI agent context",
+                poi_id=poi.poi_id,
+                error=str(exc),
+            )
 
     async def _set_yolo_inference_enabled(
         self,
@@ -2178,6 +2515,7 @@ class SlamassService:
                 "connected": self.connected,
                 "robot_pose": self._serialize_pose(self.robot_pose),
                 "path": self.path,
+                "current_action": self._serialize_current_action_locked(),
                 "pov": {
                     "available": self.latest_pov_jpeg is not None,
                     "seq": self.pov_seq,
@@ -2219,18 +2557,6 @@ class SlamassService:
             return None
         return self._require_item_ref_locked(kind, entity_id)
 
-    def _normalize_item_refs_locked(self, item_refs: list[SemanticItemRef]) -> list[SemanticItemRef]:
-        normalized: list[SemanticItemRef] = []
-        seen: set[tuple[str, str]] = set()
-        for item_ref in item_refs:
-            validated = self._require_item_ref_locked(item_ref.kind, item_ref.entity_id)
-            key = (validated.kind, validated.entity_id)
-            if key in seen:
-                continue
-            normalized.append(validated)
-            seen.add(key)
-        return normalized
-
     def _is_selected_locked(self, kind: str, entity_id: str) -> bool:
         return (
             self.ui_state.selected_item is not None
@@ -2238,18 +2564,53 @@ class SlamassService:
             and self.ui_state.selected_item.entity_id == entity_id
         )
 
-    def _is_highlighted_locked(self, kind: str, entity_id: str) -> bool:
-        return any(
-            highlighted.kind == kind and highlighted.entity_id == entity_id
-            for highlighted in self.ui_state.highlighted_items
-        )
+    def _semantic_item_image_path_locked(self, item_ref: SemanticItemRef) -> str:
+        if item_ref.kind == SEMANTIC_KIND_POI:
+            return self._require_active_poi_locked(item_ref.entity_id).hero_image_path
+        return self._require_active_yolo_object_locked(item_ref.entity_id).hero_image_path
 
-    def _item_world_xy_locked(self, item_ref: SemanticItemRef) -> tuple[float, float]:
+    def _semantic_item_question_prompt_locked(
+        self,
+        item_ref: SemanticItemRef,
+        question: str,
+    ) -> str:
         if item_ref.kind == SEMANTIC_KIND_POI:
             poi = self._require_active_poi_locked(item_ref.entity_id)
-            return poi.target_x, poi.target_y
-        object_record = self._require_active_yolo_object_locked(item_ref.entity_id)
-        return object_record.world_x, object_record.world_y
+            context_record = self.poi_agent_contexts.get(poi.poi_id)
+            metadata = {
+                "kind": SEMANTIC_KIND_POI,
+                "title": poi.title,
+                "summary": poi.summary,
+                "category": poi.category,
+                "objects": poi.objects,
+                "anchor_x": poi.anchor_x,
+                "anchor_y": poi.anchor_y,
+                "anchor_yaw": poi.anchor_yaw,
+                "target_x": poi.target_x,
+                "target_y": poi.target_y,
+                "agent_context": self._serialize_poi_agent_context(context_record),
+            }
+        else:
+            object_record = self._require_active_yolo_object_locked(item_ref.entity_id)
+            metadata = {
+                "kind": SEMANTIC_KIND_YOLO,
+                "label": object_record.label,
+                "best_confidence": object_record.best_confidence,
+                "detections_count": object_record.detections_count,
+                "world_x": object_record.world_x,
+                "world_y": object_record.world_y,
+                "world_z": object_record.world_z,
+                "best_view_x": object_record.best_view_x,
+                "best_view_y": object_record.best_view_y,
+                "best_view_yaw": object_record.best_view_yaw,
+            }
+        return (
+            "Answer the operator's question about this saved SLAMASS semantic item image. "
+            "Use the image as primary evidence. Use the metadata only as supporting context. "
+            "If the answer is uncertain or not visible, say so plainly and do not invent details.\n\n"
+            f"Question: {question}\n"
+            f"Semantic item metadata: {_safe_json_dumps(metadata)}"
+        )
 
     def _map_center_locked(self) -> tuple[float, float]:
         assert self.map_state is not None
@@ -2333,6 +2694,7 @@ class SlamassService:
         query: str,
         kind: str,
         limit: int,
+        query_embedding: list[float] | None = None,
     ) -> list[dict[str, Any]]:
         normalized_kind = kind.strip().lower() if kind else "all"
         if normalized_kind not in {"all", SEMANTIC_KIND_POI, SEMANTIC_KIND_YOLO}:
@@ -2345,15 +2707,50 @@ class SlamassService:
 
         if normalized_kind in {"all", SEMANTIC_KIND_POI}:
             for poi in self._active_pois():
-                score = self._field_score(normalized_query, tokens, poi.title, 4.0)
-                score += self._field_score(normalized_query, tokens, poi.category, 3.0)
-                score += sum(self._field_score(normalized_query, tokens, item, 2.0) for item in poi.objects)
-                score += self._field_score(normalized_query, tokens, poi.summary, 1.0)
-                if normalized_query and score <= 0:
+                lexical_score = self._field_score(normalized_query, tokens, poi.title, 4.0)
+                lexical_score += self._field_score(normalized_query, tokens, poi.category, 3.0)
+                lexical_score += sum(
+                    self._field_score(normalized_query, tokens, item, 2.0) for item in poi.objects
+                )
+                lexical_score += self._field_score(normalized_query, tokens, poi.summary, 1.0)
+                context_record = self.poi_agent_contexts.get(poi.poi_id)
+                embedding_similarity = 0.0
+                embedding_boost = 0.0
+                if (
+                    normalized_query
+                    and query_embedding is not None
+                    and context_record is not None
+                    and context_record.embedding_vector
+                ):
+                    embedding_similarity = _cosine_similarity(
+                        query_embedding,
+                        context_record.embedding_vector,
+                    )
+                    if embedding_similarity >= POI_AGENT_CONTEXT_EMBEDDING_MIN_SIMILARITY:
+                        embedding_boost = (
+                            embedding_similarity - POI_AGENT_CONTEXT_EMBEDDING_MIN_SIMILARITY
+                        ) * POI_AGENT_CONTEXT_EMBEDDING_WEIGHT
+
+                if normalized_query and lexical_score <= 0 and embedding_boost <= 0:
                     continue
+                if lexical_score > 0 and embedding_boost > 0:
+                    match_source = "hybrid"
+                elif embedding_boost > 0:
+                    match_source = "embedding"
+                else:
+                    match_source = "lexical"
+                search_score = (
+                    lexical_score + embedding_boost if normalized_query else poi.interest_score
+                )
+                agent_hint = None
+                if context_record is not None:
+                    agent_hint = (
+                        context_record.scene_caption
+                        or (context_record.landmark_cues[0] if context_record.landmark_cues else "")
+                    )[:180]
                 scored.append(
                     (
-                        score if normalized_query else poi.interest_score,
+                        search_score,
                         poi.updated_at,
                         {
                             "kind": SEMANTIC_KIND_POI,
@@ -2366,19 +2763,23 @@ class SlamassService:
                             "anchor_yaw": poi.anchor_yaw,
                             "target_x": poi.target_x,
                             "target_y": poi.target_y,
-                            "score": round(score, 3),
+                            "score": round(search_score, 3),
+                            "search_score": round(search_score, 3),
+                            "match_source": match_source,
+                            "agent_hint": agent_hint,
+                            "embedding_similarity": round(embedding_similarity, 3),
                         },
                     )
                 )
 
         if normalized_kind in {"all", SEMANTIC_KIND_YOLO}:
             for object_record in self._active_yolo_objects():
-                score = self._field_score(normalized_query, tokens, object_record.label, 4.0)
-                if normalized_query and score <= 0:
+                search_score = self._field_score(normalized_query, tokens, object_record.label, 4.0)
+                if normalized_query and search_score <= 0:
                     continue
                 scored.append(
                     (
-                        score if normalized_query else object_record.best_confidence,
+                        search_score if normalized_query else object_record.best_confidence,
                         object_record.updated_at,
                         {
                             "kind": SEMANTIC_KIND_YOLO,
@@ -2392,7 +2793,9 @@ class SlamassService:
                             "world_x": object_record.world_x,
                             "world_y": object_record.world_y,
                             "world_yaw": object_record.best_view_yaw,
-                            "score": round(score, 3),
+                            "score": round(search_score, 3),
+                            "search_score": round(search_score, 3),
+                            "match_source": "lexical",
                         },
                     )
                 )
@@ -2636,9 +3039,6 @@ class SlamassService:
                 "zoom": self.ui_state.camera.zoom,
             },
             "selected_item": self._serialize_item_ref(self.ui_state.selected_item),
-            "highlighted_items": [
-                self._serialize_item_ref(item_ref) for item_ref in self.ui_state.highlighted_items
-            ],
         }
 
     def _serialize_inspection_settings_locked(self) -> dict[str, Any]:
@@ -2672,6 +3072,24 @@ class SlamassService:
                 }
                 for message in self.chat_state.messages
             ],
+        }
+
+    def _serialize_current_action_locked(self) -> dict[str, Any] | None:
+        if self.current_action is None:
+            return None
+        return {
+            "action_id": self.current_action.action_id,
+            "type": self.current_action.action_type,
+            "status": self.current_action.status,
+            "kind": self.current_action.kind,
+            "entity_id": self.current_action.entity_id,
+            "started_at": self.current_action.started_at,
+            "target_pose": {
+                "x": self.current_action.target_x,
+                "y": self.current_action.target_y,
+                "yaw": self.current_action.target_yaw,
+            },
+            "last_error": self.current_action.last_error,
         }
 
     def _persist_chat_state_locked(self) -> None:
@@ -2717,6 +3135,22 @@ class SlamassService:
             "updated_at": poi.updated_at,
             "thumbnail_url": f"/api/assets/{poi.thumbnail_path}",
             "hero_image_url": f"/api/assets/{poi.hero_image_path}",
+        }
+
+    def _serialize_poi_agent_context(
+        self,
+        context_record: PoiAgentContextRecord | None,
+    ) -> dict[str, Any] | None:
+        if context_record is None:
+            return None
+        return {
+            "scene_caption": context_record.scene_caption,
+            "salient_entities": context_record.salient_entities,
+            "spatial_relations": context_record.spatial_relations,
+            "visible_text": context_record.visible_text,
+            "landmark_cues": context_record.landmark_cues,
+            "uncertainty_notes": context_record.uncertainty_notes,
+            "updated_at": context_record.updated_at,
         }
 
     def _serialize_yolo_object(self, object_record: YoloObjectRecord) -> dict[str, Any]:
@@ -2904,39 +3338,6 @@ def create_app(
     @app.post("/api/ui/select-item")
     async def post_ui_select_item(request: UiSelectionRequest) -> dict[str, Any]:
         return await slamass.select_item(request.kind, request.entity_id)
-
-    @app.post("/api/ui/highlight-items")
-    async def post_ui_highlight_items(request: UiHighlightRequest) -> dict[str, Any]:
-        return await slamass.highlight_items(
-            [
-                SemanticItemRef(kind=item["kind"], entity_id=item["entity_id"])
-                for item in request.items
-            ],
-            selected_item=(
-                SemanticItemRef(
-                    kind=request.selected_item["kind"],
-                    entity_id=request.selected_item["entity_id"],
-                )
-                if request.selected_item is not None
-                else None
-            ),
-        )
-
-    @app.post("/api/ui/clear-focus")
-    async def post_ui_clear_focus() -> dict[str, Any]:
-        return await slamass.clear_ui_focus()
-
-    @app.post("/api/ui/focus-item/{kind}/{entity_id}")
-    async def post_ui_focus_item(kind: str, entity_id: str, request: UiFocusRequest) -> dict[str, Any]:
-        return await slamass.focus_item(kind, entity_id, zoom=request.zoom)
-
-    @app.post("/api/ui/focus-robot")
-    async def post_ui_focus_robot(request: UiFocusRequest) -> dict[str, Any]:
-        return await slamass.focus_robot(zoom=request.zoom)
-
-    @app.post("/api/ui/focus-map")
-    async def post_ui_focus_map() -> dict[str, Any]:
-        return await slamass.focus_map()
 
     @app.post("/api/navigate")
     async def post_navigate(request: NavigateRequest) -> dict[str, Any]:

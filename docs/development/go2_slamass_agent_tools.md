@@ -29,11 +29,11 @@ The agent should treat these as one semantic dataset with modality-specific geom
 ### 1. Runtime / State
 
 - `get_runtime_overview()`
-  - connectivity, robot pose, counts, layer visibility, UI focus
+  - connectivity, robot pose, counts, layer visibility, current selected item, current embodied action
 - `get_map_status()`
   - map loaded, updated_at, bounds, save status
 - `get_robot_context()`
-  - robot pose, path length, current selected item, current highlighted items
+  - robot pose, path length, current selected item, current action status
 
 ### 2. Retrieval
 
@@ -62,19 +62,11 @@ The agent should treat these as one semantic dataset with modality-specific geom
 
 These should be deterministic backend tools. The model should not be doing ad hoc geometry in-context.
 
-### 4. UI Presentation
+### 4. UI / Presenter Control
 
-- `focus_semantic_item(kind, entity_id, zoom?)`
-- `highlight_semantic_items(items, selected_item?)`
-- `focus_robot(zoom?)`
-- `focus_map()`
-- `zoom_to_bounds(min_x, min_y, max_x, max_y, padding?)`
-- `clear_map_focus()`
+- current MVP stance: keep map camera, pan/zoom, and semantic selection manual in the operator UI
 - `set_layer_visibility(show_pois?, show_yolo?)`
-- `open_semantic_detail(kind, entity_id)`
-  - explicit “show the card/modal”
-- `present_semantic_results(items, selected_item?, zoom_mode?)`
-  - macro tool for highlight + layer visibility + focus
+- presenter-facing action feedback should come from lightweight notifications, not agent-driven zoom/highlight state mutation
 
 ### 5. Navigation / Verification
 
@@ -129,7 +121,7 @@ These are the high-level skills the agent should feel like it has:
 - `what does the robot see right now`
   - `look_current_view`
 - `prepare the map for the presenter`
-  - layer toggles + focus + highlights + optional save
+  - layer toggles + optional save
 
 ## Priority Order
 
