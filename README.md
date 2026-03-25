@@ -33,6 +33,12 @@ SLAMASS combines:
 - exposes a constrained chat agent that reasons over saved memory and safe robot actions instead of raw low-level control
 - keeps the demo grounded: every semantic item is tied to a real captured image and a real saved pose
 
+## UI Snapshot
+
+One Hack26 snapshot of the dashboard in use, included mainly to show the combined POV, semantic map, and operator rail layout:
+
+<img src="assets/readme/slamass_dashboard.png" alt="SLAMASS dashboard snapshot with live POV, semantic map, and operator rail" width="860">
+
 ## Architecture
 
 ```mermaid
