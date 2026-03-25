@@ -1,6 +1,6 @@
 # Go2 SLAMASS Quick Start
 
-This runbook starts the SLAMASS MVP: a live two-pane web UI with robot POV on the left and a persisted semantic occupancy map on the right, now with both VLM POIs and live-promoted YOLO objects.
+Public quickstart for the current SLAMASS stack (`Semantic Localization and Mapping with Agentic Spatial Search`): a live two-pane web UI with robot POV on the left and a persisted semantic occupancy map on the right, with both VLM POIs and live-promoted YOLO objects.
 
 ## What You Get
 
@@ -30,9 +30,9 @@ From the repo root:
 source .venv/bin/activate
 uv sync --all-extras --no-extra dds
 cd dimos/web/slamass-app
-npm install
+npm ci
 npm run build
-cd /home/deadimex/dimos
+cd "$(git rev-parse --show-toplevel)"
 ```
 
 ## Start In Sim
@@ -154,7 +154,7 @@ dimos mcp list-tools
 dimos-slamass --help
 ```
 
-## Current MVP Behavior
+## Current Behavior
 
 - The right map is built from the new `raw_costmap` websocket event, not the inflated visualization map.
 - The occupancy memory is long-term and persisted, but still updates live when space opens or closes.
