@@ -2,11 +2,13 @@
   "name": "slamass-app",
   "private": true,
   "version": "0.0.1",
+  "description": "Operator UI for the SLAMASS semantic mapping workflow.",
   "type": "module",
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -363,6 +363,9 @@ export default function App(): React.ReactElement {
           return next;
         }
         const dropped = next[0];
+        if (!dropped) {
+          return next.slice(-MAX_TOASTS);
+        }
         const timerIdToClear = toastTimersRef.current.get(dropped.id);
         if (timerIdToClear !== undefined) {
           window.clearTimeout(timerIdToClear);

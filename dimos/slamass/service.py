@@ -20,6 +20,7 @@ import base64
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+import inspect
 import json
 import math
 import os
@@ -995,6 +996,7 @@ class SlamassService:
         self.chat_agent = chat_agent or SlamassChatAgent(model_name=chat_model_name)
         self._chat_vlm = OpenAIVlModel(model_name=chat_model_name)
         self._stop_command_runner = stop_command_runner or run_dimos_stop_command
+        self._stop_command_runner_runs_in_thread = stop_command_runner is None
         self.map_client = MapSocketClient(
             map_socket_url,
             on_connection=self._handle_connection_change,
@@ -1182,7 +1184,11 @@ class SlamassService:
         with contextlib_suppress(HTTPException):
             await self.stop_motion()
         try:
-            result = await asyncio.to_thread(self._stop_command_runner, force)
+            if self._stop_command_runner_runs_in_thread:
+                result = await asyncio.to_thread(self._stop_command_runner, force)
+            else:
+                maybe_result = self._stop_command_runner(force)
+                result = await maybe_result if inspect.isawaitable(maybe_result) else maybe_result
         except RuntimeError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         return result
@@ -3474,7 +3480,7 @@ def create_app(
         return Response(
             content=(
                 "SLAMASS UI is not built yet. Run: "
-                "cd dimos/web/slamass-app && npm install && npm run build"
+                "cd dimos/web/slamass-app && npm ci && npm run build"
             ),
             status_code=503,
             media_type="text/plain",
