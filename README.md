@@ -56,12 +56,6 @@ flowchart LR
         Service --> Memory
     end
 
-    subgraph Persistence["Persistence"]
-        direction TB
-        DB[(slamass.db)]
-        Assets[(map checkpoints<br/>images, thumbnails)]
-    end
-
     subgraph Frontend["Operator Surface"]
         direction TB
         UI[React Web App<br/>POV, semantic map, controls, chat]
@@ -69,10 +63,17 @@ flowchart LR
         UI --> Operator
     end
 
+    subgraph Persistence["Persistence"]
+        direction TB
+        DB[(slamass.db)]
+        Assets[(map checkpoints<br/>images, thumbnails)]
+    end
+
     Vis -->|websocket events| Service
     MCP -->|tool access + POV capture| Service
     Service -->|SSE, REST, static UI| UI
     UI -->|inspect, navigate, chat, layer control| Service
+    UI ~~~ DB
     Service -->|persist semantic memory| DB
     Service -->|save/load assets| Assets
 ```

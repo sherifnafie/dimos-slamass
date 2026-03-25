@@ -34,21 +34,22 @@ flowchart LR
         Service --> State
     end
 
+    subgraph UI["Presentation"]
+        direction TB
+        Browser[Browser UI<br/>map, POV, controls, chat]
+    end
+
     subgraph Storage["Persistence"]
         direction TB
         DB[(slamass.db)]
         Files[(map + image artifacts)]
     end
 
-    subgraph UI["Presentation"]
-        direction TB
-        Browser[Browser UI<br/>map, POV, controls, chat]
-    end
-
     WS -->|websocket events| Service
     MCP -->|tool calls + POV capture| Service
     Service -->|SSE + REST| Browser
     Browser -->|operator actions| Service
+    Browser ~~~ DB
     Service -->|metadata| DB
     Service -->|images + map checkpoints| Files
 ```
