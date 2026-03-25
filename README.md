@@ -37,13 +37,44 @@ SLAMASS combines:
 
 ```mermaid
 flowchart LR
-    Go2[Go2 Blueprint<br/>navigation + perception + MCP] --> Vis[WebsocketVis<br/>pose, path, raw costmap, YOLO]
-    Go2 --> MCP[MCP Server<br/>robot skills]
-    Vis --> Service[dimos-slamass<br/>FastAPI sidecar]
-    MCP --> Service
-    Service --> Store[(SQLite + image/map artifacts)]
-    Service --> UI[React operator UI]
-    UI --> Operator[Operator]
+    subgraph Runtime["DimOS Go2 Runtime"]
+        direction TB
+        Robot[Go2 SLAMASS Blueprint<br/>navigation, perception, detections]
+        Vis[WebsocketVis<br/>pose, path, raw costmap, live POV, YOLO]
+        MCP[MCP Server<br/>observe, navigation, speech, robot skills]
+        Robot --> Vis
+        Robot --> MCP
+    end
+
+    subgraph Sidecar["SLAMASS Sidecar"]
+        direction TB
+        Service[dimos-slamass<br/>FastAPI, SSE, orchestration]
+        Agent[Operator Agent<br/>multi-step tool use over memory + robot actions]
+        Memory[Active Semantic State<br/>map memory, POIs, YOLO objects, action state]
+        Service --> Agent
+        Agent -->|tool calls| Service
+        Service --> Memory
+    end
+
+    subgraph Persistence["Persistence"]
+        direction TB
+        DB[(slamass.db)]
+        Assets[(map checkpoints<br/>images, thumbnails)]
+    end
+
+    subgraph Frontend["Operator Surface"]
+        direction TB
+        UI[React Web App<br/>POV, semantic map, controls, chat]
+        Operator[Operator]
+        UI --> Operator
+    end
+
+    Vis -->|websocket events| Service
+    MCP -->|tool access + POV capture| Service
+    Service -->|SSE, REST, static UI| UI
+    UI -->|inspect, navigate, chat, layer control| Service
+    Service -->|persist semantic memory| DB
+    Service -->|save/load assets| Assets
 ```
 
 ## Repo Guide

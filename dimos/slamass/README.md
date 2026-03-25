@@ -15,13 +15,42 @@ It sits between the robot runtime and the browser UI:
 
 ```mermaid
 flowchart LR
-    Runtime[unitree-go2-slamass-mcp] --> WS[WebsocketVis events]
-    Runtime --> MCP[MCP tools + observe]
-    WS --> Service[SlamassService]
-    MCP --> Service
-    Service --> DB[(slamass.db)]
-    Service --> Files[map + image assets]
-    Service --> UI[Browser UI]
+    subgraph Runtime["Robot Runtime"]
+        direction TB
+        Stack[unitree-go2-slamass-mcp]
+        WS[WebsocketVis<br/>pose, path, raw costmap, live POV, YOLO]
+        MCP[MCP Server<br/>observe + robot tools]
+        Stack --> WS
+        Stack --> MCP
+    end
+
+    subgraph Sidecar["SLAMASS Service"]
+        direction TB
+        Service[SlamassService<br/>state, FastAPI, SSE]
+        Agent[Chat Agent<br/>multi-step retrieval + tool use]
+        State[Active Map + Semantic Memory]
+        Service --> Agent
+        Agent -->|tool calls| Service
+        Service --> State
+    end
+
+    subgraph Storage["Persistence"]
+        direction TB
+        DB[(slamass.db)]
+        Files[(map + image artifacts)]
+    end
+
+    subgraph UI["Presentation"]
+        direction TB
+        Browser[Browser UI<br/>map, POV, controls, chat]
+    end
+
+    WS -->|websocket events| Service
+    MCP -->|tool calls + POV capture| Service
+    Service -->|SSE + REST| Browser
+    Browser -->|operator actions| Service
+    Service -->|metadata| DB
+    Service -->|images + map checkpoints| Files
 ```
 
 ## Main Responsibilities
